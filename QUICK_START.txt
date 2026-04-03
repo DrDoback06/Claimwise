@@ -1,0 +1,67 @@
+═══════════════════════════════════════════════════════════════
+  CLAIMWISE OMNISCIENCE - QUICK START GUIDE
+═══════════════════════════════════════════════════════════════
+
+STEP 1: INSTALL NODE.JS (If you don't have it)
+───────────────────────────────────────────────────────────────
+1. Go to: https://nodejs.org/
+2. Download the LTS version
+3. Install it
+4. Restart your computer
+
+
+STEP 2: OPEN TERMINAL IN PROJECT FOLDER
+───────────────────────────────────────────────────────────────
+1. Navigate to: D:\Grimguff tracker app\claimwise-omniscience
+2. Right-click in the folder
+3. Select "Open in Terminal" or "Open PowerShell here"
+
+
+STEP 3: INSTALL PACKAGES
+───────────────────────────────────────────────────────────────
+Type this command and press Enter:
+    npm install
+
+Wait for it to finish (2-5 minutes)
+
+
+STEP 4: START THE APP
+───────────────────────────────────────────────────────────────
+Type this command and press Enter:
+    npm start
+
+Your browser should open automatically to http://localhost:3000
+
+
+STEP 5: SET UP API KEYS
+───────────────────────────────────────────────────────────────
+1. Click "Settings" at the bottom of the left sidebar
+2. Add at least one API key (Gemini, OpenAI, or Anthropic)
+3. Click "SAVE" for each key
+
+
+STEP 6: START USING THE APP!
+───────────────────────────────────────────────────────────────
+• Click "Personnel" to manage characters
+• Click "Item Vault" to create items
+• Click "Writer's Room" to write chapters
+• Explore other tabs as needed
+
+
+═══════════════════════════════════════════════════════════════
+  TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════
+
+If "npm" doesn't work:
+→ Install Node.js from nodejs.org
+
+If port 3000 is busy:
+→ Press Ctrl+C to stop, then: set PORT=3001 && npm start
+
+If you see errors:
+→ Stop server (Ctrl+C), then: npm cache clean --force
+→ Then: npm install
+→ Then: npm start
+
+═══════════════════════════════════════════════════════════════
+
