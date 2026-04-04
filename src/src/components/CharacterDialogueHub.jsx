@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Cloud, BarChart3, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import db from '../services/database';
-import { getCardContainerStyles, getBadgeStyles, getHoverEffects, getTextGradient } from '../utils/rpgTheme';
+import { getCardContainerStyles, getBadgeStyles, getHoverEffects, getTextGradient, getProgressBarStyles } from '../utils/rpgTheme';
 import '../styles/rpgComponents.css';
 import '../styles/rpgAnimations.css';
 

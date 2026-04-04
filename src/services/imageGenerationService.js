@@ -5,8 +5,8 @@
 
 class ImageGenerationService {
   constructor() {
-    // Use the same key storage as Settings component
-    this.apiKey = localStorage.getItem('ai_openai_key') || localStorage.getItem('openai_api_key') || '';
+    // Runtime-only key (never persisted in browser storage)
+    this.apiKey = '';
     this.baseUrl = 'https://api.openai.com/v1/images/generations';
     this.imageBasePath = '/images';
   }
@@ -16,16 +16,13 @@ class ImageGenerationService {
    */
   setApiKey(key) {
     this.apiKey = key;
-    // Store in both locations for compatibility
-    localStorage.setItem('ai_openai_key', key);
-    localStorage.setItem('openai_api_key', key);
   }
 
   /**
    * Refresh API key from localStorage (call after Settings update)
    */
   refreshApiKey() {
-    this.apiKey = localStorage.getItem('ai_openai_key') || localStorage.getItem('openai_api_key') || '';
+    // Intentionally no-op: key storage is runtime/session only.
   }
 
   /**
@@ -34,7 +31,7 @@ class ImageGenerationService {
   getApiKey() {
     this.refreshApiKey();
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getApiKey',message:'Getting API key',data:{apiKeyPresent:!!this.apiKey,apiKeyLength:this.apiKey?.length || 0,localStorage_ai_openai_key:!!localStorage.getItem('ai_openai_key'),localStorage_openai_api_key:!!localStorage.getItem('openai_api_key')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getApiKey',message:'Getting API key',data:{apiKeyPresent:!!this.apiKey,apiKeyLength:this.apiKey?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
     // #endregion
     if (!this.apiKey) {
       throw new Error('OpenAI API key not set. Please configure in Settings (OpenAI API Key for DALL-E).');
@@ -150,7 +147,7 @@ class ImageGenerationService {
       
       while (attempt <= maxAttempts) {
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:generateSkillSymbol',message:`Starting skill symbol generation attempt ${attempt}`,data:{baseUrl:this.baseUrl,apiKeyPresent:!!apiKey,apiKeyLength:apiKey?.length || 0,apiKeyPrefix:apiKey?.substring(0,7) || 'none',promptLength:prompt?.length || 0,actualPrompt:prompt,skillName:skillData.name,skillDesc:skillData.desc},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:generateSkillSymbol',message:`Starting skill symbol generation attempt ${attempt}`,data:{baseUrl:this.baseUrl,apiKeyPresent:!!apiKey,promptLength:prompt?.length || 0,skillName:skillData.name,skillDesc:skillData.desc},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         
         response = await fetch(this.baseUrl, {
@@ -905,4 +902,3 @@ class ImageGenerationService {
 
 const imageGenerationService = new ImageGenerationService();
 export default imageGenerationService;
-

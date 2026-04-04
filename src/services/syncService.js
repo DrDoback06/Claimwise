@@ -7,27 +7,28 @@
 import db from '../src/services/database';
 
 class SyncService {
+  async getSyncableStores() {
+    const storeNames = await db.getStoreNames();
+    const excluded = new Set(['meta']);
+    return storeNames.filter(name => !excluded.has(name));
+  }
+
   /**
    * Export all app data to JSON
    */
   async exportToJSON() {
     try {
+      const stores = await this.getSyncableStores();
+      const payload = {};
+      for (const storeName of stores) {
+        payload[storeName] = await db.getAll(storeName);
+      }
+
       const data = {
-        version: '1.0',
+        version: '2.0',
+        schemaVersion: db.getSchemaVersion(),
         timestamp: Date.now(),
-        actors: await db.getAll('actors'),
-        itemBank: await db.getAll('itemBank'),
-        skillBank: await db.getAll('skillBank'),
-        statRegistry: await db.getAll('statRegistry'),
-        books: await db.getAll('books'),
-        relationships: await db.getAll('relationships'),
-        wiki: await db.getAll('wiki'),
-        skillTrees: await db.getAll('skillTrees'),
-        storyMap: await db.getAll('storyMap'),
-        snapshots: await db.getAll('snapshots'),
-        documents: await db.getAll('documents'),
-        documentSuggestions: await db.getAll('documentSuggestions'),
-        backups: await db.getAll('backups')
+        stores: payload
       };
       
       return JSON.stringify(data, null, 2);
@@ -84,11 +85,14 @@ class SyncService {
       };
 
       // Import each entity type
-      const entityTypes = [
-        'actors', 'itemBank', 'skillBank', 'statRegistry', 
-        'books', 'relationships', 'wiki', 'skillTrees', 
-        'storyMap', 'snapshots', 'documents', 'documentSuggestions'
-      ];
+      const entityTypes = Object.keys(data.stores || {}).length
+        ? Object.keys(data.stores)
+        : [
+            'actors', 'itemBank', 'skillBank', 'statRegistry',
+            'books', 'relationships', 'wiki', 'skillTrees',
+            'documents', 'documentSuggestions'
+          ];
+      const availableStores = new Set(await db.getStoreNames());
 
       for (const entityType of entityTypes) {
         if (selectiveImport && !selectedEntities.includes(entityType)) {
@@ -96,50 +100,29 @@ class SyncService {
           continue;
         }
 
-        if (!data[entityType] || !Array.isArray(data[entityType])) {
+        const entityRecords = data.stores?.[entityType] ?? data[entityType];
+        if (!Array.isArray(entityRecords)) {
+          continue;
+        }
+        if (!availableStores.has(entityType)) {
+          results.skipped[entityType] = 'Store unavailable in current schema';
           continue;
         }
 
         try {
           if (mergeStrategy === 'overwrite') {
             // Clear existing and import all
-            const existing = await db.getAll(entityType);
-            for (const item of existing) {
-              await db.delete(entityType, item.id);
-            }
-            for (const item of data[entityType]) {
-              await db.add(entityType, item);
-            }
-            results.imported[entityType] = data[entityType].length;
+            await db.clear(entityType);
+            await db.batchUpsert(entityType, entityRecords, 100);
+            results.imported[entityType] = entityRecords.length;
           } else if (mergeStrategy === 'merge') {
             // Merge: update existing, add new
-            let added = 0;
-            let updated = 0;
-            for (const item of data[entityType]) {
-              try {
-                const existing = await db.get(entityType, item.id);
-                if (existing) {
-                  await db.update(entityType, item);
-                  updated++;
-                } else {
-                  await db.add(entityType, item);
-                  added++;
-                }
-              } catch (err) {
-                // Item might not exist, try adding
-                try {
-                  await db.add(entityType, item);
-                  added++;
-                } catch (addErr) {
-                  console.error(`Failed to import ${entityType} item:`, item.id, addErr);
-                }
-              }
-            }
-            results.imported[entityType] = { added, updated };
+            await db.batchUpsert(entityType, entityRecords, 100);
+            results.imported[entityType] = { addedOrUpdated: entityRecords.length };
           } else {
             // Skip: only add if doesn't exist
             let added = 0;
-            for (const item of data[entityType]) {
+            for (const item of entityRecords) {
               try {
                 const existing = await db.get(entityType, item.id);
                 if (!existing) {
@@ -156,7 +139,7 @@ class SyncService {
                 }
               }
             }
-            results.imported[entityType] = { added };
+            results.imported[entityType] = { added, skipped: entityRecords.length - added };
           }
         } catch (error) {
           results.errors[entityType] = error.message;
@@ -339,27 +322,45 @@ class SyncService {
       conflicts: {}
     };
 
-    const entityTypes = [
-      'actors', 'itemBank', 'skillBank', 'statRegistry',
-      'books', 'relationships', 'wiki', 'skillTrees', 'storyMap'
-    ];
+    const normalizeStores = (data) => data?.stores || data || {};
+    const localStores = normalizeStores(localData);
+    const remoteStores = normalizeStores(remoteData);
+    const entityTypes = Array.from(
+      new Set([
+        ...Object.keys(localStores),
+        ...Object.keys(remoteStores)
+      ])
+    );
+
+    const stableId = (item, index) => {
+      if (item?.id !== undefined && item?.id !== null && item?.id !== '') {
+        return String(item.id);
+      }
+      return `__index_${index}_${JSON.stringify(item)}`;
+    };
 
     for (const entityType of entityTypes) {
-      const local = localData[entityType] || [];
-      const remote = remoteData[entityType] || [];
+      const local = Array.isArray(localStores[entityType]) ? localStores[entityType] : [];
+      const remote = Array.isArray(remoteStores[entityType]) ? remoteStores[entityType] : [];
       
-      const localIds = new Set(local.map(item => item.id));
-      const remoteIds = new Set(remote.map(item => item.id));
+      const localPairs = local.map((item, index) => ({ key: stableId(item, index), item }));
+      const remotePairs = remote.map((item, index) => ({ key: stableId(item, index), item }));
+      const localIds = new Set(localPairs.map(({ key }) => key));
+      const remoteIds = new Set(remotePairs.map(({ key }) => key));
 
       // Find items only in local
-      differences.localOnly[entityType] = local.filter(item => !remoteIds.has(item.id));
+      differences.localOnly[entityType] = localPairs
+        .filter(({ key }) => !remoteIds.has(key))
+        .map(({ item }) => item);
       
       // Find items only in remote
-      differences.remoteOnly[entityType] = remote.filter(item => !localIds.has(item.id));
+      differences.remoteOnly[entityType] = remotePairs
+        .filter(({ key }) => !localIds.has(key))
+        .map(({ item }) => item);
 
       // Find conflicts (same ID, different content)
-      const localMap = new Map(local.map(item => [item.id, item]));
-      const remoteMap = new Map(remote.map(item => [item.id, item]));
+      const localMap = new Map(localPairs.map(({ key, item }) => [key, item]));
+      const remoteMap = new Map(remotePairs.map(({ key, item }) => [key, item]));
       
       differences.conflicts[entityType] = [];
       for (const [id, localItem] of localMap) {
@@ -382,4 +383,3 @@ class SyncService {
 
 const syncService = new SyncService();
 export default syncService;
-

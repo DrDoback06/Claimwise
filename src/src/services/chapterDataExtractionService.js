@@ -9,6 +9,27 @@ import contextEngine from './contextEngine';
 class ChapterDataExtractionService {
   constructor() {
     this.cache = new Map();
+    this.chunkSize = 5000;
+    this.chunkOverlap = 500;
+  }
+
+  getTextChunks(chapterText) {
+    const text = chapterText || '';
+    if (text.length <= this.chunkSize) {
+      return [{ index: 0, text }];
+    }
+
+    const chunks = [];
+    let start = 0;
+    let index = 0;
+    while (start < text.length) {
+      const end = Math.min(text.length, start + this.chunkSize);
+      chunks.push({ index, text: text.slice(start, end) });
+      if (end >= text.length) break;
+      start = end - this.chunkOverlap;
+      index += 1;
+    }
+    return chunks;
   }
 
   /**
@@ -24,25 +45,38 @@ class ChapterDataExtractionService {
     }
 
     try {
-      const prompt = `Analyze the following chapter text and extract plot beats (significant story events, conflicts, resolutions, character moments).
+      const chunks = this.getTextChunks(chapterText);
+      const merged = [];
+      const seen = new Set();
+      for (const chunk of chunks) {
+        const prompt = `Analyze the following chapter text chunk and extract plot beats (significant story events, conflicts, resolutions, character moments).
 
-Chapter ${chapterNumber}:
-${chapterText.substring(0, 5000)}
+Chapter ${chapterNumber}, Chunk ${chunk.index + 1}/${chunks.length}:
+${chunk.text}
 
 Return a JSON array of plot beats. Each beat should have:
 - beat: A brief description of what happens
 - purpose: Why this beat matters to the story
 - characters: Array of character names involved
-- emotionalTone: The emotional tone (e.g., "tense", "triumphant", "sad")
+- emotionalTone: The emotional tone
 - importance: 1-10 scale
-
-Format: [{"beat": "...", "purpose": "...", "characters": [...], "emotionalTone": "...", "importance": 5}]`;
-
-      const response = await aiService.callAI(prompt, 'structured');
-
-      // Parse the response
-      const beats = this._parseBeatsResponse(response, chapterNumber, bookId);
-      return beats;
+- confidence: 0-1 confidence score`;
+        const response = await aiService.callAI(prompt, 'structured');
+        const beats = this._parseBeatsResponse(response, chapterNumber, bookId).map(beat => ({
+          ...beat,
+          confidence: Number(beat.confidence ?? 0.85),
+          sourceChunk: chunk.index,
+          chunkCount: chunks.length,
+          promptVersion: 'beats_chunk_v2'
+        }));
+        beats.forEach((beat) => {
+          const key = `${(beat.beat || '').toLowerCase().trim()}|${beat.targetChapter}`;
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          merged.push(beat);
+        });
+      }
+      return merged;
     } catch (error) {
       console.error('Error extracting beats from chapter:', error);
       return [];
@@ -63,11 +97,15 @@ Format: [{"beat": "...", "purpose": "...", "characters": [...], "emotionalTone":
     }
 
     try {
+      const chunks = this.getTextChunks(chapterText);
       const actorNames = actors.map(a => a.name).join(', ');
-      const prompt = `Analyze the following chapter text and extract story events.
+      const merged = [];
+      const seen = new Set();
+      for (const chunk of chunks) {
+        const prompt = `Analyze the following chapter text chunk and extract story events.
 
-Chapter text:
-${chapterText.substring(0, 5000)}
+Chapter text (chunk ${chunk.index + 1}/${chunks.length}):
+${chunk.text}
 
 Available characters: ${actorNames || 'None specified'}
 
@@ -85,13 +123,26 @@ Return JSON array with events. Each event should have:
 - type: One of: character_appearance, stat_change, skill_event, item_event, travel, relationship_change, milestone
 - actors: Array of character names involved
 - locations: Array of location names (if applicable)
+- confidence: 0-1 confidence score
 
 Format: [{"title": "...", "description": "...", "type": "...", "actors": [...], "locations": [...]}]`;
 
-      const response = await aiService.callAI(prompt, 'structured');
-
-      const events = this._parseEventsResponse(response, chapterId, bookId, actors);
-      return events;
+        const response = await aiService.callAI(prompt, 'structured');
+        const events = this._parseEventsResponse(response, chapterId, bookId, actors).map(event => ({
+          ...event,
+          confidence: Number(event.confidence ?? 0.9),
+          sourceChunk: chunk.index,
+          chunkCount: chunks.length,
+          promptVersion: 'events_chunk_v2'
+        }));
+        events.forEach((event) => {
+          const key = `${(event.title || '').toLowerCase().trim()}|${(event.type || '').toLowerCase()}|${chapterId}|${bookId}`;
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          merged.push(event);
+        });
+      }
+      return merged;
     } catch (error) {
       console.error('Error extracting events from chapter:', error);
       return [];
@@ -111,10 +162,14 @@ Format: [{"title": "...", "description": "...", "type": "...", "actors": [...], 
     }
 
     try {
-      const prompt = `Analyze the following chapter text and extract location mentions.
+      const chunks = this.getTextChunks(chapterText);
+      const merged = [];
+      const seen = new Set();
+      for (const chunk of chunks) {
+        const prompt = `Analyze the following chapter text and extract location mentions.
 
-Chapter text:
-${chapterText.substring(0, 5000)}
+Chapter text (chunk ${chunk.index + 1}/${chunks.length}):
+${chunk.text}
 
 Extract all location mentions. For each location, identify:
 - name: Location name
@@ -126,10 +181,22 @@ Common UK cities: London, Manchester, Birmingham, Liverpool, Leeds, Sheffield, B
 
 Return JSON array: [{"name": "...", "type": "...", "description": "...", "isUKCity": true/false}]`;
 
-      const response = await aiService.callAI(prompt, 'structured');
-
-      const locations = this._parseLocationsResponse(response, chapterId, bookId);
-      return locations;
+        const response = await aiService.callAI(prompt, 'structured');
+        const locations = this._parseLocationsResponse(response, chapterId, bookId).map(location => ({
+          ...location,
+          confidence: Number(location.confidence ?? 0.85),
+          sourceChunk: chunk.index,
+          chunkCount: chunks.length,
+          promptVersion: 'locations_chunk_v2'
+        }));
+        locations.forEach((location) => {
+          const key = `${(location.name || '').toLowerCase().trim()}|${bookId}`;
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          merged.push(location);
+        });
+      }
+      return merged;
     } catch (error) {
       console.error('Error extracting locations from chapter:', error);
       return [];
@@ -149,10 +216,14 @@ Return JSON array: [{"name": "...", "type": "...", "description": "...", "isUKCi
     }
 
     try {
-      const prompt = `Analyze the following chapter text and extract story entities.
+      const chunks = this.getTextChunks(chapterText);
+      const merged = { actors: [], items: [], skills: [] };
+      const seen = new Set();
+      for (const chunk of chunks) {
+        const prompt = `Analyze the following chapter text and extract story entities.
 
-Chapter text:
-${chapterText.substring(0, 5000)}
+Chapter text (chunk ${chunk.index + 1}/${chunks.length}):
+${chunk.text}
 
 Extract:
 1. Characters/Actors mentioned (new or existing)
@@ -167,10 +238,24 @@ For each entity, provide:
 
 Return JSON: {"actors": [{"name": "...", "description": "...", "isNew": true}], "items": [...], "skills": [...]}`;
 
-      const response = await aiService.callAI(prompt, 'structured');
-
-      const entities = this._parseEntitiesResponse(response);
-      return entities;
+        const response = await aiService.callAI(prompt, 'structured');
+        const entities = this._parseEntitiesResponse(response);
+        ['actors', 'items', 'skills'].forEach((type) => {
+          entities[type].forEach((entry) => {
+            const key = `${type}|${(entry.name || '').toLowerCase().trim()}`;
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            merged[type].push({
+              ...entry,
+              confidence: Number(entry.confidence ?? 0.8),
+              sourceChunk: chunk.index,
+              chunkCount: chunks.length,
+              promptVersion: 'entities_chunk_v2'
+            });
+          });
+        });
+      }
+      return merged;
     } catch (error) {
       console.error('Error extracting entities from chapter:', error);
       return { actors: [], items: [], skills: [] };
@@ -191,11 +276,15 @@ Return JSON: {"actors": [{"name": "...", "description": "...", "isNew": true}], 
     }
 
     try {
+      const chunks = this.getTextChunks(chapterText);
       const actorNames = actors.map(a => a.name).join(', ');
-      const prompt = `Analyze the following chapter text for character data.
+      const merged = { appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [] };
+      const seen = new Set();
+      for (const chunk of chunks) {
+        const prompt = `Analyze the following chapter text for character data.
 
-Chapter text:
-${chapterText.substring(0, 5000)}
+Chapter text (chunk ${chunk.index + 1}/${chunks.length}):
+${chunk.text}
 
 Available characters: ${actorNames || 'None'}
 
@@ -223,10 +312,24 @@ Return JSON:
   "relationshipChanges": [{"character1": "...", "character2": "...", "change": "..."}]
 }`;
 
-      const response = await aiService.callAI(prompt, 'structured');
-
-      const data = this._parseCharacterDataResponse(response, chapterId, bookId);
-      return data;
+        const response = await aiService.callAI(prompt, 'structured');
+        const data = this._parseCharacterDataResponse(response, chapterId, bookId);
+        Object.keys(merged).forEach((type) => {
+          (data[type] || []).forEach((entry) => {
+            const key = `${type}|${JSON.stringify(entry).toLowerCase()}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            merged[type].push({
+              ...entry,
+              confidence: Number(entry.confidence ?? 0.8),
+              sourceChunk: chunk.index,
+              chunkCount: chunks.length,
+              promptVersion: 'character_data_chunk_v2'
+            });
+          });
+        });
+      }
+      return merged;
     } catch (error) {
       console.error('Error extracting character data from chapter:', error);
       return { appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [] };

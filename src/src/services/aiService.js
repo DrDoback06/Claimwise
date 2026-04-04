@@ -22,13 +22,13 @@ class AIService {
     
     this.apis = {
       gemini: {
-        key: "AIzaSyDlMP083JOLVq5BpZz5MzCpondrW2fHJPU",
+        key: "",
         endpoint: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent",
         requiresKey: true,
         free: false
       },
       openai: {
-        key: "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",
+        key: "",
         endpoint: "https://api.openai.com/v1/chat/completions",
         requiresKey: true,
         free: false
@@ -55,8 +55,20 @@ class AIService {
       }
     };
     
+    this.envKeyMap = {
+      gemini: process.env.REACT_APP_GEMINI_API_KEY || '',
+      openai: process.env.REACT_APP_OPENAI_API_KEY || '',
+      anthropic: process.env.REACT_APP_ANTHROPIC_API_KEY || '',
+      groq: process.env.REACT_APP_GROQ_API_KEY || '',
+      huggingface: process.env.REACT_APP_HUGGINGFACE_API_KEY || ''
+    };
+    this.runtimeKeys = {};
+    this.useServerProxy = true;
+
     // Load preferred provider from localStorage
     this.preferredProvider = localStorage.getItem('ai_preferred_provider') || 'auto';
+    this.loadApiKeys();
+    this._assertNoHardcodedKeys();
   }
   
   /**
@@ -111,19 +123,55 @@ class AIService {
   setApiKey(provider, key) {
     if (this.apis[provider]) {
       this.apis[provider].key = key;
-      // Store in localStorage for persistence
-      localStorage.setItem(`ai_${provider}_key`, key);
+      this.runtimeKeys[provider] = key;
     }
   }
 
+  async setApiKeySecure(provider, key) {
+    const response = await fetch('/api/ai/ai-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.REACT_APP_CLAIMWISE_CLIENT_TOKEN
+          ? { 'x-claimwise-client': process.env.REACT_APP_CLAIMWISE_CLIENT_TOKEN }
+          : {})
+      },
+      credentials: 'include',
+      body: JSON.stringify({ provider, key })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to store API key');
+    }
+    this.setApiKey(provider, key);
+    return data;
+  }
+
+  async validateApiKey(provider, key) {
+    const response = await fetch('/api/ai/ai-validate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.REACT_APP_CLAIMWISE_CLIENT_TOKEN
+          ? { 'x-claimwise-client': process.env.REACT_APP_CLAIMWISE_CLIENT_TOKEN }
+          : {})
+      },
+      credentials: 'include',
+      body: JSON.stringify({ provider, key })
+    });
+    const data = await response.json();
+    return Boolean(response.ok && data.valid);
+  }
+
   /**
-   * Load API keys from localStorage
+   * Load API keys from secure runtime sources (env/session proxy)
    */
   loadApiKeys() {
     Object.keys(this.apis).forEach(provider => {
-      const storedKey = localStorage.getItem(`ai_${provider}_key`);
-      if (storedKey) {
-        this.apis[provider].key = storedKey;
+      if (this.runtimeKeys[provider]) {
+        this.apis[provider].key = this.runtimeKeys[provider];
+      } else if (this.envKeyMap[provider]) {
+        this.apis[provider].key = this.envKeyMap[provider];
       }
     });
     
@@ -134,10 +182,45 @@ class AIService {
     }
   }
 
+  _assertNoHardcodedKeys() {
+    const keyPattern = /^(sk-|AIza)/;
+    const embedded = Object.entries(this.apis).find(([, config]) => keyPattern.test(config.key || ''));
+    if (embedded) {
+      throw new Error(`Blocked startup: detected hardcoded API key pattern for provider ${embedded[0]}`);
+    }
+  }
+
+  async callProviderProxy(provider, payload, abortController = null) {
+    const fetchOptions = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.REACT_APP_CLAIMWISE_CLIENT_TOKEN
+          ? { 'x-claimwise-client': process.env.REACT_APP_CLAIMWISE_CLIENT_TOKEN }
+          : {})
+      },
+      credentials: 'include',
+      body: JSON.stringify({ provider, ...payload })
+    };
+    if (abortController) {
+      fetchOptions.signal = abortController.signal;
+    }
+
+    const response = await fetch('/api/ai/ai-proxy', fetchOptions);
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'AI proxy error');
+    }
+    return data.text || '';
+  }
+
   /**
    * Gemini API call
    */
   async callGemini(prompt, systemContext = "", abortController = null) {
+    if (this.useServerProxy) {
+      return this.callProviderProxy('gemini', { prompt, systemContext }, abortController);
+    }
     const { key, endpoint } = this.apis.gemini;
 
     if (!key) {
@@ -183,6 +266,9 @@ class AIService {
    * ChatGPT (OpenAI) API call
    */
   async callChatGPT(prompt, systemContext = "", model = "gpt-4o", abortController = null) {
+    if (this.useServerProxy) {
+      return this.callProviderProxy('openai', { prompt, systemContext, model }, abortController);
+    }
     const { key, endpoint } = this.apis.openai;
 
     if (!key) {
@@ -235,6 +321,9 @@ class AIService {
    * Claude (Anthropic) API call
    */
   async callClaude(prompt, systemContext = "", model = "claude-3-5-sonnet-20241022", abortController = null) {
+    if (this.useServerProxy) {
+      return this.callProviderProxy('anthropic', { prompt, systemContext, model }, abortController);
+    }
     const { key, endpoint } = this.apis.anthropic;
 
     if (!key) {
@@ -283,6 +372,9 @@ class AIService {
    * Very fast inference with Llama models
    */
   async callGroq(prompt, systemContext = "", model = "llama-3.1-70b-versatile", abortController = null) {
+    if (this.useServerProxy) {
+      return this.callProviderProxy('groq', { prompt, systemContext, model }, abortController);
+    }
     const { key, endpoint } = this.apis.groq;
 
     if (!key) {
@@ -334,6 +426,9 @@ class AIService {
    * Uses open-source models
    */
   async callHuggingFace(prompt, systemContext = "", abortController = null) {
+    if (this.useServerProxy) {
+      return this.callProviderProxy('huggingface', { prompt, systemContext }, abortController);
+    }
     const { key, endpoint, model } = this.apis.huggingface;
 
     try {

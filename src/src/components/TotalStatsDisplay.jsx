@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { TrendingUp, BarChart3 } from 'lucide-react';
-import { getCardContainerStyles, getProgressBarStyles, getBadgeStyles, getTextGradient } from '../utils/rpgTheme';
+import { getCardContainerStyles, getProgressBarStyles, getBadgeStyles, getTextGradient, getHoverEffects } from '../utils/rpgTheme';
 import '../styles/rpgComponents.css';
 import '../styles/rpgAnimations.css';
 
