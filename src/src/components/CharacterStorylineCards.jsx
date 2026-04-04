@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Clock, CheckCircle, AlertCircle, Play, Pause, Target } from 'lucide-react';
 import db from '../services/database';
-import { getStatusStyles, getCardContainerStyles, getProgressBarStyles, getBadgeStyles } from '../utils/rpgTheme';
+import { getStatusStyles, getCardContainerStyles, getProgressBarStyles, getBadgeStyles, getHoverEffects } from '../utils/rpgTheme';
 import '../styles/rpgComponents.css';
 import '../styles/rpgAnimations.css';
 

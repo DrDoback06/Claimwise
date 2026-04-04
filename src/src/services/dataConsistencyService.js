@@ -9,6 +9,32 @@ import contextEngine from './contextEngine';
 class DataConsistencyService {
   constructor() {
     this.cache = new Map();
+    this.thresholds = this._loadThresholdConfig();
+  }
+
+  _loadThresholdConfig() {
+    const defaults = {
+      plotBeatSimilarity: 0.93,
+      timelineTitleSimilarity: 0.9,
+      timelineCombinedTitleSimilarity: 0.82,
+      timelineDescriptionSimilarity: 0.88,
+      locationSimilarity: 0.94,
+      nodeSimilarity: 0.94
+    };
+    try {
+      const raw = localStorage.getItem('consistency_thresholds');
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw);
+      return { ...defaults, ...parsed };
+    } catch (error) {
+      console.warn('Invalid threshold config, falling back to defaults:', error);
+      return defaults;
+    }
+  }
+
+  setThresholdConfig(config = {}) {
+    this.thresholds = { ...this.thresholds, ...config };
+    localStorage.setItem('consistency_thresholds', JSON.stringify(this.thresholds));
   }
 
   /**
@@ -33,7 +59,7 @@ class DataConsistencyService {
         // Similarity check (if texts are very similar and same chapter)
         if (targetChapter && existingChapter === targetChapter) {
           const similarity = this._calculateSimilarity(existingText, beatText);
-          if (similarity > 0.85) { // 85% similarity threshold
+          if (similarity > this.thresholds.plotBeatSimilarity) {
             return true;
           }
         }
@@ -91,7 +117,13 @@ class DataConsistencyService {
         if (chapterId && existingChapter === chapterId && bookId && existingBook === bookId) {
           const titleSimilarity = this._calculateSimilarity(existingTitle, eventTitle);
           const descSimilarity = this._calculateSimilarity(existingDesc, eventDesc);
-          if (titleSimilarity > 0.8 || (titleSimilarity > 0.6 && descSimilarity > 0.7)) {
+          if (
+            titleSimilarity > this.thresholds.timelineTitleSimilarity ||
+            (
+              titleSimilarity > this.thresholds.timelineCombinedTitleSimilarity &&
+              descSimilarity > this.thresholds.timelineDescriptionSimilarity
+            )
+          ) {
             return true;
           }
         }
@@ -146,7 +178,7 @@ class DataConsistencyService {
       
       return allLocations.find(loc => {
         const locName = (loc.name || '').toLowerCase().trim();
-        return locName === searchName || this._calculateSimilarity(locName, searchName) > 0.9;
+        return locName === searchName || this._calculateSimilarity(locName, searchName) > this.thresholds.locationSimilarity;
       }) || null;
     } catch (error) {
       console.error('Error finding existing location:', error);
@@ -260,7 +292,7 @@ class DataConsistencyService {
       if (nodeLabel) {
         const byLabel = allNodes.find(n => {
           const existingLabel = ((n.label || n.name || '')).toLowerCase().trim();
-          return existingLabel === nodeLabel || this._calculateSimilarity(existingLabel, nodeLabel) > 0.9;
+          return existingLabel === nodeLabel || this._calculateSimilarity(existingLabel, nodeLabel) > this.thresholds.nodeSimilarity;
         });
         if (byLabel) return byLabel;
       }

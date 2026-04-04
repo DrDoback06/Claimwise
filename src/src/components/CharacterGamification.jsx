@@ -333,7 +333,7 @@ const CharacterGamification = ({ character, worldState }) => {
               return (
                 <div
                   key={idx}
-                  className={`p-2 rounded border ${getPowerLevelColor(100).replace('text-', 'border-')} bg-slate-800/50 flex items-center gap-2`}
+                  className={`p-2 rounded border ${getPowerLevelStyles(100).text.replace('text-', 'border-')} bg-slate-800/50 flex items-center gap-2`}
                 >
                   <Icon className={`w-4 h-4 text-${achievement.color}-400`} />
                   <div className="text-xs text-white">{achievement.name}</div>

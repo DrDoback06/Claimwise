@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'ClaimwiseOmniscience';
-const DB_VERSION = 19; // Incremented to add new stores for AI suggestions and persistence
+const DB_VERSION = 20; // Incremented for schema consistency and transactional ingestion support
 
 class ClaimwiseDB {
   constructor() {
@@ -504,6 +504,22 @@ class ClaimwiseDB {
             templateStore.createIndex('isCustom', 'isCustom', { unique: false });
           }
         }
+
+        // Migration for version 20: Add missing sync stores
+        if (oldVersion < 20) {
+          if (!db.objectStoreNames.contains('backups')) {
+            const backupStore = db.createObjectStore('backups', { keyPath: 'id' });
+            backupStore.createIndex('timestamp', 'timestamp', { unique: false });
+          }
+
+          if (!db.objectStoreNames.contains('snapshots')) {
+            const snapshotStore = db.createObjectStore('snapshots', { keyPath: 'id' });
+            snapshotStore.createIndex('actorId', 'actorId', { unique: false });
+            snapshotStore.createIndex('bookId', 'bookId', { unique: false });
+            snapshotStore.createIndex('chapterId', 'chapterId', { unique: false });
+            snapshotStore.createIndex('timestamp', 'timestamp', { unique: false });
+          }
+        }
       };
     });
   }
@@ -874,6 +890,83 @@ class ClaimwiseDB {
       });
     });
     return Promise.all(promises);
+  }
+
+  /**
+   * Execute a custom IndexedDB transaction across one or many stores.
+   */
+  async executeTransaction(storeNames, mode, operationFn) {
+    await this.ensureInitialized();
+    const stores = Array.isArray(storeNames) ? storeNames : [storeNames];
+    const transaction = this.db.transaction(stores, mode);
+    const storeMap = Object.fromEntries(stores.map(name => [name, transaction.objectStore(name)]));
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const settleResolve = (value) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+      const settleReject = (error) => {
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+      };
+
+      let operationResult;
+      transaction.oncomplete = () => settleResolve(operationResult);
+      transaction.onerror = () => settleReject(transaction.error);
+      transaction.onabort = () => settleReject(transaction.error || new Error('Transaction aborted'));
+
+      Promise.resolve()
+        .then(() => operationFn({ transaction, stores: storeMap }))
+        .then(result => {
+          operationResult = result;
+        })
+        .catch(error => {
+          try {
+            transaction.abort();
+          } catch (abortError) {
+            console.warn('Transaction abort warning:', abortError);
+          }
+          settleReject(error);
+        });
+    });
+  }
+
+  /**
+   * Batch upsert with chunking to avoid oversized transactions.
+   */
+  async batchUpsert(storeName, records, batchSize = 50) {
+    await this.ensureInitialized();
+    if (!Array.isArray(records) || records.length === 0) {
+      return 0;
+    }
+
+    const normalizedBatchSize = Math.max(1, Number(batchSize) || 50);
+    for (let i = 0; i < records.length; i += normalizedBatchSize) {
+      const chunk = records.slice(i, i + normalizedBatchSize);
+      await this.executeTransaction(storeName, 'readwrite', ({ stores }) => {
+        chunk.forEach(record => {
+          stores[storeName].put(record);
+        });
+      });
+    }
+
+    this._invalidateStoreCache(storeName);
+    return records.length;
+  }
+
+  async getStoreNames() {
+    await this.ensureInitialized();
+    return Array.from(this.db.objectStoreNames || []);
+  }
+
+  getSchemaVersion() {
+    return DB_VERSION;
   }
 
   /**

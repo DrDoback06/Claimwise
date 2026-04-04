@@ -16,6 +16,112 @@ import worldConsistencyService from './worldConsistencyService';
 class ManuscriptIntelligenceService {
   constructor() {
     this.cache = new Map();
+    this.defaultBatchSize = 25;
+  }
+
+  getBatchSize() {
+    const configured = Number(localStorage.getItem('chapter_ingestion_batch_size'));
+    return Number.isFinite(configured) && configured > 0 ? configured : this.defaultBatchSize;
+  }
+
+  async ingestChapterExtractionTransactional(chapter, extractionPayload = {}) {
+    const dedupedTimelineEvents = await this.dedupeTimelineEventsForChapter(
+      extractionPayload.timelineEvents || [],
+      chapter?.id || null
+    );
+
+    const storePayload = {
+      plotBeats: extractionPayload.beats || [],
+      timelineEvents: dedupedTimelineEvents,
+      storylines: extractionPayload.storylines || [],
+      decisions: extractionPayload.decisions || [],
+      callbacks: extractionPayload.callbacks || [],
+      aiSuggestions: extractionPayload.aiSuggestions || []
+    };
+
+    const stores = Object.entries(storePayload)
+      .filter(([, records]) => Array.isArray(records) && records.length > 0)
+      .map(([storeName]) => storeName);
+
+    if (stores.length === 0) {
+      return;
+    }
+
+    const batchSize = this.getBatchSize();
+    const maxLength = Math.max(...stores.map(name => storePayload[name].length));
+    for (let offset = 0; offset < maxLength; offset += batchSize) {
+      await db.executeTransaction(stores, 'readwrite', ({ stores: txStores }) => {
+        stores.forEach(storeName => {
+          const chunk = storePayload[storeName].slice(offset, offset + batchSize);
+          chunk.forEach(record => {
+            txStores[storeName].put({
+              ...record,
+              chapterId: record.chapterId || chapter?.id || null,
+              chapterNumber: record.chapterNumber || chapter?.number || null,
+              updatedAt: Date.now()
+            });
+          });
+        });
+      });
+    }
+  }
+
+  async dedupeTimelineEventsForChapter(events = [], chapterId = null) {
+    if (!Array.isArray(events) || events.length === 0) {
+      return [];
+    }
+
+    const normalized = [];
+    const seen = new Set();
+
+    const existingEvents = chapterId
+      ? await db.getByIndex('timelineEvents', 'chapterId', chapterId)
+      : [];
+
+    const existingKeys = new Set(
+      existingEvents.map(event =>
+        this.buildTimelineEventDedupKey(
+          event.title,
+          event.description,
+          event.type,
+          event.chapterId,
+          event.bookId
+        )
+      )
+    );
+
+    events.forEach(event => {
+      const dedupeKey = this.buildTimelineEventDedupKey(
+        event.title,
+        event.description,
+        event.type,
+        event.chapterId || chapterId,
+        event.bookId
+      );
+      if (!dedupeKey || seen.has(dedupeKey) || existingKeys.has(dedupeKey)) {
+        return;
+      }
+      seen.add(dedupeKey);
+      normalized.push(event);
+    });
+
+    return normalized;
+  }
+
+  buildTimelineEventDedupKey(title, description, type, chapterId, bookId) {
+    const normalize = (value) => (value || '').toString().trim().toLowerCase();
+    const normalizedTitle = normalize(title);
+    const normalizedDescription = normalize(description).slice(0, 120);
+    if (!normalizedTitle && !normalizedDescription) {
+      return '';
+    }
+    return [
+      normalizedTitle,
+      normalizedDescription,
+      normalize(type),
+      normalize(chapterId),
+      normalize(bookId)
+    ].join('|');
   }
 
   /**
@@ -702,39 +808,41 @@ Return JSON array:
 
           allAISuggestions.push(...chapterAISuggestions);
 
-          // Save AI suggestions to database
-          try {
-            for (const suggestion of chapterAISuggestions) {
-              const suggestionRecord = {
-                id: suggestion.id || `suggestion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                chapterId: chapter.id,
-                chapterNumber: chapter.number,
-                bookId: book?.id || null,
-                type: suggestion.type || 'unknown',
-                priority: suggestion.priority || 'medium',
-                confidence: suggestion.confidence || 0.5,
-                status: 'pending', // 'pending' | 'accepted' | 'dismissed'
-                suggestion: suggestion.suggestion || suggestion.comedyMoment || suggestion.conflict || suggestion.event || suggestion.decision || '',
-                reasoning: suggestion.reasoning || '',
-                suggestions: suggestion.suggestions || [],
-                characters: suggestion.characters || suggestion.character1 ? [suggestion.character1, suggestion.character2].filter(Boolean) : [],
-                data: suggestion, // Store full suggestion data
-                createdAt: Date.now(),
-                source: 'manuscript_intelligence'
-              };
+          const suggestionRecords = chapterAISuggestions.map(suggestion => ({
+            id: suggestion.id || `suggestion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            chapterId: chapter.id,
+            chapterNumber: chapter.number,
+            bookId: book?.id || null,
+            type: suggestion.type || 'unknown',
+            priority: suggestion.priority || 'medium',
+            confidence: suggestion.confidence || 0.5,
+            status: 'pending',
+            suggestion: suggestion.suggestion || suggestion.comedyMoment || suggestion.conflict || suggestion.event || suggestion.decision || '',
+            reasoning: suggestion.reasoning || '',
+            suggestions: suggestion.suggestions || [],
+            characters: suggestion.characters || suggestion.character1 ? [suggestion.character1, suggestion.character2].filter(Boolean) : [],
+            data: suggestion,
+            createdAt: Date.now(),
+            source: 'manuscript_intelligence'
+          }));
 
-              try {
-                await db.add('aiSuggestions', suggestionRecord);
-              } catch (e) {
-                // Update if exists (shouldn't happen, but handle gracefully)
-                console.warn('Suggestion already exists, skipping:', suggestionRecord.id);
-              }
-            }
-          } catch (error) {
-            console.warn('Error saving AI suggestions to database:', error);
-          }
+          await this.ingestChapterExtractionTransactional(chapter, {
+            beats: chapterData.beats,
+            timelineEvents: chapterData.timelineEvents,
+            storylines: chapterData.storylines,
+            decisions: chapterData.decisions,
+            callbacks: chapterData.callbacks,
+            aiSuggestions: suggestionRecords
+          });
         } catch (error) {
-          console.warn('Error generating AI suggestions for chapter:', error);
+          console.warn('Error generating/ingesting chapter AI suggestions:', error);
+          await this.ingestChapterExtractionTransactional(chapter, {
+            beats: chapterData.beats,
+            timelineEvents: chapterData.timelineEvents,
+            storylines: chapterData.storylines,
+            decisions: chapterData.decisions,
+            callbacks: chapterData.callbacks
+          });
         }
       }
 

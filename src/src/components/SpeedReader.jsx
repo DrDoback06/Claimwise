@@ -508,6 +508,11 @@ const SpeedReader = ({ worldState }) => {
   const progress = words.length > 0 ? ((currentIndex + 1) / words.length) * 100 : 0;
   const timeRemaining = wordsRemaining > 0 ? Math.round((wordsRemaining / speed) * 60) : 0;
   const timeRemainingFormatted = `${Math.floor(timeRemaining / 60)}:${String(timeRemaining % 60).padStart(2, '0')}`;
+  const getPreviewWords = (count = 5) => {
+    if (words.length === 0) return [];
+    const start = Math.min(currentIndex + 1, words.length);
+    return words.slice(start, start + count);
+  };
 
   // Render word with center letter highlighted
   const renderWord = (word) => {

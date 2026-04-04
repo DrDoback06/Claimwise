@@ -12,8 +12,7 @@ import ReadAloudPanel from './ReadAloudPanel';
 import db from '../services/database';
 import contextEngine from '../services/contextEngine';
 import aiService from '../services/aiService';
-import chapterDataExtractionService from '../services/chapterDataExtractionService';
-import dataConsistencyService from '../services/dataConsistencyService';
+import chapterIngestionOrchestrator from '../services/chapterIngestionOrchestrator';
 import EntityExtractionWizard from './EntityExtractionWizard';
 
 /**
@@ -55,6 +54,7 @@ const WritingCanvas = ({
   // Completion state
   const [completionAnalysis, setCompletionAnalysis] = useState(null);
   const [showCompletionPanel, setShowCompletionPanel] = useState(false);
+  const [ingestionHealth, setIngestionHealth] = useState(null);
   
   // Selection/rewrite state
   const [selectedText, setSelectedText] = useState('');
@@ -224,31 +224,25 @@ const WritingCanvas = ({
       fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:215',message:'Chapter saved, extracting events',data:{bookId:currentBook.id,chapterId:currentChapter.id,contentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
       
-      // Extract events using Master Timeline's proven method
+      // Run unified chapter-ingestion orchestrator
       if (content && content.trim().length >= 50) {
         try {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:222',message:'Calling extractEventsFromChapter',data:{actorsCount:actors.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
-          
-          const events = await chapterDataExtractionService.extractEventsFromChapter(
-            content,
-            currentChapter.id,
-            currentBook.id,
-            actors || []
-          );
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:232',message:'Events extracted',data:{eventsCount:events.length,eventTypes:events.map(e=>e.type)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
-
-          // Save events to timelineEvents table
-          for (const event of events) {
-            await dataConsistencyService.addTimelineEventSafe(event);
-          }
+          const ingestSession = await chapterIngestionOrchestrator.ingestChapter({
+            bookId: currentBook.id,
+            chapterId: currentChapter.id,
+            chapterNumber: currentChapter.number,
+            chapterText: content,
+            actors: actors || []
+          });
+          setIngestionHealth({
+            status: ingestSession.status,
+            sessionId: ingestSession.id,
+            counts: ingestSession.stages?.extracted || {},
+            errors: ingestSession.errors || []
+          });
           
           // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:240',message:'Events saved, showing wizard',data:{eventsSaved:events.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:240',message:'Ingestion session completed',data:{sessionId:ingestSession.id,status:ingestSession.status,errors:ingestSession.errors?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
           // #endregion
 
           // Show Entity Extraction Wizard (mandatory)
@@ -262,6 +256,12 @@ const WritingCanvas = ({
           // #endregion
           
           console.error('[WritingCanvas] Event extraction failed:', error);
+          setIngestionHealth({
+            status: 'failed',
+            sessionId: null,
+            counts: {},
+            errors: [{ error: error.message }]
+          });
           // Still show wizard even if extraction fails - user can manually review
           setShowEntityWizard(true);
         }
@@ -1138,6 +1138,35 @@ Write a tighter version (aim for 50-70% of original length). Only return the con
           </div>
         </div>
       </div>
+
+      {ingestionHealth && (
+        <div className={`mx-4 mt-3 px-3 py-2 rounded border text-sm ${
+          ingestionHealth.status === 'committed'
+            ? 'bg-green-900/30 border-green-700 text-green-200'
+            : ingestionHealth.status === 'partial'
+            ? 'bg-amber-900/30 border-amber-700 text-amber-200'
+            : 'bg-red-900/30 border-red-700 text-red-200'
+        }`}>
+          <div className="font-semibold">
+            Ingestion status: {ingestionHealth.status}
+            {ingestionHealth.sessionId ? ` • ${ingestionHealth.sessionId}` : ''}
+          </div>
+          <div className="text-xs mt-1">
+            Events: {ingestionHealth.counts?.events || 0} • Beats: {ingestionHealth.counts?.beats || 0} • Locations: {ingestionHealth.counts?.locations || 0}
+          </div>
+          {(ingestionHealth.errors || []).length > 0 && (
+            <div className="text-xs mt-1">Errors: {(ingestionHealth.errors || []).map(e => e.error).join(' | ')}</div>
+          )}
+          {ingestionHealth.status !== 'committed' && (
+            <button
+              onClick={handleSave}
+              className="mt-2 px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-600"
+            >
+              Retry ingestion
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden relative">

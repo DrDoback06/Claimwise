@@ -347,7 +347,6 @@ const EnhancedItemVault = ({ items, books, onItemSelect, onCreateNew }) => {
                 <ItemGamification item={selectedItem} items={items} actors={[]} />
               </div>
             </div>
-          </div>
         </div>
       )}
     </div>
