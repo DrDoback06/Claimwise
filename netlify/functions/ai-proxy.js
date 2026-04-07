@@ -115,7 +115,7 @@ exports.handler = async (event) => {
       }
       case 'huggingface': {
         const hfModel = model || 'microsoft/Phi-3-mini-4k-instruct';
-        const hfEndpoint = `https://api-inference.huggingface.co/models/${hfModel}`;
+        const hfEndpoint = `https://router.huggingface.co/models/${hfModel}`;
         console.log('[ai-proxy DEBUG] HuggingFace calling:', hfEndpoint);
         const fullPrompt = systemContext
           ? `<|system|>\n${systemContext}\n<|user|>\n${prompt}\n<|assistant|>\n`

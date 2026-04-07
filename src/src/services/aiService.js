@@ -48,7 +48,7 @@ class AIService {
       },
       huggingface: {
         key: "",
-        endpoint: "https://api-inference.huggingface.co/models/microsoft/Phi-3-mini-4k-instruct",
+        endpoint: "https://router.huggingface.co/models/microsoft/Phi-3-mini-4k-instruct",
         requiresKey: false, // Can work without key, but better with key
         free: true,
         model: "microsoft/Phi-3-mini-4k-instruct" // Faster, smaller model that works well
