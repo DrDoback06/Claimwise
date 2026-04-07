@@ -693,33 +693,26 @@ class AIService {
       primaryProvider = taskMapping[task] || "groq"; // Default to free Groq
     }
 
-    // Build fallback chain: offline -> preferred -> free providers -> paid providers
+    // Build fallback chain: offline -> preferred -> free -> cheap -> expensive
     const fallbackChain = [];
-    
+
     // Try offline AI first if available
     if (offlineAIService.isAvailable()) {
       fallbackChain.push('offline');
     }
-    
+
     // Add preferred provider
     if (primaryProvider !== 'offline') {
       fallbackChain.push(primaryProvider);
     }
-    
-    // Add free providers to fallback
-    if (primaryProvider !== 'groq' && !fallbackChain.includes('groq')) {
-      fallbackChain.push('groq');
-    }
-    if (primaryProvider !== 'huggingface' && !fallbackChain.includes('huggingface')) {
-      fallbackChain.push('huggingface');
-    }
-    
-    // Add other paid providers
-    Object.keys(this.apis).forEach(provider => {
-      if (!fallbackChain.includes(provider) && provider !== primaryProvider && provider !== 'offline') {
+
+    // Cost-ordered fallback: free first, then cheapest paid
+    const providerCostOrder = ['huggingface', 'groq', 'gemini', 'openai', 'anthropic'];
+    for (const provider of providerCostOrder) {
+      if (!fallbackChain.includes(provider)) {
         fallbackChain.push(provider);
       }
-    });
+    }
 
     // Try each provider in the fallback chain
     let lastError = null;
@@ -734,8 +727,8 @@ class AIService {
         const config = this.apis[provider];
         if (!config) continue;
         
-        if (config.requiresKey && !config.key) {
-          continue; // Skip providers that need keys but don't have them
+        if (config.requiresKey && !config.key && !this.useServerProxy) {
+          continue; // Skip providers that need keys but don't have them (unless using server proxy)
         }
 
         console.log(`[AI Service] Trying provider: ${provider}`);
