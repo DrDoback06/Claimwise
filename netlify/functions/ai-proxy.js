@@ -116,9 +116,11 @@ exports.handler = async (event) => {
       case 'huggingface': {
         const hfModel = model || 'microsoft/Phi-3-mini-4k-instruct';
         const hfEndpoint = `https://api-inference.huggingface.co/models/${hfModel}`;
+        console.log('[ai-proxy DEBUG] HuggingFace calling:', hfEndpoint);
         const fullPrompt = systemContext
           ? `<|system|>\n${systemContext}\n<|user|>\n${prompt}\n<|assistant|>\n`
           : `<|user|>\n${prompt}\n<|assistant|>\n`;
+        console.log('[ai-proxy DEBUG] HuggingFace prompt length:', fullPrompt.length);
         const response = await fetch(hfEndpoint, {
           method: 'POST',
           headers: {
@@ -135,12 +137,16 @@ exports.handler = async (event) => {
             }
           })
         });
+        console.log('[ai-proxy DEBUG] HuggingFace response status:', response.status);
         const data = await response.json();
+        console.log('[ai-proxy DEBUG] HuggingFace response data:', JSON.stringify(data).slice(0, 500));
         if (!response.ok) {
           const errMsg = (Array.isArray(data) && data[0]?.error) || data.error || 'HuggingFace request failed';
+          console.log('[ai-proxy DEBUG] HuggingFace ERROR:', errMsg);
           return json(response.status, { error: errMsg });
         }
         const text = Array.isArray(data) ? data[0]?.generated_text : data.generated_text;
+        console.log('[ai-proxy DEBUG] HuggingFace SUCCESS, text length:', (text || '').length);
         return json(200, { text: (text || '').trim() });
       }
       case 'anthropic': {
@@ -185,6 +191,7 @@ exports.handler = async (event) => {
         return json(400, { error: 'Provider not yet implemented in proxy' });
     }
   } catch (error) {
+    console.log('[ai-proxy DEBUG] CATCH error:', error.message, error.stack);
     return json(500, sanitizeError(error));
   }
 };
