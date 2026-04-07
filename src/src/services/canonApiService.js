@@ -327,6 +327,10 @@ class CanonApiService {
             }
             break;
           case 'plot':
+            if (item.operation === 'create') {
+              await db.update('plotThreads', { id: proposed.id || `pt_${Date.now()}`, ...proposed });
+            }
+            break;
           case 'quest':
             if (item.operation === 'create') {
               await db.update('plotQuests', { id: proposed.id || `pq_${Date.now()}`, ...proposed });
@@ -338,9 +342,13 @@ class CanonApiService {
             }
             break;
           case 'faction':
-          case 'lore':
             if (item.operation === 'create') {
               await db.update('factions', { id: proposed.id || `fac_${Date.now()}`, ...proposed });
+            }
+            break;
+          case 'lore':
+            if (item.operation === 'create') {
+              await db.update('wikiEntries', { id: proposed.id || `lore_${Date.now()}`, ...proposed });
             }
             break;
           case 'timeline':

@@ -30,7 +30,7 @@ const OPERATION_COLORS = {
 const ITEM_HEIGHT = 88;
 const BUFFER_COUNT = 5;
 
-const NarrativeReviewQueue = ({ sessionId, chapterId, chapterNumber, onComplete, onClose, isRetroEdit }) => {
+const NarrativeReviewQueue = ({ sessionId, chapterId, chapterNumber, onComplete, onClose, onUnresolvedChange, isRetroEdit }) => {
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -49,7 +49,9 @@ const NarrativeReviewQueue = ({ sessionId, chapterId, chapterNumber, onComplete,
     setItems(all);
     const sum = await narrativeReviewQueueService.getSessionSummary(sessionId);
     setSummary(sum);
-  }, [sessionId]);
+    const unresolvedCount = all.filter(i => i.status === 'pending').length;
+    if (onUnresolvedChange) onUnresolvedChange(unresolvedCount);
+  }, [sessionId, onUnresolvedChange]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

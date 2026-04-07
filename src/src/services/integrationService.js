@@ -248,6 +248,16 @@ class IntegrationService {
               preview.ukMap.travel.push(integration.data);
             }
             break;
+
+          case 'plotQuests':
+            if (!preview.quests) preview.quests = [];
+            preview.quests.push(integration.data);
+            break;
+
+          case 'factions':
+            if (!preview.factions) preview.factions = [];
+            preview.factions.push(integration.data);
+            break;
         }
       }
     }

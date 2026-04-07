@@ -5071,10 +5071,16 @@ const ManuscriptIntelligencePanel = ({
           chapterId={currentChapter?.id}
           chapterNumber={currentChapter?.chapterNumber || currentChapter?.id}
           onComplete={handleReviewQueueComplete}
+          onUnresolvedChange={(count) => setCanonUnresolved(count)}
           onClose={() => {
             // Can only close if all items resolved
             if (canonUnresolved > 0) {
               toastService.warning(`Cannot close: ${canonUnresolved} unresolved items`);
+              return;
+            }
+            // Prevent closing while still in ReviewLocked — must commit or cancel first
+            if (canonState === STATES.REVIEW_LOCKED) {
+              toastService.warning('All items resolved — click "Continue Writing" to commit canon before closing.');
               return;
             }
             setShowReviewQueue(false);
