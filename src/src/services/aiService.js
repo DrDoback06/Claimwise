@@ -689,11 +689,11 @@ class AIService {
     let primaryProvider = this.preferredProvider;
     
     if (primaryProvider === 'auto') {
-      // Auto mode: prefer free providers, then task-specific
-      primaryProvider = taskMapping[task] || "groq"; // Default to free Groq
+      // Auto mode: use task-specific mapping, default to gemini
+      primaryProvider = taskMapping[task] || "gemini";
     }
 
-    // Build fallback chain: offline -> preferred -> free -> cheap -> expensive
+    // Build fallback chain: offline -> preferred -> cheap -> expensive
     const fallbackChain = [];
 
     // Try offline AI first if available
@@ -706,8 +706,8 @@ class AIService {
       fallbackChain.push(primaryProvider);
     }
 
-    // Cost-ordered fallback: free first, then cheapest paid
-    const providerCostOrder = ['huggingface', 'groq', 'gemini', 'openai', 'anthropic'];
+    // Cost-ordered fallback: gemini (cheap+reliable) -> openai -> anthropic -> groq -> huggingface
+    const providerCostOrder = ['gemini', 'openai', 'anthropic', 'groq', 'huggingface'];
     for (const provider of providerCostOrder) {
       if (!fallbackChain.includes(provider)) {
         fallbackChain.push(provider);
