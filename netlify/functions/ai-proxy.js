@@ -35,6 +35,35 @@ function getProviderKey(event, provider) {
 }
 
 exports.handler = async (event) => {
+  // === DEBUG LOGGING ===
+  const debugInfo = {
+    httpMethod: event.httpMethod,
+    path: event.path,
+    envKeysAvailable: {
+      HUGGINGFACE_API_KEY: !!process.env.HUGGINGFACE_API_KEY,
+      OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+      GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
+      ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+      GROQ_API_KEY: !!process.env.GROQ_API_KEY,
+    },
+    envKeyLengths: {
+      HUGGINGFACE_API_KEY: (process.env.HUGGINGFACE_API_KEY || '').length,
+      OPENAI_API_KEY: (process.env.OPENAI_API_KEY || '').length,
+      GEMINI_API_KEY: (process.env.GEMINI_API_KEY || '').length,
+      ANTHROPIC_API_KEY: (process.env.ANTHROPIC_API_KEY || '').length,
+      GROQ_API_KEY: (process.env.GROQ_API_KEY || '').length,
+    },
+    allEnvKeys: Object.keys(process.env).filter(k => k.includes('API') || k.includes('KEY') || k.includes('HUGGIN') || k.includes('OPENAI') || k.includes('GEMINI') || k.includes('ANTHROPIC') || k.includes('GROQ')),
+    hasCookie: !!(event.headers.cookie && event.headers.cookie.includes('claimwise_byok')),
+  };
+  console.log('[ai-proxy DEBUG]', JSON.stringify(debugInfo, null, 2));
+
+  // If ?debug query param, return debug info directly
+  if (event.queryStringParameters?.debug === '1') {
+    return json(200, { debug: debugInfo });
+  }
+  // === END DEBUG ===
+
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   if (!rateLimit(event)) return json(429, { error: 'Rate limit exceeded' });
   const authError = getAuthError(event);
@@ -43,11 +72,13 @@ exports.handler = async (event) => {
 
   try {
     const { provider, prompt, systemContext = '', model = null } = JSON.parse(event.body || '{}');
+    console.log('[ai-proxy DEBUG] provider:', provider, 'prompt length:', prompt?.length);
     if (!validateProvider(provider)) return json(400, { error: 'Unsupported provider' });
     if (!prompt || typeof prompt !== 'string') return json(400, { error: 'provider and prompt are required' });
 
     const apiKey = getProviderKey(event, provider);
-    if (!apiKey) return json(500, { error: `Missing key for provider: ${provider}` });
+    console.log('[ai-proxy DEBUG] apiKey found:', !!apiKey, 'length:', (apiKey || '').length, 'source:', apiKey === process.env[PROVIDER_ENV_MAP[provider]] ? 'env' : 'cookie');
+    if (!apiKey) return json(500, { error: `Missing key for provider: ${provider}`, debug: debugInfo });
 
     switch (provider) {
       case 'openai': {
