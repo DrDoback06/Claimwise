@@ -115,12 +115,12 @@ exports.handler = async (event) => {
       }
       case 'huggingface': {
         const hfModel = model || 'microsoft/Phi-3-mini-4k-instruct';
-        const hfEndpoint = `https://router.huggingface.co/models/${hfModel}`;
+        const hfEndpoint = `https://router.huggingface.co/hf-inference/models/${hfModel}/v1/chat/completions`;
         console.log('[ai-proxy DEBUG] HuggingFace calling:', hfEndpoint);
-        const fullPrompt = systemContext
-          ? `<|system|>\n${systemContext}\n<|user|>\n${prompt}\n<|assistant|>\n`
-          : `<|user|>\n${prompt}\n<|assistant|>\n`;
-        console.log('[ai-proxy DEBUG] HuggingFace prompt length:', fullPrompt.length);
+        const messages = [
+          ...(systemContext ? [{ role: 'system', content: systemContext }] : []),
+          { role: 'user', content: prompt }
+        ];
         const response = await fetch(hfEndpoint, {
           method: 'POST',
           headers: {
@@ -128,26 +128,25 @@ exports.handler = async (event) => {
             Authorization: `Bearer ${apiKey}`
           },
           body: JSON.stringify({
-            inputs: fullPrompt,
-            parameters: {
-              max_new_tokens: 2048,
-              temperature: 0.7,
-              return_full_text: false,
-              top_p: 0.9
-            }
+            model: hfModel,
+            messages,
+            max_tokens: 2048,
+            temperature: 0.7
           })
         });
         console.log('[ai-proxy DEBUG] HuggingFace response status:', response.status);
-        const data = await response.json();
-        console.log('[ai-proxy DEBUG] HuggingFace response data:', JSON.stringify(data).slice(0, 500));
+        const rawText = await response.text();
+        console.log('[ai-proxy DEBUG] HuggingFace raw response:', rawText.slice(0, 500));
         if (!response.ok) {
-          const errMsg = (Array.isArray(data) && data[0]?.error) || data.error || 'HuggingFace request failed';
+          let errMsg = 'HuggingFace request failed';
+          try { errMsg = JSON.parse(rawText)?.error || rawText.slice(0, 200); } catch (_) { errMsg = rawText.slice(0, 200); }
           console.log('[ai-proxy DEBUG] HuggingFace ERROR:', errMsg);
           return json(response.status, { error: errMsg });
         }
-        const text = Array.isArray(data) ? data[0]?.generated_text : data.generated_text;
-        console.log('[ai-proxy DEBUG] HuggingFace SUCCESS, text length:', (text || '').length);
-        return json(200, { text: (text || '').trim() });
+        const data = JSON.parse(rawText);
+        const text = data.choices?.[0]?.message?.content || '';
+        console.log('[ai-proxy DEBUG] HuggingFace SUCCESS, text length:', text.length);
+        return json(200, { text: text.trim() });
       }
       case 'anthropic': {
         const response = await fetch('https://api.anthropic.com/v1/messages', {
