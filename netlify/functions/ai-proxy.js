@@ -82,6 +82,74 @@ exports.handler = async (event) => {
         if (!response.ok) return json(response.status, { error: data.error?.message || 'Gemini request failed' });
         return json(200, { text: data.candidates?.[0]?.content?.parts?.[0]?.text || '' });
       }
+      case 'huggingface': {
+        const hfModel = model || 'microsoft/Phi-3-mini-4k-instruct';
+        const hfEndpoint = `https://api-inference.huggingface.co/models/${hfModel}`;
+        const fullPrompt = systemContext
+          ? `<|system|>\n${systemContext}\n<|user|>\n${prompt}\n<|assistant|>\n`
+          : `<|user|>\n${prompt}\n<|assistant|>\n`;
+        const response = await fetch(hfEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            inputs: fullPrompt,
+            parameters: {
+              max_new_tokens: 2048,
+              temperature: 0.7,
+              return_full_text: false,
+              top_p: 0.9
+            }
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          const errMsg = (Array.isArray(data) && data[0]?.error) || data.error || 'HuggingFace request failed';
+          return json(response.status, { error: errMsg });
+        }
+        const text = Array.isArray(data) ? data[0]?.generated_text : data.generated_text;
+        return json(200, { text: (text || '').trim() });
+      }
+      case 'anthropic': {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: model || 'claude-sonnet-4-20250514',
+            max_tokens: 2048,
+            ...(systemContext ? { system: systemContext } : {}),
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) return json(response.status, { error: data.error?.message || 'Anthropic request failed' });
+        return json(200, { text: data.content?.[0]?.text || '' });
+      }
+      case 'groq': {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: model || 'llama-3.1-70b-versatile',
+            messages: [
+              ...(systemContext ? [{ role: 'system', content: systemContext }] : []),
+              { role: 'user', content: prompt }
+            ]
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) return json(response.status, { error: data.error?.message || 'Groq request failed' });
+        return json(200, { text: data.choices?.[0]?.message?.content || '' });
+      }
       default:
         return json(400, { error: 'Provider not yet implemented in proxy' });
     }
