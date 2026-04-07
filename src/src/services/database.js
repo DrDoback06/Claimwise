@@ -1072,7 +1072,17 @@ class ClaimwiseDB {
    */
   async exportData() {
     const data = {};
-    const storeNames = ['meta', 'statRegistry', 'skillBank', 'itemBank', 'actors', 'books', 'relationships', 'wiki', 'skillTrees'];
+    const storeNames = [
+      'meta', 'statRegistry', 'skillBank', 'itemBank', 'actors', 'books',
+      'relationships', 'wiki', 'skillTrees',
+      // Narrative control stores
+      'canonSessions', 'narrativeReviewQueue', 'queueAudit',
+      'chapterVersions', 'chapterChangelog', 'retroImpacts',
+      'plotQuests', 'factions', 'canonSettings',
+      // Visualization & context stores
+      'timelineEvents', 'locations', 'plotThreads', 'plotBeats',
+      'wikiEntries', 'characterArcs', 'extractionHistory', 'extractionSessions'
+    ];
 
     for (const storeName of storeNames) {
       data[storeName] = await this.getAll(storeName);

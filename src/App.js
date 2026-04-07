@@ -6749,12 +6749,14 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
               />
             )}
             {activeTab === 'plotthreads' && (
-              <StoryAnalysisHub
+              <PlotQuestTab
+                books={worldState.books}
+              />
+            )}
+            {activeTab === 'worldlore' && (
+              <WorldLoreTab
                 actors={worldState.actors}
                 books={worldState.books}
-                itemBank={worldState.itemBank}
-                skillBank={worldState.skillBank}
-                onClose={() => setActiveTab('bible')}
               />
             )}
             {activeTab === 'consistency' && (

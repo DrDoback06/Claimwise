@@ -123,6 +123,41 @@ class IntegrationService {
         });
         break;
 
+      case 'quest':
+        integrations.push({
+          system: 'plotQuests',
+          action: 'create_or_update',
+          data: {
+            id: entity.id || `pq_${Date.now()}`,
+            title: entity.data?.title || entity.name,
+            description: entity.data?.description || '',
+            type: entity.data?.type || 'sub',
+            status: entity.data?.status || 'active',
+            objectives: entity.data?.objectives || [],
+            chapterId, bookId,
+            createdAt: Date.now()
+          }
+        });
+        break;
+
+      case 'faction':
+        integrations.push({
+          system: 'factions',
+          action: 'create_or_update',
+          data: {
+            id: entity.id || `fac_${Date.now()}`,
+            name: entity.data?.name || entity.name,
+            type: entity.data?.type || 'organization',
+            description: entity.data?.description || '',
+            members: entity.data?.members || [],
+            goals: entity.data?.goals || '',
+            status: 'active',
+            chapterId, bookId,
+            createdAt: Date.now()
+          }
+        });
+        break;
+
       default:
         // Generic wiki entry for unknown types
         integrations.push({
@@ -363,6 +398,40 @@ class IntegrationService {
               results.success.push({ system: 'plotThreads', id: thread.id });
             } catch (error) {
               results.failed.push({ system: 'plotThreads', id: thread.id, error: error.message });
+            }
+          }
+        }
+      }
+
+      // Apply quests
+      if (preview.quests) {
+        for (const quest of preview.quests) {
+          try {
+            await db.add('plotQuests', quest);
+            results.success.push({ system: 'plotQuests', id: quest.id });
+          } catch (error) {
+            try {
+              await db.update('plotQuests', quest);
+              results.success.push({ system: 'plotQuests', id: quest.id, action: 'updated' });
+            } catch (e) {
+              results.failed.push({ system: 'plotQuests', id: quest.id, error: e.message });
+            }
+          }
+        }
+      }
+
+      // Apply factions
+      if (preview.factions) {
+        for (const faction of preview.factions) {
+          try {
+            await db.add('factions', faction);
+            results.success.push({ system: 'factions', id: faction.id });
+          } catch (error) {
+            try {
+              await db.update('factions', faction);
+              results.success.push({ system: 'factions', id: faction.id, action: 'updated' });
+            } catch (e) {
+              results.failed.push({ system: 'factions', id: faction.id, error: e.message });
             }
           }
         }

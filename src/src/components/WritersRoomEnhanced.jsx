@@ -5079,7 +5079,11 @@ const ManuscriptIntelligencePanel = ({
             }
             setShowReviewQueue(false);
           }}
-          isRetroEdit={false}
+          isRetroEdit={(() => {
+            if (!currentBook?.chapters || currentBook.chapters.length <= 1) return false;
+            const sorted = [...currentBook.chapters].sort((a, b) => (a.chapterNumber || a.id) - (b.chapterNumber || b.id));
+            return sorted[sorted.length - 1]?.id !== currentChapter?.id;
+          })()}
         />
       )}
 
