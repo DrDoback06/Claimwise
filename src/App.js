@@ -34,6 +34,8 @@ import ManuscriptIntelligence from './src/components/ManuscriptIntelligence';
 import SpeedReader from './src/components/SpeedReader';
 // TimelineVisualizer removed - replaced by MasterTimeline
 import PlotThreadTracker from './src/components/PlotThreadTracker';
+import PlotQuestTab from './src/components/PlotQuestTab';
+import WorldLoreTab from './src/components/WorldLoreTab';
 import CharacterArcMapper from './src/components/CharacterArcMapper';
 import ConsistencyChecker from './src/components/ConsistencyChecker';
 import StoryAnalysisHub from './src/components/StoryAnalysisHub';
@@ -6747,12 +6749,14 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
               />
             )}
             {activeTab === 'plotthreads' && (
-              <StoryAnalysisHub
+              <PlotQuestTab
+                books={worldState.books}
+              />
+            )}
+            {activeTab === 'worldlore' && (
+              <WorldLoreTab
                 actors={worldState.actors}
                 books={worldState.books}
-                itemBank={worldState.itemBank}
-                skillBank={worldState.skillBank}
-                onClose={() => setActiveTab('bible')}
               />
             )}
             {activeTab === 'consistency' && (

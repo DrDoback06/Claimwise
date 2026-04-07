@@ -58,6 +58,8 @@ const NAVIGATION_CONFIG = [
     tooltip: 'Analyze relationships, plot threads, and check for inconsistencies',
     items: [
       { id: 'relationships', label: 'Relationships', icon: Link, tooltip: 'Track character relationships and dynamics' },
+      { id: 'plotthreads', label: 'Plot & Quests', icon: BookMarked, tooltip: 'Plot threads, quest tracking, and story beats' },
+      { id: 'worldlore', label: 'World / Lore', icon: Shield, tooltip: 'World-building lore entries and factions' },
       { id: 'consistency', label: 'Story Analysis', icon: Shield, tooltip: 'Consistency checking and plot thread tracking' },
       { id: 'wiki', label: 'Wiki Manager', icon: BookMarked, tooltip: 'Comprehensive encyclopedia of your story world' },
       { id: 'storymap', label: 'Story Map', icon: Network, tooltip: 'Narrative structure and scene connections' },

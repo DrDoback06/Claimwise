@@ -127,6 +127,10 @@ class AIService {
     }
   }
 
+  getRuntimeKeys() {
+    return { ...this.runtimeKeys };
+  }
+
   async setApiKeySecure(provider, key) {
     const response = await fetch('/api/ai/ai-session', {
       method: 'POST',
