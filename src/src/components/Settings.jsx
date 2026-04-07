@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Key, Database, Trash2, X, Save, Eye, EyeOff, Image as ImageIcon, Sparkles, RefreshCw, FileArchive, FileText, Volume2 } from 'lucide-react';
+import { Settings as SettingsIcon, Key, Database, Trash2, X, Save, Eye, EyeOff, Image as ImageIcon, Sparkles, RefreshCw, FileArchive, FileText, Volume2, Shield } from 'lucide-react';
 import aiService from '../services/aiService';
 import db from '../services/database';
 import imageGenerationService from '../../services/imageGenerationService';
@@ -7,12 +7,14 @@ import contextEngine from '../services/contextEngine';
 import BackupManager from './BackupManager';
 import StyleReferenceManager from './StyleReferenceManager';
 import textToSpeechService from '../services/textToSpeechService';
+import CanonSettingsPanel from './CanonSettingsPanel';
 
 /**
  * Settings Panel - API key management, backup settings, UI preferences, data management
  */
 const Settings = ({ onClose, onRerunOnboarding }) => {
   const [storyProfileExists, setStoryProfileExists] = useState(false);
+  const [showCanonSettings, setShowCanonSettings] = useState(false);
 
   useEffect(() => {
     checkStoryProfile();
@@ -82,20 +84,28 @@ const Settings = ({ onClose, onRerunOnboarding }) => {
   };
 
   const loadSettings = () => {
-    // Load API keys
-    const geminiKey = localStorage.getItem('ai_gemini_key') || '';
-    const openaiKey = localStorage.getItem('ai_openai_key') || '';
-    const anthropicKey = localStorage.getItem('ai_anthropic_key') || '';
-    const groqKey = localStorage.getItem('ai_groq_key') || '';
-    const huggingfaceKey = localStorage.getItem('ai_huggingface_key') || '';
-    const elevenlabsKey = localStorage.getItem('ai_elevenlabs_key') || '';
+    // Load API keys from runtime memory (aiService) - NOT from localStorage
+    // Security: Keys are kept in-memory only, never persisted to localStorage
+    const runtimeKeys = aiService.getRuntimeKeys ? aiService.getRuntimeKeys() : {};
 
-    setApiKeys({ 
-      gemini: geminiKey, 
-      openai: openaiKey, 
-      anthropic: anthropicKey,
-      groq: groqKey,
-      huggingface: huggingfaceKey
+    // Migration: if legacy localStorage keys exist, migrate to runtime and clear
+    const providers = ['gemini', 'openai', 'anthropic', 'groq', 'huggingface', 'elevenlabs'];
+    providers.forEach(p => {
+      const legacyKey = localStorage.getItem(`ai_${p}_key`);
+      if (legacyKey) {
+        runtimeKeys[p] = legacyKey;
+        aiService.setApiKey(p, legacyKey);
+        localStorage.removeItem(`ai_${p}_key`); // Clear from localStorage
+        console.info(`[Security] Migrated ${p} key from localStorage to runtime memory`);
+      }
+    });
+
+    setApiKeys({
+      gemini: runtimeKeys.gemini || '',
+      openai: runtimeKeys.openai || '',
+      anthropic: runtimeKeys.anthropic || '',
+      groq: runtimeKeys.groq || '',
+      huggingface: runtimeKeys.huggingface || ''
     });
 
     // Load preferred provider
@@ -114,14 +124,12 @@ const Settings = ({ onClose, onRerunOnboarding }) => {
 
   const saveApiKey = (provider, key) => {
     if (provider === 'openai') {
-      // Also update image generation service
       imageGenerationService.setApiKey(key);
     }
-    // Save to localStorage
-    localStorage.setItem(`ai_${provider}_key`, key);
+    // Security: Store in runtime memory only — NOT in localStorage
     aiService.setApiKey(provider, key);
     setApiKeys(prev => ({ ...prev, [provider]: key }));
-    alert(`${provider.toUpperCase()} API key saved!`);
+    alert(`${provider.toUpperCase()} API key saved (session-only — will need re-entry after reload).`);
   };
 
   const savePreferredProvider = (provider) => {
@@ -618,10 +626,32 @@ const Settings = ({ onClose, onRerunOnboarding }) => {
 
               <div className="pt-2 border-t border-slate-700">
                 <p className="text-xs text-slate-500">
-                  💡 <strong>Tip:</strong> The read-aloud feature automatically selects the best available voice provider. 
+                  💡 <strong>Tip:</strong> The read-aloud feature automatically selects the best available voice provider.
                   Browser voices are free but limited. Premium voices (ElevenLabs/OpenAI) provide better quality and character differentiation.
                 </p>
               </div>
+            </div>
+
+            {/* Canon Control Settings */}
+            <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
+              <button
+                onClick={() => setShowCanonSettings(!showCanonSettings)}
+                className="w-full p-4 flex items-center justify-between hover:bg-slate-800 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Shield className="w-5 h-5 text-red-400" />
+                  <div className="text-left">
+                    <div className="text-sm font-bold text-white">Canon Control</div>
+                    <div className="text-xs text-slate-400">Confidence thresholds, auto-apply, extraction policies</div>
+                  </div>
+                </div>
+                <span className="text-slate-500 text-xs">{showCanonSettings ? '▲' : '▼'}</span>
+              </button>
+              {showCanonSettings && (
+                <div className="border-t border-slate-700">
+                  <CanonSettingsPanel onClose={() => setShowCanonSettings(false)} />
+                </div>
+              )}
             </div>
           </div>
         </div>

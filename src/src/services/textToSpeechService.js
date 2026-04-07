@@ -44,7 +44,7 @@ class TextToSpeechService {
 
     // Check ElevenLabs API key
     try {
-      const elevenlabsKey = localStorage.getItem('ai_elevenlabs_key');
+      const elevenlabsKey = (typeof aiService !== 'undefined' && aiService.getRuntimeKeys ? aiService.getRuntimeKeys().elevenlabs : null);
       if (elevenlabsKey) {
         providers.elevenlabs = true;
       }
@@ -301,7 +301,7 @@ Emotion:`;
    */
   async readWithElevenLabs(text, options = {}) {
     try {
-      const apiKey = localStorage.getItem('ai_elevenlabs_key');
+      const apiKey = (typeof aiService !== 'undefined' && aiService.getRuntimeKeys ? aiService.getRuntimeKeys().elevenlabs : null);
 
       if (!apiKey) {
         throw new Error('ElevenLabs API key not set');
@@ -391,7 +391,7 @@ Emotion:`;
    */
   async readWithOpenAI(text, options = {}) {
     try {
-      const apiKey = localStorage.getItem('ai_openai_key');
+      const apiKey = (aiService.getRuntimeKeys ? aiService.getRuntimeKeys().openai : null);
 
       if (!apiKey) {
         throw new Error('OpenAI API key not set');

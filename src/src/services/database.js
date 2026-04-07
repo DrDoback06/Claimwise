@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'ClaimwiseOmniscience';
-const DB_VERSION = 20; // Incremented for schema consistency and transactional ingestion support
+const DB_VERSION = 21; // Narrative control integration: canon lifecycle, review queue, retro impacts
 
 class ClaimwiseDB {
   constructor() {
@@ -491,6 +491,104 @@ class ClaimwiseDB {
             memoryStore.createIndex('importance', 'importance', { unique: false });
             memoryStore.createIndex('referenced', 'referenced', { unique: false });
             memoryStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+        }
+
+        // Migration for version 21: Narrative Control Integration
+        if (oldVersion < 21) {
+          // Canon Sessions - Track extraction session lifecycle
+          if (!db.objectStoreNames.contains('canonSessions')) {
+            const sessionStore = db.createObjectStore('canonSessions', { keyPath: 'id' });
+            sessionStore.createIndex('chapterId', 'chapterId', { unique: false });
+            sessionStore.createIndex('chapterNumber', 'chapterNumber', { unique: false });
+            sessionStore.createIndex('status', 'status', { unique: false });
+            sessionStore.createIndex('createdAt', 'createdAt', { unique: false });
+            sessionStore.createIndex('committedAt', 'committedAt', { unique: false });
+          }
+
+          // Narrative Review Queue - Unified queue for all extraction nodes
+          if (!db.objectStoreNames.contains('narrativeReviewQueue')) {
+            const queueStore = db.createObjectStore('narrativeReviewQueue', { keyPath: 'id' });
+            queueStore.createIndex('sessionId', 'sessionId', { unique: false });
+            queueStore.createIndex('chapterId', 'chapterId', { unique: false });
+            queueStore.createIndex('chapterNumber', 'chapterNumber', { unique: false });
+            queueStore.createIndex('domain', 'domain', { unique: false });
+            queueStore.createIndex('status', 'status', { unique: false });
+            queueStore.createIndex('blocking', 'blocking', { unique: false });
+            queueStore.createIndex('confidenceBand', 'confidenceBand', { unique: false });
+            queueStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // Queue Audit - Full audit trail of queue actions
+          if (!db.objectStoreNames.contains('queueAudit')) {
+            const auditStore = db.createObjectStore('queueAudit', { keyPath: 'id' });
+            auditStore.createIndex('queueItemId', 'queueItemId', { unique: false });
+            auditStore.createIndex('sessionId', 'sessionId', { unique: false });
+            auditStore.createIndex('action', 'action', { unique: false });
+            auditStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // Chapter Versions - Immutable canon snapshots
+          if (!db.objectStoreNames.contains('chapterVersions')) {
+            const versionStore = db.createObjectStore('chapterVersions', { keyPath: 'id' });
+            versionStore.createIndex('chapterId', 'chapterId', { unique: false });
+            versionStore.createIndex('chapterNumber', 'chapterNumber', { unique: false });
+            versionStore.createIndex('versionNumber', 'versionNumber', { unique: false });
+            versionStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // Chapter Changelog - Diff records between versions
+          if (!db.objectStoreNames.contains('chapterChangelog')) {
+            const changelogStore = db.createObjectStore('chapterChangelog', { keyPath: 'id' });
+            changelogStore.createIndex('chapterId', 'chapterId', { unique: false });
+            changelogStore.createIndex('fromVersion', 'fromVersion', { unique: false });
+            changelogStore.createIndex('toVersion', 'toVersion', { unique: false });
+            changelogStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // Retro Impacts - Downstream impact tracking for retro-edits
+          if (!db.objectStoreNames.contains('retroImpacts')) {
+            const retroStore = db.createObjectStore('retroImpacts', { keyPath: 'id' });
+            retroStore.createIndex('originChapterId', 'originChapterId', { unique: false });
+            retroStore.createIndex('impactedChapterId', 'impactedChapterId', { unique: false });
+            retroStore.createIndex('severity', 'severity', { unique: false });
+            retroStore.createIndex('status', 'status', { unique: false });
+            retroStore.createIndex('blocking', 'blocking', { unique: false });
+            retroStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // Plot Quests - Quest tracking merged into Plot domain
+          if (!db.objectStoreNames.contains('plotQuests')) {
+            const questStore = db.createObjectStore('plotQuests', { keyPath: 'id' });
+            questStore.createIndex('plotThreadId', 'plotThreadId', { unique: false });
+            questStore.createIndex('type', 'type', { unique: false });
+            questStore.createIndex('status', 'status', { unique: false });
+            questStore.createIndex('chapterId', 'chapterId', { unique: false });
+            questStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // Factions - Faction entities under World/Lore domain
+          if (!db.objectStoreNames.contains('factions')) {
+            const factionStore = db.createObjectStore('factions', { keyPath: 'id' });
+            factionStore.createIndex('name', 'name', { unique: false });
+            factionStore.createIndex('type', 'type', { unique: false });
+            factionStore.createIndex('status', 'status', { unique: false });
+            factionStore.createIndex('chapterId', 'chapterId', { unique: false });
+            factionStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // Extraction Failures - Track failed extraction nodes
+          if (!db.objectStoreNames.contains('extractionFailures')) {
+            const failureStore = db.createObjectStore('extractionFailures', { keyPath: 'id' });
+            failureStore.createIndex('sessionId', 'sessionId', { unique: false });
+            failureStore.createIndex('chapterId', 'chapterId', { unique: false });
+            failureStore.createIndex('domain', 'domain', { unique: false });
+            failureStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+
+          // Canon Settings - Configurable confidence thresholds and policies
+          if (!db.objectStoreNames.contains('canonSettings')) {
+            db.createObjectStore('canonSettings', { keyPath: 'id' });
           }
         }
 

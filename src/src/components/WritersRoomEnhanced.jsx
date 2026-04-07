@@ -16,6 +16,9 @@ import chapterDataExtractionService from '../services/chapterDataExtractionServi
 import dataConsistencyService from '../services/dataConsistencyService';
 import smartContextEngine from '../services/smartContextEngine';
 import EntityExtractionWizard from './EntityExtractionWizard';
+import NarrativeReviewQueue from './NarrativeReviewQueue';
+import canonApiService from '../services/canonApiService';
+import canonLifecycleService, { STATES } from '../services/canonLifecycleService';
 import MoodEditorPanel from './MoodEditorPanel';
 import AIContextualMenu from './AIContextualMenu';
 import TextSelectionContextMenu from './TextSelectionContextMenu';
@@ -138,6 +141,15 @@ const WritersRoomEnhanced = ({ books, actors, items, skills, onClose, onChapterU
   const [showEntityWizard, setShowEntityWizard] = useState(false);
 
   // ========================================
+  // CANON LIFECYCLE STATE
+  // ========================================
+  const [canonState, setCanonState] = useState(STATES.DRAFT);
+  const [canonSessionId, setCanonSessionId] = useState(null);
+  const [showReviewQueue, setShowReviewQueue] = useState(false);
+  const [isCanonExtracting, setIsCanonExtracting] = useState(false);
+  const [canonUnresolved, setCanonUnresolved] = useState(0);
+
+  // ========================================
   // AUTONOMOUS PIPELINE STATE
   // ========================================
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -244,6 +256,19 @@ const WritersRoomEnhanced = ({ books, actors, items, skills, onClose, onChapterU
       if (lastSave) {
         setSaveStatus(prev => ({ ...prev, lastSaved: parseInt(lastSave) }));
       }
+
+      // Load canon lifecycle state for this chapter
+      canonLifecycleService.getChapterState(currentChapter.id).then(state => {
+        setCanonState(state);
+        if (state === STATES.REVIEW_LOCKED) {
+          canonLifecycleService.getActiveSession(currentChapter.id).then(session => {
+            if (session) {
+              setCanonSessionId(session.id);
+              setShowReviewQueue(true);
+            }
+          });
+        }
+      }).catch(() => setCanonState(STATES.DRAFT));
     }
   }, [currentChapter, currentBook]);
 
@@ -2265,12 +2290,104 @@ Continue the story naturally. Return ONLY the continuation text.`;
   };
 
   /**
-   * Manual save button handler
+   * Save Draft only — no extraction, stays in Draft state
+   */
+  const saveDraftOnly = async () => {
+    if (!currentBook || !currentChapter || !chapterText) return;
+    setSaveStatus(prev => ({ ...prev, isSaving: true }));
+    try {
+      await canonApiService.saveDraft({
+        chapterId: currentChapter.id,
+        chapterText,
+        bookData: currentBook
+      });
+      setSaveStatus({ lastSaved: Date.now(), isSaving: false, hasUnsavedChanges: false });
+      if (onChapterUpdate) onChapterUpdate(currentBook);
+      toastService.success('Draft saved!');
+    } catch (error) {
+      setSaveStatus(prev => ({ ...prev, isSaving: false }));
+      toastService.error('Failed to save draft: ' + error.message);
+    }
+  };
+
+  /**
+   * Save & Extract — triggers canon lifecycle pipeline
+   */
+  const saveAndExtract = async () => {
+    if (!currentBook || !currentChapter || !chapterText) return;
+    if (chapterText.trim().length < 50) {
+      toastService.warning('Write at least 50 characters before extracting');
+      return;
+    }
+
+    setIsCanonExtracting(true);
+    setCanonState(STATES.SAVE_PENDING);
+
+    try {
+      // Build guides context from story context documents
+      const guidesContext = {};
+      if (storyContextDocuments.length > 0) {
+        const styleDoc = storyContextDocuments.find(d => d.category === 'style');
+        const rulesDoc = storyContextDocuments.find(d => d.category === 'rules');
+        const archDoc = storyContextDocuments.find(d => d.category === 'architecture');
+        if (styleDoc) guidesContext.styleGuide = styleDoc.content;
+        if (rulesDoc) guidesContext.worldRules = rulesDoc.content;
+        if (archDoc) guidesContext.storyArchitecture = archDoc.content;
+      }
+
+      const result = await canonApiService.transactionalSaveAndExtract(
+        {
+          chapterId: currentChapter.id,
+          chapterNumber: currentChapter.chapterNumber || currentChapter.id,
+          bookId: currentBook.id,
+          chapterText,
+          bookData: currentBook,
+          worldState: { actors: actors || [], items: items || [], skills: skills || [] }
+        },
+        guidesContext
+      );
+
+      setCanonSessionId(result.sessionId);
+      setCanonState(STATES.REVIEW_LOCKED);
+      setShowReviewQueue(true);
+      setSaveStatus({ lastSaved: Date.now(), isSaving: false, hasUnsavedChanges: false });
+      if (onChapterUpdate) onChapterUpdate(currentBook);
+      toastService.success(`Extraction complete! ${result.queueItems?.length || 0} items to review.`);
+    } catch (error) {
+      setCanonState(STATES.DRAFT);
+      toastService.error('Save & Extract failed: ' + error.message);
+    } finally {
+      setIsCanonExtracting(false);
+    }
+  };
+
+  /**
+   * Handle Review Queue completion — commit canon
+   */
+  const handleReviewQueueComplete = async () => {
+    setShowReviewQueue(false);
+    try {
+      await canonApiService.commitCanon(currentChapter.id, canonSessionId);
+      setCanonState(STATES.CANON_COMMITTED);
+      setCanonSessionId(null);
+      toastService.success('Canon committed! You may continue writing.');
+      // Reset to draft for next chapter editing
+      setTimeout(() => setCanonState(STATES.DRAFT), 500);
+      if (onChapterUpdate) {
+        const book = getBookById(selectedBook);
+        if (book) onChapterUpdate(book);
+      }
+    } catch (error) {
+      toastService.error('Canon commit failed: ' + error.message);
+    }
+  };
+
+  /**
+   * Legacy manual save handler (kept for Ctrl+S compat)
    */
   const saveChapter = async () => {
     const success = await saveChapterToBook();
     if (success) {
-      // Auto-check consistency on manual save
       await checkConsistency();
     }
   };
@@ -3266,18 +3383,41 @@ Continue the story naturally. Return ONLY the continuation text.`;
                   </div>
                 ) : null}
                 <button
-                  onClick={saveChapter}
-                  disabled={saveStatus.isSaving || !chapterText}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded flex items-center gap-2 disabled:opacity-50 transition-colors"
-                  title="Manually save chapter to book (Ctrl+S)"
+                  onClick={saveDraftOnly}
+                  disabled={saveStatus.isSaving || !chapterText || canonState !== STATES.DRAFT}
+                  className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold rounded flex items-center gap-2 disabled:opacity-50 transition-colors"
+                  title="Save draft only — no extraction (Ctrl+S)"
                 >
-                  {saveStatus.isSaving ? (
+                  <Save className="w-4 h-4" />
+                  SAVE DRAFT
+                </button>
+                <button
+                  onClick={saveAndExtract}
+                  disabled={saveStatus.isSaving || !chapterText || canonState !== STATES.DRAFT || isCanonExtracting}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded flex items-center gap-2 disabled:opacity-50 transition-colors"
+                  title="Save chapter and extract canon data for review"
+                >
+                  {isCanonExtracting ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
-                    <Save className="w-4 h-4" />
+                    <Sparkles className="w-4 h-4" />
                   )}
-                  SAVE & EXTRACT
+                  {isCanonExtracting ? 'EXTRACTING...' : 'SAVE & EXTRACT'}
                 </button>
+                {/* Lifecycle Badge */}
+                {canonState !== STATES.DRAFT && (
+                  <div className={`px-3 py-2 rounded text-xs font-bold flex items-center gap-2 ${
+                    canonState === STATES.EXTRACTING ? 'bg-yellow-900/30 text-yellow-400' :
+                    canonState === STATES.REVIEW_LOCKED ? 'bg-red-900/30 text-red-400' :
+                    canonState === STATES.CANON_COMMITTED ? 'bg-green-900/30 text-green-400' :
+                    'bg-slate-800 text-slate-400'
+                  }`}>
+                    {canonState === STATES.EXTRACTING && <><RefreshCw className="w-3 h-3 animate-spin" /> Extracting</>}
+                    {canonState === STATES.REVIEW_LOCKED && <><Lock className="w-3 h-3" /> Review Locked</>}
+                    {canonState === STATES.CANON_COMMITTED && <><CheckCircle className="w-3 h-3" /> Committed</>}
+                    {canonState === STATES.SAVE_PENDING && <><Clock className="w-3 h-3" /> Saving</>}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -3937,7 +4077,8 @@ Continue the story naturally. Return ONLY the continuation text.`;
             <textarea
                   ref={textareaRef}
               value={chapterText}
-                  onChange={handleChapterTextChange}
+                  onChange={canonState === STATES.DRAFT ? handleChapterTextChange : undefined}
+                  readOnly={canonState !== STATES.DRAFT}
                   onMouseUp={handleTextSelection}
                   onKeyUp={handleTextSelection}
                   onContextMenu={handleContextMenu}
@@ -4907,8 +5048,8 @@ const ManuscriptIntelligencePanel = ({
         )}
       </div>
 
-      {/* Entity Extraction Wizard */}
-      {showEntityWizard && (
+      {/* Legacy Entity Extraction Wizard (fallback) */}
+      {showEntityWizard && !showReviewQueue && (
         <EntityExtractionWizard
           chapterText={chapterText}
           chapterId={currentChapter?.id}
@@ -4920,6 +5061,25 @@ const ManuscriptIntelligencePanel = ({
           books={Array.isArray(books) ? books : Object.values(books || {})}
           onComplete={handleEntityWizardComplete}
           onClose={() => setShowEntityWizard(false)}
+        />
+      )}
+
+      {/* Narrative Review Queue (canon lifecycle) */}
+      {showReviewQueue && canonSessionId && (
+        <NarrativeReviewQueue
+          sessionId={canonSessionId}
+          chapterId={currentChapter?.id}
+          chapterNumber={currentChapter?.chapterNumber || currentChapter?.id}
+          onComplete={handleReviewQueueComplete}
+          onClose={() => {
+            // Can only close if all items resolved
+            if (canonUnresolved > 0) {
+              toastService.warning(`Cannot close: ${canonUnresolved} unresolved items`);
+              return;
+            }
+            setShowReviewQueue(false);
+          }}
+          isRetroEdit={false}
         />
       )}
 
