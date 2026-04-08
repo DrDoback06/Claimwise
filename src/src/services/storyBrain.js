@@ -21,6 +21,9 @@ import smartContextEngine from './smartContextEngine';
 import contextEngine from './contextEngine';
 import db from './database';
 import writingCraftGuide from '../data/writingCraftGuide';
+import { getGenreGuide } from '../data/genreGuides';
+import chapterMemoryService from './chapterMemoryService';
+import narrativeArcService from './narrativeArcService';
 
 // ─── Token Budget ────────────────────────────────────────────
 // We cap context to leave room for the AI's response.
@@ -100,8 +103,53 @@ class StoryBrain {
     const maxContextChars = budget.context * CHARS_PER_TOKEN;
     const compressed = this._compressContext(contextText, maxContextChars, action);
 
+    // Layer on chapter memories (story-so-far) — replaces full previous chapter text
+    let storySoFar = '';
+    if (bookId && ['continue', 'scene', 'dialogue', 'planning', 'characterIntro'].includes(action)) {
+      try {
+        storySoFar = await chapterMemoryService.buildStorySoFar(bookId, chapterNumber || Infinity, 1500);
+      } catch (_) { /* optional */ }
+    }
+
+    // Layer on narrative arc guidance
+    let arcGuidance = '';
+    if (['continue', 'scene', 'planning'].includes(action)) {
+      try {
+        // Count total chapters from book
+        const books = await db.getAll('books');
+        const book = books.find(b => b.id === bookId);
+        const totalChapters = book?.chapters?.length || 0;
+        const arcInfo = await narrativeArcService.getArcGuidance(bookId, chapterNumber || 1, totalChapters);
+        arcGuidance = arcInfo.guidance;
+      } catch (_) { /* optional */ }
+    }
+
+    // Layer on genre guide
+    let genreGuidance = '';
+    if (['continue', 'scene', 'dialogue', 'mood', 'characterIntro'].includes(action)) {
+      try {
+        const storyProfile = rawContext?.storyProfile;
+        const genres = storyProfile?.genres || (storyProfile?.genre ? [storyProfile.genre] : []);
+        if (genres.length > 0) {
+          const guide = getGenreGuide(genres);
+          if (guide) {
+            genreGuidance = guide.conventions;
+            if (['scene', 'continue'].includes(action)) {
+              genreGuidance += '\n\n' + guide.pacing;
+            }
+          }
+        }
+      } catch (_) { /* optional */ }
+    }
+
+    // Assemble final system context
+    const contextParts = [compressed];
+    if (storySoFar) contextParts.push(storySoFar);
+    if (arcGuidance) contextParts.push(arcGuidance);
+    if (genreGuidance) contextParts.push('\n=== GENRE-SPECIFIC GUIDANCE ===\n' + genreGuidance);
+
     const result = {
-      systemContext: compressed,
+      systemContext: contextParts.join('\n\n'),
       rawContext,
       budget
     };

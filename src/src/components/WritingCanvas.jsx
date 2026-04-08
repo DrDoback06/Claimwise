@@ -13,6 +13,7 @@ import db from '../services/database';
 import contextEngine from '../services/contextEngine';
 import aiService from '../services/aiService';
 import storyBrain from '../services/storyBrain';
+import chapterMemoryService from '../services/chapterMemoryService';
 import chapterIngestionOrchestrator from '../services/chapterIngestionOrchestrator';
 import EntityExtractionWizard from './EntityExtractionWizard';
 
@@ -225,6 +226,19 @@ const WritingCanvas = ({
       fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:215',message:'Chapter saved, extracting events',data:{bookId:currentBook.id,chapterId:currentChapter.id,contentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
       
+      // Generate chapter memory for story continuity (runs in background)
+      if (content && content.trim().length >= 200) {
+        chapterMemoryService.generateMemory(
+          currentChapter.id,
+          content,
+          currentChapter.number,
+          currentBook.id,
+          actors
+        ).catch(err => console.warn('[WritingCanvas] Chapter memory generation failed:', err));
+        // Also clear storyBrain cache so next AI call picks up the new memory
+        storyBrain.clearCache();
+      }
+
       // Run unified chapter-ingestion orchestrator
       if (content && content.trim().length >= 50) {
         try {

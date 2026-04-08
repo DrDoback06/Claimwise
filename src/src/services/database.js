@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'ClaimwiseOmniscience';
-const DB_VERSION = 21; // Narrative control integration: canon lifecycle, review queue, retro impacts
+const DB_VERSION = 22; // Story Brain: chapter memories for forward context
 
 class ClaimwiseDB {
   constructor() {
@@ -616,6 +616,16 @@ class ClaimwiseDB {
             snapshotStore.createIndex('bookId', 'bookId', { unique: false });
             snapshotStore.createIndex('chapterId', 'chapterId', { unique: false });
             snapshotStore.createIndex('timestamp', 'timestamp', { unique: false });
+          }
+        }
+
+        // Migration for version 22: Story Brain chapter memories
+        if (oldVersion < 22) {
+          if (!db.objectStoreNames.contains('chapterMemories')) {
+            const memoryStore = db.createObjectStore('chapterMemories', { keyPath: 'id' });
+            memoryStore.createIndex('bookId', 'bookId', { unique: false });
+            memoryStore.createIndex('chapterNumber', 'chapterNumber', { unique: false });
+            memoryStore.createIndex('generatedAt', 'generatedAt', { unique: false });
           }
         }
       };
