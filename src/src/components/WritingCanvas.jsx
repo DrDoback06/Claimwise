@@ -12,6 +12,7 @@ import ReadAloudPanel from './ReadAloudPanel';
 import db from '../services/database';
 import contextEngine from '../services/contextEngine';
 import aiService from '../services/aiService';
+import storyBrain from '../services/storyBrain';
 import chapterIngestionOrchestrator from '../services/chapterIngestionOrchestrator';
 import EntityExtractionWizard from './EntityExtractionWizard';
 
@@ -404,16 +405,26 @@ const WritingCanvas = ({
     }
   };
 
+  // Helper: get common story brain context params
+  const getBrainParams = () => ({
+    bookId: currentBook?.id,
+    chapterId: currentChapter?.id,
+    chapterNumber: currentChapter?.number,
+    actors,
+    text: content,
+  });
+
   const handleRewrite = async () => {
     if (!selectedText || !selectionRange) return;
-    
+
     setIsProcessingSelection(true);
     try {
-      const result = await aiService.callAI(
-        `Rewrite this text, keeping the same meaning but improving clarity and style. Keep the same tone and voice. Only return the rewritten text, no explanation:\n\n"${selectedText}"`,
-        'creative'
-      );
-      
+      const result = await storyBrain.rewriteText({
+        selectedText,
+        surroundingText: content,
+        ...getBrainParams()
+      });
+
       if (result) {
         const before = content.substring(0, selectionRange.start);
         const after = content.substring(selectionRange.end);
@@ -430,14 +441,15 @@ const WritingCanvas = ({
 
   const handleExpand = async () => {
     if (!selectedText || !selectionRange) return;
-    
+
     setIsProcessingSelection(true);
     try {
-      const result = await aiService.callAI(
-        `Expand on this text with more detail and description, maintaining the same style and voice. Only return the expanded text, no explanation:\n\n"${selectedText}"`,
-        'creative'
-      );
-      
+      const result = await storyBrain.expandText({
+        selectedText,
+        surroundingText: content,
+        ...getBrainParams()
+      });
+
       if (result) {
         const before = content.substring(0, selectionRange.start);
         const after = content.substring(selectionRange.end);
@@ -457,28 +469,12 @@ const WritingCanvas = ({
     setIsGenerating(true);
     setGenerationMode('continue');
     try {
-      // Get the last ~500 characters for context
-      const contextText = content.slice(-500);
-      const characterNames = actors.map(a => a.name).join(', ');
-      
-      const prompt = `Continue writing this story. You are a skilled author. Write the next 2-3 paragraphs that naturally follow from where this text ends. Maintain the same tone, style, and voice. Characters in this story: ${characterNames || 'Not specified'}.
+      const result = await storyBrain.continueWriting(getBrainParams());
 
-Do NOT explain what you're doing. Just write the continuation.
-
-Story so far (ending):
-"""
-${contextText}
-"""
-
-Continue from here:`;
-
-      const result = await aiService.callAI(prompt, 'creative');
-      
       if (result) {
         const cleanResult = result.replace(/^["']|["']$/g, '').trim();
         setContent(prev => prev + '\n\n' + cleanResult);
-        
-        // Scroll to bottom
+
         if (textareaRef.current) {
           textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
         }
@@ -495,34 +491,15 @@ Continue from here:`;
     setIsGenerating(true);
     setGenerationMode('scene');
     try {
-      // Get uncompleted plot beats for this chapter
-      const uncompletedBeats = plotBeatsForChapter.filter(b => !b.completed);
-      const nextBeat = uncompletedBeats[0];
-      const characterNames = actors.map(a => a.name).join(', ');
-      
-      const beatInfo = nextBeat 
-        ? `Next plot beat to address: "${nextBeat.beat || nextBeat.purpose}"`
-        : 'Continue the story naturally';
-      
-      const prompt = `Write a scene for this story chapter. You are a skilled author writing in a unique voice.
+      const result = await storyBrain.generateScene({
+        ...getBrainParams(),
+        plotBeats: plotBeatsForChapter
+      });
 
-${beatInfo}
-
-Characters available: ${characterNames || 'Use existing characters'}
-
-Current chapter content so far:
-"""
-${content.slice(-1000)}
-"""
-
-Write the next scene (3-5 paragraphs). Be vivid, engaging, and maintain consistency with the established tone. Do NOT explain - just write the scene:`;
-
-      const result = await aiService.callAI(prompt, 'creative');
-      
       if (result) {
         const cleanResult = result.replace(/^["']|["']$/g, '').trim();
         setContent(prev => prev + '\n\n' + cleanResult);
-        
+
         if (textareaRef.current) {
           textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
         }
@@ -539,26 +516,8 @@ Write the next scene (3-5 paragraphs). Be vivid, engaging, and maintain consiste
     setIsGenerating(true);
     setGenerationMode('improve');
     try {
-      // Analyze last portion of text
-      const textToAnalyze = content.slice(-2000);
-      
-      const prompt = `As an expert editor, analyze this text and provide specific, actionable improvement suggestions. Focus on:
-- Flow and pacing
-- Dialogue quality
-- Description vs action balance
-- Character voice consistency
-- Grammar and style issues
+      const result = await storyBrain.suggestImprovements(getBrainParams());
 
-Text to analyze:
-"""
-${textToAnalyze}
-"""
-
-Provide 3-5 specific suggestions with examples of how to fix them:`;
-
-      const result = await aiService.callAI(prompt, 'analytical');
-      
-      // For now, just alert the suggestions - in future could show in a panel
       if (result) {
         alert('AI Suggestions:\n\n' + result);
       }
@@ -572,22 +531,15 @@ Provide 3-5 specific suggestions with examples of how to fix them:`;
 
   const handleMatchStyle = async () => {
     if (!selectedText || !selectionRange) return;
-    
+
     setIsProcessingSelection(true);
     try {
-      // Try to get style profile
-      const storyProfile = await db.getAll('storyProfile');
-      const styleInfo = storyProfile[0]?.styleProfile || 'Darkly comedic, British bureaucratic satire';
-      
-      const prompt = `Rewrite this text to better match this style: "${styleInfo}"
+      const result = await storyBrain.matchStyle({
+        selectedText,
+        surroundingText: content,
+        ...getBrainParams()
+      });
 
-Original text:
-"${selectedText}"
-
-Rewrite to match the style - keep the meaning but adjust tone and voice. Only return the rewritten text:`;
-
-      const result = await aiService.callAI(prompt, 'creative');
-      
       if (result) {
         const before = content.substring(0, selectionRange.start);
         const after = content.substring(selectionRange.end);
@@ -607,22 +559,8 @@ Rewrite to match the style - keep the meaning but adjust tone and voice. Only re
     setIsGenerating(true);
     setGenerationMode('character');
     try {
-      const existingCharacters = actors.map(a => a.name).join(', ');
-      
-      const prompt = `Write an introduction paragraph for a NEW character entering this scene. 
-This should be a character that hasn't appeared yet. 
-Make them memorable, quirky, and fitting for a darkly comedic British satire.
-Existing characters: ${existingCharacters || 'Not specified'}
+      const result = await storyBrain.introduceCharacter(getBrainParams());
 
-Current scene context:
-"""
-${content.slice(-800)}
-"""
-
-Write 1-2 paragraphs introducing a new character. Just the prose, no explanation:`;
-
-      const result = await aiService.callAI(prompt, 'creative');
-      
       if (result) {
         const cleanResult = result.replace(/^["']|["']$/g, '').trim();
         setContent(prev => prev + '\n\n' + cleanResult);
@@ -640,34 +578,19 @@ Write 1-2 paragraphs introducing a new character. Just the prose, no explanation
 
   const handleIntegrateSelection = async () => {
     if (!selectedText || !selectionRange) return;
-    
+
     setIsProcessingSelection(true);
     try {
-      // Get surrounding context
-      const beforeContext = content.substring(Math.max(0, selectionRange.start - 500), selectionRange.start);
-      const afterContext = content.substring(selectionRange.end, Math.min(content.length, selectionRange.end + 500));
-      
-      const prompt = `This text needs to be better integrated into the surrounding scene. Add transitional phrases, sensory details, and smooth connections to make it flow naturally.
+      const beforeText = content.substring(Math.max(0, selectionRange.start - 500), selectionRange.start);
+      const afterText = content.substring(selectionRange.end, Math.min(content.length, selectionRange.end + 500));
 
-Text BEFORE:
-"""
-${beforeContext}
-"""
+      const result = await storyBrain.integrateText({
+        selectedText,
+        beforeText,
+        afterText,
+        ...getBrainParams()
+      });
 
-TEXT TO INTEGRATE:
-"""
-${selectedText}
-"""
-
-Text AFTER:
-"""
-${afterContext}
-"""
-
-Rewrite the middle section to flow better with what comes before and after. Only return the rewritten middle section:`;
-
-      const result = await aiService.callAI(prompt, 'creative');
-      
       if (result) {
         const before = content.substring(0, selectionRange.start);
         const after = content.substring(selectionRange.end);
@@ -684,18 +607,15 @@ Rewrite the middle section to flow better with what comes before and after. Only
 
   const handleMakeFunnier = async () => {
     if (!selectedText || !selectionRange) return;
-    
+
     setIsProcessingSelection(true);
     try {
-      const prompt = `Make this passage funnier while keeping the plot intact. Add witty observations, absurd details, or comedic timing. Think Peep Show meets Terry Pratchett.
+      const result = await storyBrain.makeFunnier({
+        selectedText,
+        surroundingText: content,
+        ...getBrainParams()
+      });
 
-Original:
-"${selectedText}"
-
-Rewrite with more comedy. Only return the rewritten text:`;
-
-      const result = await aiService.callAI(prompt, 'creative');
-      
       if (result) {
         const before = content.substring(0, selectionRange.start);
         const after = content.substring(selectionRange.end);
@@ -712,18 +632,15 @@ Rewrite with more comedy. Only return the rewritten text:`;
 
   const handleMakeDarker = async () => {
     if (!selectedText || !selectionRange) return;
-    
+
     setIsProcessingSelection(true);
     try {
-      const prompt = `Make this passage darker and more ominous while keeping the plot intact. Add dread, unease, or horror undertones. Think Garth Marenghi's Darkplace.
+      const result = await storyBrain.makeDarker({
+        selectedText,
+        surroundingText: content,
+        ...getBrainParams()
+      });
 
-Original:
-"${selectedText}"
-
-Rewrite with darker tone. Only return the rewritten text:`;
-
-      const result = await aiService.callAI(prompt, 'creative');
-      
       if (result) {
         const before = content.substring(0, selectionRange.start);
         const after = content.substring(selectionRange.end);
@@ -741,7 +658,7 @@ Rewrite with darker tone. Only return the rewritten text:`;
   // Quick mood rewrite handler
   const handleQuickMoodRewrite = async (moodPreset) => {
     if (!selectedText || !selectionRange) return;
-    
+
     setIsProcessingSelection(true);
     try {
       const presets = {
@@ -762,20 +679,18 @@ Rewrite with darker tone. Only return the rewritten text:`;
         formal: { comedy_horror: 50, tension: 50, pacing: 40, detail: 60, emotional: 40, darkness: 50, absurdity: 30, formality: 90 },
         casual: { comedy_horror: 50, tension: 50, pacing: 60, detail: 40, emotional: 50, darkness: 50, absurdity: 60, formality: 20 }
       };
-      
+
       const preset = presets[moodPreset];
       if (!preset) return;
-      
-      const moodDesc = `Comedy/Horror: ${preset.comedy_horror}%, Tension: ${preset.tension}%, Pacing: ${preset.pacing}%, Detail: ${preset.detail}%, Emotional: ${preset.emotional}%, Darkness: ${preset.darkness}%, Absurdity: ${preset.absurdity}%, Formality: ${preset.formality}%`;
-      const moodGuide = `Rewrite with these mood settings: ${moodDesc}. Keep the same events/meaning but adjust the tone and style to match these settings.`;
-      
-      const prompt = `${moodGuide}
-Only return the rewritten text:
 
-"${selectedText}"`;
+      const result = await storyBrain.applyMood({
+        selectedText,
+        moodPreset,
+        moodSettings: preset,
+        surroundingText: content,
+        ...getBrainParams()
+      });
 
-      const result = await aiService.callAI(prompt, 'creative');
-      
       if (result) {
         const before = content.substring(0, selectionRange.start);
         const after = content.substring(selectionRange.end);
@@ -794,21 +709,18 @@ Only return the rewritten text:
     setIsGenerating(true);
     setGenerationMode('dialogue');
     try {
-      const characterNames = actors.slice(0, 4).map(a => a.name).join(', ');
-      
-      const prompt = `Write a dialogue exchange (4-8 lines) that continues naturally from this scene. Make the dialogue sharp, character-specific, and revealing.
+      // Detect which characters are in the current scene
+      const recentText = content.slice(-1000);
+      const speakingCharacters = actors
+        .filter(a => recentText.toLowerCase().includes(a.name.toLowerCase()))
+        .map(a => a.name)
+        .slice(0, 4);
 
-Characters available: ${characterNames || 'Use characters from context'}
+      const result = await storyBrain.generateDialogue({
+        ...getBrainParams(),
+        speakingCharacters: speakingCharacters.length > 0 ? speakingCharacters : actors.slice(0, 3).map(a => a.name)
+      });
 
-Scene so far:
-"""
-${content.slice(-1000)}
-"""
-
-Write the dialogue exchange. Just the prose with dialogue tags, no explanation:`;
-
-      const result = await aiService.callAI(prompt, 'creative');
-      
       if (result) {
         const cleanResult = result.replace(/^["']|["']$/g, '').trim();
         setContent(prev => prev + '\n\n' + cleanResult);
@@ -828,17 +740,26 @@ Write the dialogue exchange. Just the prose with dialogue tags, no explanation:`
     setIsGenerating(true);
     setGenerationMode('description');
     try {
-      const prompt = `Write a rich descriptive paragraph that enhances this scene. Focus on sensory details - sight, sound, smell, texture. Make the world feel lived-in and strange.
+      const { systemContext } = await storyBrain.getContext({
+        ...getBrainParams(),
+        action: 'expand'
+      });
+
+      const system = `You are the author of this story. Write rich, sensory description that grounds the reader in this world.
+
+${systemContext}`;
+
+      const prompt = `Write 1-2 descriptive paragraphs that enhance this scene. Focus on sensory details — sight, sound, smell, texture. Make the world feel lived-in. Match the story's established voice.
 
 Current scene:
 """
 ${content.slice(-800)}
 """
 
-Write 1-2 descriptive paragraphs. Just the prose, no explanation:`;
+Write the description. No explanation:`;
 
-      const result = await aiService.callAI(prompt, 'creative');
-      
+      const result = await aiService.callAI(prompt, 'creative', system);
+
       if (result) {
         const cleanResult = result.replace(/^["']|["']$/g, '').trim();
         setContent(prev => prev + '\n\n' + cleanResult);
@@ -856,17 +777,26 @@ Write 1-2 descriptive paragraphs. Just the prose, no explanation:`;
 
   const handleSummarize = async () => {
     if (!selectedText || !selectionRange) return;
-    
+
     setIsProcessingSelection(true);
     try {
-      const prompt = `Condense this passage while keeping the essential plot points and best lines. Remove redundancy and tighten the prose.
+      const { systemContext } = await storyBrain.getContext({
+        ...getBrainParams(),
+        action: 'rewrite'
+      });
+
+      const system = `You are tightening prose in this story. Preserve voice and essential content.
+
+${systemContext}`;
+
+      const prompt = `Condense this passage while keeping the essential plot points and best lines. Remove redundancy and tighten the prose. Match the story's voice.
 
 Original (${selectedText.split(/\s+/).length} words):
 "${selectedText}"
 
 Write a tighter version (aim for 50-70% of original length). Only return the condensed text:`;
 
-      const result = await aiService.callAI(prompt, 'creative');
+      const result = await aiService.callAI(prompt, 'creative', system);
       
       if (result) {
         const before = content.substring(0, selectionRange.start);
