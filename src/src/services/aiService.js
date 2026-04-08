@@ -63,7 +63,7 @@ class AIService {
       huggingface: process.env.REACT_APP_HUGGINGFACE_API_KEY || ''
     };
     this.runtimeKeys = {};
-    this.useServerProxy = true;
+    this.useServerProxy = false;
 
     // Load preferred provider from localStorage
     this.preferredProvider = localStorage.getItem('ai_preferred_provider') || 'auto';
