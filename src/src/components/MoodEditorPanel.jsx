@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Sliders, Check, RefreshCw } from 'lucide-react';
 import aiService from '../services/aiService';
 import smartContextEngine from '../services/smartContextEngine';
+import storyBrain from '../services/storyBrain';
 
 /**
  * MoodEditorPanel - Unified mood rewrite interface with quick presets and advanced sliders
@@ -103,20 +104,19 @@ const MoodEditorPanel = ({
       if (moodSettings.formality > 70) moodDescriptions.push('FORMAL - proper, structured, dignified');
       else if (moodSettings.formality < 30) moodDescriptions.push('CASUAL - conversational, relaxed');
 
-      // Get style context if available
-      let styleContext = '';
+      // Get style context from storyBrain (includes craft directives, chapter memories, genre guides)
+      let systemContext = '';
       try {
-        if (chapterText && chapterId && bookId) {
-          const contextResult = await smartContextEngine.buildAIContext({
+        if (chapterText && bookId) {
+          const moodPreset = moodSettings.comedy_horror < 30 ? 'comedy' : moodSettings.comedy_horror > 70 ? 'horror' : null;
+          const { systemContext: ctx } = await storyBrain.getContext({
             text: chapterText,
             chapterId,
             bookId,
-            includeFullChapter: false,
-            moodSettings,
-            moodPreset: null
+            action: 'mood'
           });
-          // buildAIContext returns { contextText, rawContext }, extract the string
-          styleContext = contextResult?.contextText || (typeof contextResult === 'string' ? contextResult : '');
+          const craft = storyBrain.getCraftDirective('mood', moodPreset);
+          systemContext = `You are adjusting the mood of a passage in this story.\n\n${craft}\n\n${ctx}`;
         }
       } catch (error) {
         console.warn('Failed to load style context for mood editor:', error);
@@ -129,9 +129,8 @@ Mood Settings: Comedy/Horror: ${moodSettings.comedy_horror}%, Tension: ${moodSet
 Keep the same events/meaning but transform the tone and style to match these settings EXACTLY.`;
 
       let prompt = '';
-      if (styleContext) {
-        prompt = `${styleContext}
-
+      if (systemContext) {
+        prompt = `
 === YOUR TASK ===
 ${moodGuide}
 
@@ -158,7 +157,7 @@ ${customPrompt ? `\n=== CUSTOM INSTRUCTIONS ===\n${customPrompt}\n` : ''}
 Only return the rewritten text (no explanations):`;
       }
 
-      const result = await aiService.callAI(prompt, 'creative');
+      const result = await aiService.callAI(prompt, 'creative', systemContext);
       
       // #region agent log
       fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MoodEditorPanel.jsx:114',message:'AI result received',data:{resultLength:result?.length||0,hasResult:!!result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});

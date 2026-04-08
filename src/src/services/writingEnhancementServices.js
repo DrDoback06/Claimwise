@@ -8,6 +8,25 @@ import db from './database';
 import smartContextEngine from './smartContextEngine';
 import contextEngine from './contextEngine';
 import chapterDataExtractionService from './chapterDataExtractionService';
+import storyBrain from './storyBrain';
+
+/**
+ * Helper: get storyBrain system context for writing enhancement features.
+ * This ensures all writing generation gets full story awareness.
+ */
+const _getEnhancementContext = async (text, bookId, chapterId, action = 'rewrite') => {
+  try {
+    const { systemContext } = await storyBrain.getContext({
+      text: text || '',
+      bookId,
+      chapterId,
+      action
+    });
+    return systemContext;
+  } catch (_) {
+    return '';
+  }
+};
 
 /**
  * Feature 1: Smart Continuity Checker
@@ -30,15 +49,9 @@ export const checkContinuity = async (selectedText, currentChapterId, currentBoo
       .join('\n\n')
       .slice(-5000); // Last 5000 chars
 
-    const styleContext = await smartContextEngine.buildAIContext({
-      text: selectedText,
-      chapterId: currentChapterId,
-      bookId: currentBookId
-    });
+    const systemContext = await _getEnhancementContext(selectedText, currentBookId, currentChapterId, 'rewrite');
 
-    const prompt = `${styleContext}
-
-=== CONTINUITY CHECK ===
+    const prompt = `=== CONTINUITY CHECK ===
 Analyze this selected text for inconsistencies with previous chapters.
 
 SELECTED TEXT:
@@ -78,7 +91,7 @@ Return JSON:
   ]
 }`;
 
-    const response = await aiService.callAI(prompt, 'structured');
+    const response = await aiService.callAI(prompt, 'structured', systemContext);
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
@@ -98,23 +111,17 @@ Return JSON:
 export const enhanceDialogue = async (dialogueText, characterName, chapterId, bookId) => {
   try {
     const voiceProfile = await smartContextEngine.getCharacterVoice(characterName);
-    const styleContext = await smartContextEngine.buildAIContext({
-      text: dialogueText,
-      chapterId,
-      bookId
-    });
+    const systemContext = await _getEnhancementContext(dialogueText, bookId, chapterId, 'dialogue');
 
-    const prompt = `${styleContext}
+    const system = `You are enhancing dialogue to match a character's voice profile.\n\n${systemContext}`;
 
-=== DIALOGUE ENHANCEMENT ===
-Enhance this dialogue to match the character's voice profile exactly.
+    const prompt = `Enhance this dialogue to match ${characterName}'s voice profile exactly.
 
 DIALOGUE:
 """
 ${dialogueText}
 """
 
-CHARACTER: ${characterName}
 ${voiceProfile ? `
 VOICE PROFILE:
 - Speech Patterns: ${voiceProfile.speechPatterns || 'Not specified'}
@@ -125,7 +132,7 @@ VOICE PROFILE:
 
 Return ONLY the enhanced dialogue (no explanations):`;
 
-    const response = await aiService.callAI(prompt, 'creative');
+    const response = await aiService.callAI(prompt, 'creative', system);
     return response.trim();
   } catch (error) {
     console.error('Error enhancing dialogue:', error);
@@ -240,15 +247,9 @@ const _createPacingTimeline = (chapterText, paragraphs) => {
  */
 export const trackEmotionalBeats = async (chapterText, chapterId, bookId) => {
   try {
-    const styleContext = await smartContextEngine.buildAIContext({
-      text: chapterText,
-      chapterId,
-      bookId
-    });
+    const systemContext = await _getEnhancementContext(chapterText, bookId, chapterId, 'rewrite');
 
-    const prompt = `${styleContext}
-
-Analyze this chapter text and identify emotional beats (moments of high emotion, tension, relief, etc.).
+    const prompt = `Analyze this chapter text and identify emotional beats (moments of high emotion, tension, relief, etc.).
 
 CHAPTER TEXT:
 """
@@ -266,7 +267,7 @@ Return JSON array:
   }
 ]`;
 
-    const response = await aiService.callAI(prompt, 'structured');
+    const response = await aiService.callAI(prompt, 'structured', systemContext);
     const jsonMatch = response.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       const beats = JSON.parse(jsonMatch[0]);
@@ -307,15 +308,9 @@ export const checkVoiceConsistency = async (dialogueText, characterName, chapter
       return { issues: [], suggestions: [] };
     }
 
-    const styleContext = await smartContextEngine.buildAIContext({
-      text: dialogueText,
-      chapterId,
-      bookId
-    });
+    const systemContext = await _getEnhancementContext(dialogueText, bookId, chapterId, 'dialogue');
 
-    const prompt = `${styleContext}
-
-Check if this dialogue matches the character's voice profile.
+    const prompt = `Check if this dialogue matches the character's voice profile.
 
 DIALOGUE:
 """
@@ -336,7 +331,7 @@ Return JSON:
   "suggestedDialogue": "Corrected dialogue"
 }`;
 
-    const response = await aiService.callAI(prompt, 'structured');
+    const response = await aiService.callAI(prompt, 'structured', systemContext);
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
@@ -353,11 +348,7 @@ Return JSON:
  */
 export const generateSceneTransition = async (endOfScene, startOfNextScene, transitionStyle, chapterId, bookId) => {
   try {
-    const styleContext = await smartContextEngine.buildAIContext({
-      text: endOfScene + '\n\n' + startOfNextScene,
-      chapterId,
-      bookId
-    });
+    const systemContext = await _getEnhancementContext(endOfScene + '\n\n' + startOfNextScene, bookId, chapterId, 'integrate');
 
     const styleOptions = {
       abrupt: 'Abrupt cut - immediate shift',
@@ -367,9 +358,7 @@ export const generateSceneTransition = async (endOfScene, startOfNextScene, tran
       pov_shift: 'POV shift - change perspective'
     };
 
-    const prompt = `${styleContext}
-
-Generate a transition paragraph between these two scenes.
+    const prompt = `Generate a transition paragraph between these two scenes.
 
 END OF SCENE:
 """
@@ -385,7 +374,7 @@ TRANSITION STYLE: ${styleOptions[transitionStyle] || 'smooth'}
 
 Return ONLY the transition paragraph (no explanations):`;
 
-    const response = await aiService.callAI(prompt, 'creative');
+    const response = await aiService.callAI(prompt, 'creative', systemContext);
     return response.trim();
   } catch (error) {
     console.error('Error generating transition:', error);
@@ -398,15 +387,9 @@ Return ONLY the transition paragraph (no explanations):`;
  */
 export const escalateConflict = async (conflictText, chapterId, bookId) => {
   try {
-    const styleContext = await smartContextEngine.buildAIContext({
-      text: conflictText,
-      chapterId,
-      bookId
-    });
+    const systemContext = await _getEnhancementContext(conflictText, bookId, chapterId, 'scene');
 
-    const prompt = `${styleContext}
-
-This text contains a conflict. Generate 3 options to escalate the tension and stakes.
+    const prompt = `This text contains a conflict. Generate 3 options to escalate the tension and stakes.
 
 CONFLICT TEXT:
 """
@@ -424,7 +407,7 @@ Return JSON:
   ]
 }`;
 
-    const response = await aiService.callAI(prompt, 'structured');
+    const response = await aiService.callAI(prompt, 'structured', systemContext);
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
@@ -441,17 +424,11 @@ Return JSON:
  */
 export const injectSensoryDetails = async (paragraphText, senses, chapterId, bookId) => {
   try {
-    const styleContext = await smartContextEngine.buildAIContext({
-      text: paragraphText,
-      chapterId,
-      bookId
-    });
+    const systemContext = await _getEnhancementContext(paragraphText, bookId, chapterId, 'expand');
 
     const senseList = Array.isArray(senses) ? senses.join(', ') : senses || 'sight, sound, smell, touch, taste';
 
-    const prompt = `${styleContext}
-
-Enhance this paragraph by adding sensory details for: ${senseList}
+    const prompt = `Enhance this paragraph by adding sensory details for: ${senseList}
 
 PARAGRAPH:
 """
@@ -460,7 +437,7 @@ ${paragraphText}
 
 Return the enhanced paragraph with natural sensory details woven in (no explanations):`;
 
-    const response = await aiService.callAI(prompt, 'creative');
+    const response = await aiService.callAI(prompt, 'creative', systemContext);
     return response.trim();
   } catch (error) {
     console.error('Error injecting sensory details:', error);
@@ -473,20 +450,14 @@ Return the enhanced paragraph with natural sensory details woven in (no explanat
  */
 export const suggestForeshadowing = async (chapterText, futureChapters, chapterId, bookId) => {
   try {
-    const styleContext = await smartContextEngine.buildAIContext({
-      text: chapterText,
-      chapterId,
-      bookId
-    });
+    const systemContext = await _getEnhancementContext(chapterText, bookId, chapterId, 'planning');
 
     const futureContext = futureChapters
       .slice(0, 3)
       .map(c => `Chapter ${c.number}: ${c.title || 'Untitled'}`)
       .join('\n');
 
-    const prompt = `${styleContext}
-
-Analyze this chapter for opportunities to add foreshadowing for future events.
+    const prompt = `Analyze this chapter for opportunities to add foreshadowing for future events.
 
 CURRENT CHAPTER:
 """
@@ -508,7 +479,7 @@ Return JSON:
   ]
 }`;
 
-    const response = await aiService.callAI(prompt, 'structured');
+    const response = await aiService.callAI(prompt, 'structured', systemContext);
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
@@ -525,6 +496,8 @@ Return JSON:
  */
 export const generateChapterSummary = async (chapterText, chapterId, bookId, chapterTitle) => {
   try {
+    const systemContext = await _getEnhancementContext(chapterText, bookId, chapterId, 'planning');
+
     const prompt = `Generate a concise chapter summary (2-3 sentences) covering:
 - Key events
 - Character appearances
@@ -539,7 +512,7 @@ ${chapterText.slice(0, 10000)}
 
 Return ONLY the summary text (no JSON, no explanations):`;
 
-    const response = await aiService.callAI(prompt, 'creative');
+    const response = await aiService.callAI(prompt, 'creative', systemContext);
     
     // Also extract key data
     const events = await chapterDataExtractionService.extractEventsFromChapter(
