@@ -4,6 +4,7 @@
  */
 
 import offlineAIService from './offlineAIService';
+import intelligenceRouter from './intelligenceRouter';
 
 class AIService {
   constructor() {
@@ -12,13 +13,16 @@ class AIService {
     this.isProcessingQueue = false;
     this.maxConcurrentRequests = 2; // Limit concurrent requests
     this.activeRequests = 0;
-    
+
     // Response cache with TTL
     this.responseCache = new Map();
     this.cacheTTL = 10 * 60 * 1000; // 10 minutes
-    
+
     // Request cancellation
     this.activeRequestControllers = new Map();
+
+    // Intelligence router
+    this.router = intelligenceRouter;
     
     this.apis = {
       gemini: {
@@ -63,7 +67,7 @@ class AIService {
       huggingface: process.env.REACT_APP_HUGGINGFACE_API_KEY || ''
     };
     this.runtimeKeys = {};
-    this.useServerProxy = true;
+    this.useServerProxy = false;
 
     // Load preferred provider from localStorage
     this.preferredProvider = localStorage.getItem('ai_preferred_provider') || 'auto';
@@ -221,11 +225,12 @@ class AIService {
   /**
    * Gemini API call
    */
-  async callGemini(prompt, systemContext = "", abortController = null) {
+  async callGemini(prompt, systemContext = "", abortController = null, model = null) {
+    const geminiModel = model || 'gemini-2.5-flash-preview-04-17';
     if (this.useServerProxy) {
-      return this.callProviderProxy('gemini', { prompt, systemContext }, abortController);
+      return this.callProviderProxy('gemini', { prompt, systemContext, model: geminiModel }, abortController);
     }
-    const { key, endpoint } = this.apis.gemini;
+    const { key } = this.apis.gemini;
 
     if (!key) {
       throw new Error("Gemini API key not set");
@@ -233,6 +238,7 @@ class AIService {
 
     try {
       const fullPrompt = systemContext ? `${systemContext}\n\n${prompt}` : prompt;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
 
       const fetchOptions = {
         method: 'POST',
@@ -246,13 +252,11 @@ class AIService {
         })
       };
 
-      // Add abort signal if provided
       if (abortController) {
         fetchOptions.signal = abortController.signal;
       }
 
       const response = await fetch(`${endpoint}?key=${key}`, fetchOptions);
-
       const data = await response.json();
 
       if (!response.ok) {
@@ -675,100 +679,105 @@ class AIService {
   }
 
   /**
+   * Get list of providers that have keys configured
+   */
+  _getConfiguredProviders() {
+    const configured = [];
+    for (const [name, config] of Object.entries(this.apis)) {
+      if (this.useServerProxy || !config.requiresKey || config.key) {
+        configured.push(name);
+      }
+    }
+    return configured;
+  }
+
+  /**
    * Internal AI call (without queue/cache)
+   * Uses the intelligence router to automatically pick the best model for the request.
    */
   async _callAIInternal(prompt, task, systemContext, abortController) {
-    const taskMapping = {
-      creative: "gemini",       // Story generation, creative writing
-      analytical: "claude",     // Consistency checking, analysis
-      structured: "openai",     // Item generation, structured data
-      general: "gemini"         // Default fallback
-    };
+    const configuredProviders = this._getConfiguredProviders();
 
-    // Determine which provider to try first
-    let primaryProvider = this.preferredProvider;
-    
-    if (primaryProvider === 'auto') {
-      // Auto mode: prefer free providers, then task-specific
-      primaryProvider = taskMapping[task] || "groq"; // Default to free Groq
-    }
+    // Use the intelligence router to determine the best model
+    const { primary, fallbacks, complexity } = this.router.route(
+      prompt,
+      systemContext,
+      task,
+      configuredProviders,
+      this.preferredProvider
+    );
 
-    // Build fallback chain: offline -> preferred -> free providers -> paid providers
-    const fallbackChain = [];
-    
-    // Try offline AI first if available
+    // Build the model chain: primary + fallbacks from router
+    const modelChain = [];
+
+    // Add offline as first option if available
     if (offlineAIService.isAvailable()) {
-      fallbackChain.push('offline');
+      modelChain.push({ provider: 'offline', model: null, id: 'offline' });
     }
-    
-    // Add preferred provider
-    if (primaryProvider !== 'offline') {
-      fallbackChain.push(primaryProvider);
-    }
-    
-    // Add free providers to fallback
-    if (primaryProvider !== 'groq' && !fallbackChain.includes('groq')) {
-      fallbackChain.push('groq');
-    }
-    if (primaryProvider !== 'huggingface' && !fallbackChain.includes('huggingface')) {
-      fallbackChain.push('huggingface');
-    }
-    
-    // Add other paid providers
-    Object.keys(this.apis).forEach(provider => {
-      if (!fallbackChain.includes(provider) && provider !== primaryProvider && provider !== 'offline') {
-        fallbackChain.push(provider);
-      }
-    });
 
-    // Try each provider in the fallback chain
+    if (primary) {
+      modelChain.push(primary);
+    }
+    modelChain.push(...fallbacks);
+
+    // If router found no models (no keys set), fall back to legacy chain
+    if (!primary) {
+      const legacyFallback = ['groq', 'gemini', 'openai', 'anthropic', 'huggingface'];
+      for (const provider of legacyFallback) {
+        const config = this.apis[provider];
+        if (config && (this.useServerProxy || !config.requiresKey || config.key)) {
+          modelChain.push({ provider, model: null, id: provider });
+        }
+      }
+    }
+
+    // Try each model in the chain
     let lastError = null;
-    for (const provider of fallbackChain) {
-      // Check if request was cancelled
+    for (const modelDef of modelChain) {
       if (abortController?.signal.aborted) {
         throw new Error('Request cancelled');
       }
 
       try {
-        // Check if provider is available
-        const config = this.apis[provider];
-        if (!config) continue;
-        
-        if (config.requiresKey && !config.key) {
-          continue; // Skip providers that need keys but don't have them
+        const config = this.apis[modelDef.provider];
+        if (!config && modelDef.provider !== 'offline') continue;
+
+        if (modelDef.provider !== 'offline' && !this.useServerProxy && config.requiresKey && !config.key) {
+          continue;
         }
 
-        console.log(`[AI Service] Trying provider: ${provider}`);
-        const result = await this.callByProvider(provider, prompt, systemContext, abortController);
-        console.log(`[AI Service] Success with provider: ${provider}`);
+        console.log(`[AI Service] Trying: ${modelDef.id} (${modelDef.provider}/${modelDef.model || 'default'}) | Complexity: ${complexity.tier} (${complexity.score.toFixed(2)})`);
+
+        const result = await this.callByProvider(
+          modelDef.provider,
+          prompt,
+          systemContext,
+          abortController,
+          modelDef.model // pass the specific model from the registry
+        );
+
+        console.log(`[AI Service] Success: ${modelDef.id}`);
+
+        // Track token usage (estimate: ~4 chars per token for prompt, response ~same length)
+        const estimatedTokens = Math.ceil((prompt.length + (systemContext?.length || 0) + (result?.length || 0)) / 4);
+        const tracking = this.router.trackCompletion(modelDef.id, modelDef.provider, estimatedTokens);
+
+        if (tracking.warning) {
+          console.warn(`[AI Service] Usage warning: ${tracking.warning.message}`);
+        }
+
         return result;
       } catch (error) {
-        // Don't continue if request was cancelled
         if (error.name === 'AbortError' || error.message === 'Request cancelled') {
           throw error;
         }
 
-        console.warn(`[AI Service] Provider ${provider} failed:`, error.message);
+        console.warn(`[AI Service] ${modelDef.id} failed:`, error.message);
         lastError = error;
-        
-        // Check if it's a quota/rate limit error - if so, try next provider immediately
-        const errorMsg = error.message?.toLowerCase() || '';
-        const isQuotaError = errorMsg.includes('quota') || 
-                           errorMsg.includes('rate limit') || 
-                           errorMsg.includes('exceeded') ||
-                           errorMsg.includes('429');
-        
-        if (isQuotaError) {
-          console.log(`[AI Service] Quota exceeded for ${provider}, trying next provider...`);
-          continue; // Try next provider
-        }
-        
-        // For other errors, we still try next provider
         continue;
       }
     }
 
-    // If all providers failed, throw the last error
     throw lastError || new Error("All AI providers failed. Please check your API keys in Settings.");
   }
 
@@ -856,12 +865,11 @@ class AIService {
   }
 
   /**
-   * Call specific provider
+   * Call specific provider with optional model override from intelligence router
    */
-  async callByProvider(provider, prompt, systemContext = "", abortController = null) {
+  async callByProvider(provider, prompt, systemContext = "", abortController = null, model = null) {
     switch (provider) {
       case "offline":
-        // Check if offline AI is available
         if (!offlineAIService.isAvailable()) {
           throw new Error("Offline AI is not available on this device");
         }
@@ -870,18 +878,32 @@ class AIService {
           temperature: 0.7
         });
       case "gemini":
-        return this.callGemini(prompt, systemContext, abortController);
+        return this.callGemini(prompt, systemContext, abortController, model);
       case "openai":
-        return this.callChatGPT(prompt, systemContext, "gpt-4o", abortController);
+        return this.callChatGPT(prompt, systemContext, model || "gpt-4o", abortController);
       case "anthropic":
-        return this.callClaude(prompt, systemContext, abortController);
+        return this.callClaude(prompt, systemContext, model || "claude-sonnet-4-20250514", abortController);
       case "groq":
-        return this.callGroq(prompt, systemContext, abortController);
+        return this.callGroq(prompt, systemContext, model || "llama-3.1-70b-versatile", abortController);
       case "huggingface":
         return this.callHuggingFace(prompt, systemContext, abortController);
       default:
         throw new Error(`Unknown provider: ${provider}`);
     }
+  }
+
+  /**
+   * Get the intelligence router instance (for UI access)
+   */
+  getRouter() {
+    return this.router;
+  }
+
+  /**
+   * Get usage summary from the intelligence router
+   */
+  getUsageSummary() {
+    return this.router.getUsageSummary();
   }
 
   /**
