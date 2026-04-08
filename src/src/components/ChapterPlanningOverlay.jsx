@@ -18,6 +18,7 @@ import {
 import ChapterMoodSliders, { defaultPresets } from './ChapterMoodSliders';
 import contextEngine from '../services/contextEngine';
 import aiService from '../services/aiService';
+import storyBrain from '../services/storyBrain';
 import promptTemplates from '../services/promptTemplates';
 
 /**
@@ -107,7 +108,17 @@ const ChapterPlanningOverlay = ({
 
     try {
       const planPrompt = contextEngine.buildPlanningPrompt(ctx, moodSliders);
-      const response = await aiService.callAI(planPrompt, 'creative');
+      // Use storyBrain for planning context (includes arc guidance, chapter memories, genre guides)
+      const { systemContext } = await storyBrain.getContext({
+        text: '',
+        chapterNumber,
+        bookId: ctx?.bookId || null,
+        chapterId: ctx?.chapterId || null,
+        action: 'planning'
+      });
+      const craft = storyBrain.getCraftDirective('planning');
+      const system = `You are a story consultant planning the next chapter.\n\n${craft}\n\n${systemContext}`;
+      const response = await aiService.callAI(planPrompt, 'creative', system);
 
       // Try to parse JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);

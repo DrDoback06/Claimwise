@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PenTool, BookOpen, Users, FileText, CheckCircle, X, Search, RefreshCw, RefreshCcw, Eye, Edit3, Save, AlertTriangle, Zap, Sparkles, ChevronRight, ChevronLeft, ChevronDown, Target, BarChart3, Calendar, TrendingUp, Clock, Brain, Upload, Lightbulb, Database, Settings, Trash2, Plus, ScanText, Mic, MicOff, Lock, Unlock, FileDown, Check, XCircle, ArrowRight, Wand2, HelpCircle } from 'lucide-react';
 import aiService from '../services/aiService';
+import storyBrain from '../services/storyBrain';
 import db from '../services/database';
 import toastService from '../../services/toastService';
 import documentService from '../services/documentService';
@@ -773,52 +774,32 @@ const WritersRoomEnhanced = ({ books, actors, items, skills, onClose, onChapterU
     try {
       const currentBook = getBookById(selectedBook);
       const currentChapter = currentBook?.chapters?.find(c => c.id === selectedChapter);
-      
-      // Get full AI context including style profile, comparisons, style references, etc.
-      const contextResult = await smartContextEngine.buildAIContext({
+      const action = options.action || 'continue';
+
+      // Use storyBrain for context assembly (includes chapter memories, arc guidance, genre guides, craft directives)
+      const { systemContext } = await storyBrain.getContext({
         text: chapterText,
         chapterNumber: currentChapter?.chapterNumber || null,
         bookId: currentBook?.id || null,
         chapterId: currentChapter?.id || null,
-        includeFullChapter: false,
-        moodSettings: null,
-        moodPreset: null,
-        contextOptions: {
-          includePlotBeats: contextCheckboxes.plotBeats,
-          includeCharacterArcs: contextCheckboxes.characterArcs,
-          includeTimeline: contextCheckboxes.timelineEvents,
-          includeDecisions: contextCheckboxes.decisions,
-          includeCallbacks: contextCheckboxes.callbacks,
-          includeMemories: contextCheckboxes.memories,
-          includeAISuggestions: contextCheckboxes.aiSuggestions,
-          includeStorylines: contextCheckboxes.storylines
-        }
+        action
       });
-      
-      // buildAIContext returns { contextText, rawContext }, extract the string
-      const context = contextResult?.contextText || (typeof contextResult === 'string' ? contextResult : '');
-      
-      // Build the full prompt with context
-      const fullPrompt = `${context}
 
-=== YOUR TASK ===
-${userPrompt}
+      const craft = storyBrain.getCraftDirective(action);
 
-=== CRITICAL STYLE REQUIREMENTS ===
-- Match the writing style from the style profile and references above EXACTLY
-- Use the tone, humor style, and voice patterns shown in the examples
-- If comparisons are provided (e.g., "Peep Show meets Garth Marenghi"), embody that style
-- Be witty, sarcastic, and emotionally hard-hitting as specified
-- Do NOT write generic or bland prose - match the unique voice described above
+      const system = `You are the author of this story. Write in the EXACT same voice, style, and rhythm as the existing text.
 
-${options.customPrompt ? `\n=== CUSTOM INSTRUCTIONS ===\n${options.customPrompt}\n` : ''}
+${craft}
+
+${systemContext}
+
+${options.customPrompt ? `CUSTOM INSTRUCTIONS:\n${options.customPrompt}\n` : ''}
 ${options.additionalInstructions || ''}`;
-      
-      return fullPrompt;
+
+      return { system, user: userPrompt };
     } catch (error) {
       console.warn('Failed to build contextual prompt, using basic prompt:', error);
-      // Fallback to basic prompt if context fails
-      return `${userPrompt}${options.customPrompt ? `\n\nCustom instructions: ${options.customPrompt}` : ''}`;
+      return { system: '', user: `${userPrompt}${options.customPrompt ? `\n\nCustom instructions: ${options.customPrompt}` : ''}` };
     }
   };
 
@@ -885,12 +866,12 @@ Tighten:`;
       }
       
       // Build contextual prompt with style context
-      const fullPrompt = await buildContextualPrompt(taskPrompt, {
+      const { system, user } = await buildContextualPrompt(taskPrompt, {
         customPrompt,
-        additionalInstructions: 'CRITICAL: Match the style profile exactly. Be witty, sarcastic, and emotionally hard-hitting as specified. Use the writing examples to match the voice.'
+        action: 'continue'
       });
-      
-      const result = await aiService.callAI(fullPrompt, 'creative');
+
+      const result = await aiService.callAI(user, 'creative', system);
       
       // #region agent log
       fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:750',message:'AI result received',data:{actionId,resultLength:result?.length||0,hasResult:!!result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
@@ -1001,14 +982,14 @@ TEXT TO REWRITE:
 
 Return ONLY the rewritten text, nothing else.`;
       
-      // Build contextual prompt with style context
-      const fullPrompt = await buildContextualPrompt(taskPrompt, {
+      // Build contextual prompt with storyBrain
+      const { system: rewriteSystem, user: rewriteUser } = await buildContextualPrompt(taskPrompt, {
         customPrompt,
-        additionalInstructions: 'CRITICAL: Match the style profile exactly. Be witty, sarcastic, and emotionally hard-hitting as specified. Use the writing examples to match the voice.'
+        action: 'rewrite'
       });
-      
-      const response = await aiService.callAI(fullPrompt, 'creative');
-      
+
+      const response = await aiService.callAI(rewriteUser, 'creative', rewriteSystem);
+
       // #region agent log
       fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:860',message:'Rewrite AI result',data:{responseLength:response?.length||0,hasResponse:!!response},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
       // #endregion
@@ -1084,13 +1065,13 @@ SELECTED TEXT (continue from here):
 Continue the story naturally. Return ONLY the continuation text.`;
       
       // Build contextual prompt with style context
-      const fullPrompt = await buildContextualPrompt(taskPrompt, {
+      const { system: expandSystem, user: expandUser } = await buildContextualPrompt(taskPrompt, {
         customPrompt,
-        additionalInstructions: 'CRITICAL: Match the style profile exactly. Be witty, sarcastic, and emotionally hard-hitting as specified. Use the writing examples to match the voice.'
+        action: 'expand'
       });
-      
-      const response = await aiService.callAI(fullPrompt, 'creative');
-      
+
+      const response = await aiService.callAI(expandUser, 'creative', expandSystem);
+
       // #region agent log
       fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:920',message:'Expand AI result',data:{responseLength:response?.length||0,hasResponse:!!response},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'K'})}).catch(()=>{});
       // #endregion

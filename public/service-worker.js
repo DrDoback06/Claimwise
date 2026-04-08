@@ -1,18 +1,15 @@
 /* eslint-disable no-restricted-globals */
 
 // Service Worker for Claimwise Omniscience PWA
-const CACHE_NAME = 'claimwise-omniscience-v1';
-const RUNTIME_CACHE = 'claimwise-runtime-v1';
+const CACHE_NAME = 'claimwise-omniscience-v2';
+const RUNTIME_CACHE = 'claimwise-runtime-v2';
 
-// Assets to cache on install
+// Only precache the shell - hashed assets are handled at runtime
 const PRECACHE_ASSETS = [
-  '/',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
   '/manifest.json'
 ];
 
-// Install event - cache static assets
+// Install event - cache minimal shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -46,7 +43,7 @@ self.addEventListener('activate', (event) => {
   return self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - network-first for navigation and JS/CSS, cache-first for other assets
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') {
@@ -58,26 +55,55 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Skip API calls
+  if (event.request.url.includes('/api/') || event.request.url.includes('/.netlify/')) {
+    return;
+  }
+
+  // Navigation requests and JS/CSS: network-first so we always get the latest build
+  const isNavigation = event.request.mode === 'navigate';
+  const isAsset = event.request.url.match(/\.(js|css)$/);
+
+  if (isNavigation || isAsset) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          // Offline fallback - serve cached version
+          return caches.match(event.request).then((cached) => {
+            if (cached) return cached;
+            // For navigation, fall back to cached index
+            if (isNavigation) return caches.match('/');
+            return undefined;
+          });
+        })
+    );
+    return;
+  }
+
+  // Other assets (images, fonts): cache-first
   event.respondWith(
     caches.match(event.request)
       .then((cachedResponse) => {
-        // Return cached version if available
         if (cachedResponse) {
           return cachedResponse;
         }
 
-        // Otherwise fetch from network
         return fetch(event.request)
           .then((response) => {
-            // Don't cache non-successful responses
             if (!response || response.status !== 200 || response.type !== 'basic') {
               return response;
             }
 
-            // Clone the response
             const responseToCache = response.clone();
-
-            // Cache successful responses
             caches.open(RUNTIME_CACHE)
               .then((cache) => {
                 cache.put(event.request, responseToCache);
@@ -86,10 +112,7 @@ self.addEventListener('fetch', (event) => {
             return response;
           })
           .catch(() => {
-            // If fetch fails and it's a navigation request, return offline page
-            if (event.request.mode === 'navigate') {
-              return caches.match('/');
-            }
+            return undefined;
           });
       })
   );

@@ -35,35 +35,6 @@ function getProviderKey(event, provider) {
 }
 
 exports.handler = async (event) => {
-  // === DEBUG LOGGING ===
-  const debugInfo = {
-    httpMethod: event.httpMethod,
-    path: event.path,
-    envKeysAvailable: {
-      HUGGINGFACE_API_KEY: !!process.env.HUGGINGFACE_API_KEY,
-      OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
-      GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
-      ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
-      GROQ_API_KEY: !!process.env.GROQ_API_KEY,
-    },
-    envKeyLengths: {
-      HUGGINGFACE_API_KEY: (process.env.HUGGINGFACE_API_KEY || '').length,
-      OPENAI_API_KEY: (process.env.OPENAI_API_KEY || '').length,
-      GEMINI_API_KEY: (process.env.GEMINI_API_KEY || '').length,
-      ANTHROPIC_API_KEY: (process.env.ANTHROPIC_API_KEY || '').length,
-      GROQ_API_KEY: (process.env.GROQ_API_KEY || '').length,
-    },
-    allEnvKeys: Object.keys(process.env).filter(k => k.includes('API') || k.includes('KEY') || k.includes('HUGGIN') || k.includes('OPENAI') || k.includes('GEMINI') || k.includes('ANTHROPIC') || k.includes('GROQ')),
-    hasCookie: !!(event.headers.cookie && event.headers.cookie.includes('claimwise_byok')),
-  };
-  console.log('[ai-proxy DEBUG]', JSON.stringify(debugInfo, null, 2));
-
-  // If ?debug query param, return debug info directly
-  if (event.queryStringParameters?.debug === '1') {
-    return json(200, { debug: debugInfo });
-  }
-  // === END DEBUG ===
-
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   if (!rateLimit(event)) return json(429, { error: 'Rate limit exceeded' });
   const authError = getAuthError(event);
@@ -72,13 +43,11 @@ exports.handler = async (event) => {
 
   try {
     const { provider, prompt, systemContext = '', model = null } = JSON.parse(event.body || '{}');
-    console.log('[ai-proxy DEBUG] provider:', provider, 'prompt length:', prompt?.length);
     if (!validateProvider(provider)) return json(400, { error: 'Unsupported provider' });
     if (!prompt || typeof prompt !== 'string') return json(400, { error: 'provider and prompt are required' });
 
     const apiKey = getProviderKey(event, provider);
-    console.log('[ai-proxy DEBUG] apiKey found:', !!apiKey, 'length:', (apiKey || '').length, 'source:', apiKey === process.env[PROVIDER_ENV_MAP[provider]] ? 'env' : 'cookie');
-    if (!apiKey) return json(500, { error: `Missing key for provider: ${provider}`, debug: debugInfo });
+    if (!apiKey) return json(500, { error: `Missing key for provider: ${provider}` });
 
     switch (provider) {
       case 'openai': {
@@ -101,7 +70,8 @@ exports.handler = async (event) => {
         return json(200, { text: data.choices?.[0]?.message?.content || '' });
       }
       case 'gemini': {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`;
+        const geminiModel = model || 'gemini-2.0-flash';
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -113,41 +83,6 @@ exports.handler = async (event) => {
         if (!response.ok) return json(response.status, { error: data.error?.message || 'Gemini request failed' });
         return json(200, { text: data.candidates?.[0]?.content?.parts?.[0]?.text || '' });
       }
-      case 'huggingface': {
-        const hfModel = model || 'microsoft/Phi-3-mini-4k-instruct';
-        const hfEndpoint = `https://router.huggingface.co/hf-inference/models/${hfModel}/v1/chat/completions`;
-        console.log('[ai-proxy DEBUG] HuggingFace calling:', hfEndpoint);
-        const messages = [
-          ...(systemContext ? [{ role: 'system', content: systemContext }] : []),
-          { role: 'user', content: prompt }
-        ];
-        const response = await fetch(hfEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: hfModel,
-            messages,
-            max_tokens: 2048,
-            temperature: 0.7
-          })
-        });
-        console.log('[ai-proxy DEBUG] HuggingFace response status:', response.status);
-        const rawText = await response.text();
-        console.log('[ai-proxy DEBUG] HuggingFace raw response:', rawText.slice(0, 500));
-        if (!response.ok) {
-          let errMsg = 'HuggingFace request failed';
-          try { errMsg = JSON.parse(rawText)?.error || rawText.slice(0, 200); } catch (_) { errMsg = rawText.slice(0, 200); }
-          console.log('[ai-proxy DEBUG] HuggingFace ERROR:', errMsg);
-          return json(response.status, { error: errMsg });
-        }
-        const data = JSON.parse(rawText);
-        const text = data.choices?.[0]?.message?.content || '';
-        console.log('[ai-proxy DEBUG] HuggingFace SUCCESS, text length:', text.length);
-        return json(200, { text: text.trim() });
-      }
       case 'anthropic': {
         const response = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -158,7 +93,7 @@ exports.handler = async (event) => {
           },
           body: JSON.stringify({
             model: model || 'claude-sonnet-4-20250514',
-            max_tokens: 2048,
+            max_tokens: 4096,
             ...(systemContext ? { system: systemContext } : {}),
             messages: [{ role: 'user', content: prompt }]
           })
@@ -186,11 +121,34 @@ exports.handler = async (event) => {
         if (!response.ok) return json(response.status, { error: data.error?.message || 'Groq request failed' });
         return json(200, { text: data.choices?.[0]?.message?.content || '' });
       }
+      case 'huggingface': {
+        const hfModel = model || 'microsoft/Phi-3-mini-4k-instruct';
+        const hfEndpoint = `https://router.huggingface.co/hf-inference/models/${hfModel}/v1/chat/completions`;
+        const messages = [
+          ...(systemContext ? [{ role: 'system', content: systemContext }] : []),
+          { role: 'user', content: prompt }
+        ];
+        const response = await fetch(hfEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({ model: hfModel, messages, max_tokens: 2048, temperature: 0.7 })
+        });
+        const rawText = await response.text();
+        if (!response.ok) {
+          let errMsg = 'HuggingFace request failed';
+          try { errMsg = JSON.parse(rawText)?.error || rawText.slice(0, 200); } catch (_) { errMsg = rawText.slice(0, 200); }
+          return json(response.status, { error: errMsg });
+        }
+        const data = JSON.parse(rawText);
+        return json(200, { text: (data.choices?.[0]?.message?.content || '').trim() });
+      }
       default:
         return json(400, { error: 'Provider not yet implemented in proxy' });
     }
   } catch (error) {
-    console.log('[ai-proxy DEBUG] CATCH error:', error.message, error.stack);
     return json(500, sanitizeError(error));
   }
 };

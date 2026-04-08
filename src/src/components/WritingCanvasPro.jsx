@@ -31,6 +31,7 @@ import db from '../services/database';
 import contextEngine from '../services/contextEngine';
 import aiService from '../services/aiService';
 import smartContextEngine from '../services/smartContextEngine';
+import storyBrain from '../services/storyBrain';
 import chapterDataExtractionService from '../services/chapterDataExtractionService';
 import dataConsistencyService from '../services/dataConsistencyService';
 import EntityExtractionWizard from './EntityExtractionWizard';
@@ -752,55 +753,36 @@ const WritingCanvasPro = ({
   // Build context-aware prompt with style and story context
   const buildContextualPrompt = async (userPrompt, options = {}) => {
     try {
-      // Analyze scene context before building prompt
-      if (plainContent && currentChapter?.id) {
-        await smartContextEngine.analyzeSceneContext(
-          plainContent,
-          currentChapter.id,
-          cursorPositionRef.current
-        );
-      }
-
-      // Get full AI context including style profile, comparisons, style references, etc.
-      // For continue writing, use text up to cursor if provided
+      // Use storyBrain for context assembly (includes chapter memories, arc guidance, genre guides, craft directives)
+      const action = options.action || 'continue';
       const textForContext = options.textUpToCursor || plainContent;
-      const contextResult = await smartContextEngine.buildAIContext({
+      const { systemContext } = await storyBrain.getContext({
         text: textForContext,
         chapterNumber: currentChapter?.chapterNumber || null,
         bookId: currentBook?.id || null,
         chapterId: currentChapter?.id || null,
-        includeFullChapter: false,
-        moodSettings: moodSettings,
-        moodPreset: options.moodPreset || null
+        action
       });
-      
-      // buildAIContext returns { contextText, rawContext }, extract the string
-      const context = contextResult?.contextText || (typeof contextResult === 'string' ? contextResult : '');
-      
-      // Build the full prompt with context
-      const fullPrompt = `${context}
 
-=== YOUR TASK ===
-${userPrompt}
+      const craft = storyBrain.getCraftDirective(action, options.moodPreset || null);
 
-=== CRITICAL STYLE REQUIREMENTS ===
-- Match the writing style from the style profile and references above EXACTLY
-- Use the tone, humor style, and voice patterns shown in the examples
-- If comparisons are provided (e.g., "Peep Show meets Garth Marenghi"), embody that style
-- Be witty, sarcastic, and emotionally hard-hitting as specified
-- Do NOT write generic or bland prose - match the unique voice described above
+      // Return as { system, user } so we can split them properly
+      const system = `You are the author of this story. Write in the EXACT same voice, style, and rhythm as the existing text.
 
-${options.customPrompt ? `\n=== CUSTOM INSTRUCTIONS ===\n${options.customPrompt}\n` : ''}
+${craft}
+
+${systemContext}
+
+${options.customPrompt ? `CUSTOM INSTRUCTIONS:\n${options.customPrompt}\n` : ''}
 ${options.additionalInstructions || ''}`;
-      
-      return fullPrompt;
+
+      return { system, user: userPrompt };
     } catch (error) {
       console.warn('Failed to build contextual prompt, using basic prompt:', error);
-      // Fallback to basic prompt if context fails
-      return userPrompt;
+      return { system: '', user: userPrompt };
     }
   };
-  
+
   const generateWithPreview = async (source, prompt, options = {}) => {
     setPreviewPanel({
       isOpen: true,
@@ -810,14 +792,15 @@ ${options.additionalInstructions || ''}`;
       originalSelection: options.originalSelection || null,
       isLoading: true
     });
-    
+
     try {
-      // Build context-aware prompt
-      const contextualPrompt = await buildContextualPrompt(prompt, {
-        additionalInstructions: options.additionalInstructions
+      // Build context-aware prompt with storyBrain
+      const { system, user } = await buildContextualPrompt(prompt, {
+        additionalInstructions: options.additionalInstructions,
+        action: options.action || 'continue'
       });
-      
-      const result = await aiService.callAI(contextualPrompt, 'creative');
+
+      const result = await aiService.callAI(user, 'creative', system);
       const cleanResult = result?.replace(/^["']|["']$/g, '').trim() || '';
       
       setPreviewPanel(prev => ({
@@ -1385,13 +1368,14 @@ ${textToAnalyze}
 
 Return ONLY the JSON array:`;
 
-      // Build contextual prompt with style context
-      const fullPrompt = await buildContextualPrompt(taskPrompt, {
+      // Build contextual prompt with storyBrain
+      const { system, user } = await buildContextualPrompt(taskPrompt, {
         customPrompt: customPromptReview,
-        additionalInstructions: 'CRITICAL: Match the style profile exactly when making suggestions. Focus on maintaining the witty, sarcastic, and emotionally hard-hitting voice.'
+        additionalInstructions: 'CRITICAL: Match the style profile exactly when making suggestions.',
+        action: 'improve'
       });
-      
-      const result = await aiService.callAI(fullPrompt, 'analytical');
+
+      const result = await aiService.callAI(user, 'analytical', system);
       
       // Parse suggestions
       let suggestions = [];
@@ -1448,7 +1432,9 @@ Return ONLY the JSON array:`;
     
     try {
       const moodDesc = `Comedy/Horror: ${moodSettings.comedy_horror}%, Tension: ${moodSettings.tension}%, Pacing: ${moodSettings.pacing}%, Detail: ${moodSettings.detail}%, Emotional: ${moodSettings.emotional}%`;
-      
+
+      const { system } = await buildContextualPrompt('', { action: 'mood' });
+
       const prompt = `Rewrite this text with adjusted mood settings:
 ${moodDesc}
 
@@ -1459,7 +1445,7 @@ Original:
 
 Rewrite with the mood adjustments. Only return the rewritten text:`;
 
-      const result = await aiService.callAI(prompt, 'creative');
+      const result = await aiService.callAI(prompt, 'creative', system);
       const cleanResult = result?.replace(/^["']|["']$/g, '').trim() || '';
       
       setMoodRewritePanel(prev => ({
