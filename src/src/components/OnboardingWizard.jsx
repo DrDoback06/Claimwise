@@ -21,7 +21,13 @@ import {
   FileText,
   Wand2,
   HelpCircle,
-  PenTool
+  PenTool,
+  Key,
+  Heart,
+  Eye,
+  EyeOff,
+  Zap,
+  BookMarked
 } from 'lucide-react';
 import promptTemplates, { formatForClipboard, parseExternalAIResponse } from '../services/promptTemplates';
 import contextEngine from '../services/contextEngine';
@@ -29,6 +35,7 @@ import db from '../services/database';
 import styleReferenceService from '../services/styleReferenceService';
 import StyleTestPanel from './StyleTestPanel';
 import aiService from '../services/aiService';
+import imageGenerationService from '../../services/imageGenerationService';
 
 /**
  * Onboarding Wizard Component
@@ -36,12 +43,39 @@ import aiService from '../services/aiService';
  * Also used for editing existing story setup
  */
 const OnboardingWizard = ({ onComplete, existingData = null }) => {
-  const [currentStep, setCurrentStep] = useState(0); // 0 = mode selection, 1-5 = steps
+  const [currentStep, setCurrentStep] = useState(0); // 0 = mode selection, 1-9 = steps
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [copiedPrompt, setCopiedPrompt] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false); // True when editing existing setup
-  
+
+  // Welcome slides state
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [welcomeSlide, setWelcomeSlide] = useState(0);
+
+  // API Keys state (step 6)
+  const [apiKeys, setApiKeys] = useState({
+    gemini: '', openai: '', anthropic: '', groq: '', huggingface: ''
+  });
+  const [showKeys, setShowKeys] = useState({});
+  const [preferredProvider, setPreferredProvider] = useState('auto');
+
+  // Writing Preferences state (step 8)
+  const [writingPreferences, setWritingPreferences] = useState({
+    pov: '',
+    tense: '',
+    chapterLength: '',
+    petPeeves: [],
+    customPetPeeves: '',
+    favorites: [],
+    customFavorites: '',
+    dialogueStyle: '',
+    descriptionDensity: '',
+    profanityLevel: '',
+    romanticContent: '',
+    violenceLevel: ''
+  });
+
   // Quick Import state
   const [quickImportMode, setQuickImportMode] = useState(false);
   const [quickImportContext, setQuickImportContext] = useState('');
@@ -121,8 +155,10 @@ const OnboardingWizard = ({ onComplete, existingData = null }) => {
     { id: 3, title: 'Character Profiles', icon: Users, description: 'Define how your characters speak' },
     { id: 4, title: 'World Rules', icon: Globe, description: 'Establish your story\'s boundaries' },
     { id: 5, title: 'Plot Roadmap', icon: Map, description: 'Map out your story\'s journey' },
-    { id: 6, title: 'Style Test', icon: Sparkles, description: 'Rate AI examples to refine your style' },
-    { id: 7, title: 'Style Instructions', icon: PenTool, description: 'Finalize specific style rules' }
+    { id: 6, title: 'AI Setup', icon: Key, description: 'Connect your AI provider keys' },
+    { id: 7, title: 'Style Test', icon: Sparkles, description: 'Rate AI examples to refine your style' },
+    { id: 8, title: 'Preferences', icon: Heart, description: 'Your writing tastes & pet peeves' },
+    { id: 9, title: 'Style Rules', icon: PenTool, description: 'Finalize specific style rules' }
   ];
 
   // Load existing progress
@@ -135,7 +171,6 @@ const OnboardingWizard = ({ onComplete, existingData = null }) => {
       const progress = await contextEngine.getOnboardingProgress();
       if (progress && progress.data) {
         if (progress.data.storyData) {
-          // Migrate old `genre` to new `genres` array format
           const loadedStoryData = progress.data.storyData;
           if (!loadedStoryData.genres && loadedStoryData.genre) {
             loadedStoryData.genres = [loadedStoryData.genre];
@@ -146,17 +181,31 @@ const OnboardingWizard = ({ onComplete, existingData = null }) => {
         if (progress.data.characters) setCharacters(progress.data.characters);
         if (progress.data.worldRules) setWorldRules(progress.data.worldRules);
         if (progress.data.plotData) setPlotData(progress.data.plotData);
-        
+        if (progress.data.writingPreferences) setWritingPreferences(progress.data.writingPreferences);
+
         // Check if onboarding was already completed
         if (progress.completedAt) {
           setIsEditMode(true);
-          // Jump to step 1 for editing (skip mode selection)
+          setShowWelcome(false);
           setCurrentStep(1);
         } else if (progress.currentStep != null) {
-          // Use != null to allow 0 (mode selection step)
           setCurrentStep(progress.currentStep);
+          // Don't show welcome if they've already started
+          if (progress.currentStep > 0) setShowWelcome(false);
         }
       }
+
+      // Load existing API keys from runtime
+      const runtimeKeys = aiService.getRuntimeKeys ? aiService.getRuntimeKeys() : {};
+      setApiKeys({
+        gemini: runtimeKeys.gemini || '',
+        openai: runtimeKeys.openai || '',
+        anthropic: runtimeKeys.anthropic || '',
+        groq: runtimeKeys.groq || '',
+        huggingface: runtimeKeys.huggingface || ''
+      });
+      const preferred = localStorage.getItem('ai_preferred_provider') || 'auto';
+      setPreferredProvider(preferred);
     } catch (e) {
       console.error('Error loading progress:', e);
     }
@@ -171,7 +220,8 @@ const OnboardingWizard = ({ onComplete, existingData = null }) => {
           styleData,
           characters,
           worldRules,
-          plotData
+          plotData,
+          writingPreferences
         }
       });
     } catch (e) {
@@ -183,7 +233,7 @@ const OnboardingWizard = ({ onComplete, existingData = null }) => {
   useEffect(() => {
     const timer = setTimeout(saveProgress, 1000);
     return () => clearTimeout(timer);
-  }, [storyData, styleData, characters, worldRules, plotData, currentStep]);
+  }, [storyData, styleData, characters, worldRules, plotData, writingPreferences, currentStep]);
 
   const copyToClipboard = async (text, id) => {
     try {
@@ -756,9 +806,19 @@ const OnboardingWizard = ({ onComplete, existingData = null }) => {
         console.log(`[Wizard] Saved ${styleInstructions.filter(i => i.enabled !== false).length} style instructions`);
       }
 
-      // 8. Mark onboarding complete
+      // 8. Save writing preferences
+      if (writingPreferences) {
+        await db.update('meta', {
+          id: 'writing_preferences',
+          ...writingPreferences,
+          updatedAt: Date.now()
+        });
+        console.log('[Wizard] Writing preferences saved');
+      }
+
+      // 9. Mark onboarding complete
       await contextEngine.saveOnboardingProgress({
-        currentStep: 7,
+        currentStep: 9,
         completedAt: Date.now(),
         data: {
           storyData,
@@ -766,6 +826,7 @@ const OnboardingWizard = ({ onComplete, existingData = null }) => {
           characters,
           worldRules,
           plotData,
+          writingPreferences,
           styleTestCompleted,
           styleInstructions
         }
@@ -793,12 +854,28 @@ const OnboardingWizard = ({ onComplete, existingData = null }) => {
       case 5:
         return plotData.plotBeats.length > 0;
       case 6:
-        return styleTestCompleted;
+        return hasAnyApiKey(); // Need at least one key for style test
       case 7:
+        return styleTestCompleted;
+      case 8:
+        return true; // Writing preferences are optional
+      case 9:
         return styleInstructions.length > 0;
       default:
         return true;
     }
+  };
+
+  const hasAnyApiKey = () => {
+    return Object.values(apiKeys).some(k => k && k.trim().length > 0);
+  };
+
+  const saveApiKey = (provider, key) => {
+    if (provider === 'openai') {
+      imageGenerationService.setApiKey(key);
+    }
+    aiService.setApiKey(provider, key);
+    setApiKeys(prev => ({ ...prev, [provider]: key }));
   };
 
   // Render Mode Selection (Step 0)
@@ -1726,11 +1803,15 @@ STYLE PROFILE:
 ${JSON.stringify(styleProfile, null, 2)}
 
 STYLE TEST RESULTS:
-${testResults.map(r => 
-  `Mood: ${r.moodPreset}, Rating: ${r.rating || 'N/A'}, Tags: ${r.feedbackTags?.join(', ') || 'none'}`
-).join('\n')}
+${testResults.map(r => {
+  const parts = [`Mood: ${r.moodPreset}, Rating: ${r.rating || 'N/A'}`];
+  if (r.feedbackTags?.length > 0) parts.push(`Issues: ${r.feedbackTags.join(', ')}`);
+  if (r.positiveTags?.length > 0) parts.push(`Loved: ${r.positiveTags.join(', ')}`);
+  if (r.freetext) parts.push(`Notes: ${r.freetext}`);
+  return parts.join(' | ');
+}).join('\n')}
 
-Based on the style profile and test feedback, suggest 12-15 specific, actionable style instructions.
+Based on the style profile and test feedback (both what worked and what didn't), suggest 12-15 specific, actionable style instructions.
 Examples: "Use British slang", "Avoid flowery prose", "Prefer short sentences", "Use sarcasm liberally", "Break the fourth wall occasionally", "Use dry wit in dialogue"
 
 IMPORTANT: Return ONLY a valid JSON array with NO markdown code blocks, NO explanations, just the array:
@@ -1889,10 +1970,549 @@ IMPORTANT: Return ONLY a valid JSON array with NO markdown code blocks, NO expla
     );
   };
 
+  // ─── Welcome Slides ───────────────────────────────────────
+  const WELCOME_SLIDES = [
+    {
+      title: 'Welcome to Claimwise Omniscience',
+      icon: BookMarked,
+      color: 'amber',
+      content: (
+        <div className="space-y-4 text-slate-300">
+          <p className="text-lg">Your AI-powered writing companion that <strong className="text-white">actually understands your story</strong>.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+            {[
+              { icon: '🧠', text: 'Deep story memory — tracks characters, plots, world rules, and writing style across every chapter' },
+              { icon: '✍️', text: 'Intelligent writing — generates content that matches YOUR voice, not generic AI slop' },
+              { icon: '📊', text: 'Entity tracking — characters, items, skills, relationships, all managed automatically' },
+              { icon: '🎯', text: 'Smart suggestions — forward-thinking ideas based on your story\'s narrative arc' }
+            ].map((item, i) => (
+              <div key={i} className="flex gap-3 bg-slate-800/50 rounded-lg p-3">
+                <span className="text-2xl">{item.icon}</span>
+                <p className="text-sm">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    },
+    {
+      title: 'How the Setup Wizard Works',
+      icon: Sparkles,
+      color: 'purple',
+      content: (
+        <div className="space-y-4 text-slate-300">
+          <p>The setup wizard teaches the AI about <strong className="text-white">your specific story</strong>. The more you provide, the better the AI performs.</p>
+          <div className="space-y-2 mt-4">
+            {[
+              { step: '1-2', label: 'Story & Style', desc: 'Your story premise, genre, and writing voice' },
+              { step: '3-4', label: 'Characters & World', desc: 'Who\'s in the story and the rules of your world' },
+              { step: '5', label: 'Plot Roadmap', desc: 'Where the story is headed (plot beats)' },
+              { step: '6', label: 'AI Setup', desc: 'Connect your AI provider keys' },
+              { step: '7-8', label: 'Style Test & Preferences', desc: 'Rate AI examples and tell us your taste' },
+              { step: '9', label: 'Style Rules', desc: 'Final writing rules the AI always follows' }
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-3 bg-slate-800/50 rounded-lg p-3">
+                <span className="w-10 h-10 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-bold shrink-0">{item.step}</span>
+                <div>
+                  <span className="text-white font-medium text-sm">{item.label}</span>
+                  <span className="text-slate-400 text-sm"> — {item.desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-sm text-slate-500 mt-2">Most steps are optional — you can skip and come back later.</p>
+        </div>
+      )
+    },
+    {
+      title: 'One More Thing — AI Provider Keys',
+      icon: Key,
+      color: 'green',
+      content: (
+        <div className="space-y-4 text-slate-300">
+          <p>To generate AI-powered content, you'll need at least one API key. Don't worry — <strong className="text-white">there are free options!</strong></p>
+          <div className="space-y-2 mt-4">
+            <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
+              <h4 className="text-green-400 font-medium mb-2">Free Options</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-400">✓</span>
+                  <span><strong className="text-white">Groq</strong> — 14,400 free requests/day (fast, great quality)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-400">✓</span>
+                  <span><strong className="text-white">HuggingFace</strong> — Free tier available (no key needed for basic use)</span>
+                </div>
+              </div>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              <h4 className="text-slate-300 font-medium mb-2">Paid Options (higher quality)</h4>
+              <div className="space-y-1 text-sm text-slate-400">
+                <p>Gemini, OpenAI (GPT-4o), Anthropic (Claude) — Pay-as-you-go</p>
+              </div>
+            </div>
+          </div>
+          <p className="text-sm text-amber-400 mt-3">
+            You'll set up your keys in Step 6 of the wizard. Ready to begin?
+          </p>
+        </div>
+      )
+    }
+  ];
+
+  const renderWelcome = () => {
+    const slide = WELCOME_SLIDES[welcomeSlide];
+    const Icon = slide.icon;
+    // Hardcode Tailwind classes per slide to avoid purge issues
+    const slideStyles = [
+      { iconBg: 'bg-amber-500/20', iconText: 'text-amber-400', dotActive: 'bg-amber-400', btnBg: 'bg-amber-600 hover:bg-amber-500' },
+      { iconBg: 'bg-purple-500/20', iconText: 'text-purple-400', dotActive: 'bg-purple-400', btnBg: 'bg-purple-600 hover:bg-purple-500' },
+      { iconBg: 'bg-green-500/20', iconText: 'text-green-400', dotActive: 'bg-green-400', btnBg: 'bg-green-600 hover:bg-green-500' }
+    ];
+    const s = slideStyles[welcomeSlide];
+
+    return (
+      <div className="fixed inset-0 bg-slate-950/95 z-[60] flex items-center justify-center p-4">
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden">
+          {/* Slide header */}
+          <div className="p-6 pb-2">
+            <div className="flex items-center justify-between mb-4">
+              <div className={`w-12 h-12 rounded-xl ${s.iconBg} flex items-center justify-center`}>
+                <Icon className={`w-6 h-6 ${s.iconText}`} />
+              </div>
+              <div className="flex gap-2">
+                {WELCOME_SLIDES.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setWelcomeSlide(i)}
+                    className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                      i === welcomeSlide ? s.dotActive : 'bg-slate-700'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-white">{slide.title}</h2>
+          </div>
+
+          {/* Slide content */}
+          <div className="px-6 pb-4 max-h-[60vh] overflow-y-auto">
+            {slide.content}
+          </div>
+
+          {/* Navigation */}
+          <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between">
+            {welcomeSlide > 0 ? (
+              <button
+                onClick={() => setWelcomeSlide(prev => prev - 1)}
+                className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </button>
+            ) : (
+              <button
+                onClick={() => { setShowWelcome(false); }}
+                className="text-sm text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                Skip intro
+              </button>
+            )}
+
+            {welcomeSlide < WELCOME_SLIDES.length - 1 ? (
+              <button
+                onClick={() => setWelcomeSlide(prev => prev + 1)}
+                className={`flex items-center gap-2 px-6 py-2 ${s.btnBg} text-white font-medium rounded-lg transition-colors`}
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowWelcome(false)}
+                className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-500 text-white font-medium rounded-lg transition-colors"
+              >
+                Let's Get Started
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ─── Step 6: AI Setup ───────────────────────────────────────
+  const renderAISetup = () => {
+    const providers = [
+      { id: 'groq', name: 'Groq', free: true, desc: '14,400 free requests/day — Fast & reliable', signupUrl: 'https://console.groq.com/keys' },
+      { id: 'gemini', name: 'Google Gemini', free: false, desc: 'Excellent quality, competitive pricing', signupUrl: 'https://aistudio.google.com/apikey' },
+      { id: 'openai', name: 'OpenAI', free: false, desc: 'GPT-4o — Also enables DALL-E image generation', signupUrl: 'https://platform.openai.com/api-keys' },
+      { id: 'anthropic', name: 'Anthropic Claude', free: false, desc: 'Exceptional writing quality', signupUrl: 'https://console.anthropic.com/settings/keys' },
+      { id: 'huggingface', name: 'HuggingFace', free: true, desc: 'Free tier — Good for basic tasks', signupUrl: 'https://huggingface.co/settings/tokens' }
+    ];
+
+    const keyCount = Object.values(apiKeys).filter(k => k && k.trim()).length;
+
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-500/20">
+            <Key className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Connect Your AI</h2>
+          <p className="text-slate-400">
+            Add at least one API key so we can generate style examples in the next step.
+            Keys are stored in memory only — never saved to disk.
+          </p>
+        </div>
+
+        {keyCount === 0 && (
+          <div className="bg-amber-900/20 border border-amber-500/30 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-sm text-amber-300">
+              You need at least one AI provider key to continue. <strong>Groq is free</strong> and gives you 14,400 requests per day — perfect to get started.
+            </p>
+          </div>
+        )}
+
+        {keyCount > 0 && (
+          <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4 flex items-start gap-3">
+            <CheckCircle className="w-5 h-5 text-green-400 mt-0.5 shrink-0" />
+            <p className="text-sm text-green-300">
+              {keyCount} provider{keyCount > 1 ? 's' : ''} configured. The AI will automatically pick the best model for each task.
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {providers.map(provider => {
+            const key = apiKeys[provider.id] || '';
+            const hasKey = key.trim().length > 0;
+            const isVisible = showKeys[provider.id];
+
+            return (
+              <div key={provider.id} className={`bg-slate-900 rounded-lg border p-4 transition-colors ${
+                hasKey ? 'border-green-500/30' : 'border-slate-700'
+              }`}>
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-medium text-white">{provider.name}</h4>
+                      {provider.free && (
+                        <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full font-medium">FREE</span>
+                      )}
+                      {hasKey && <CheckCircle className="w-4 h-4 text-green-400" />}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">{provider.desc}</p>
+                  </div>
+                  <a
+                    href={provider.signupUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-amber-400 hover:text-amber-300 shrink-0"
+                  >
+                    Get key →
+                  </a>
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type={isVisible ? 'text' : 'password'}
+                      value={key}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, [provider.id]: e.target.value }))}
+                      placeholder={`Enter ${provider.name} API key...`}
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg focus:border-amber-500 pr-10"
+                    />
+                    <button
+                      onClick={() => setShowKeys(prev => ({ ...prev, [provider.id]: !prev[provider.id] }))}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                    >
+                      {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => saveApiKey(provider.id, key)}
+                    disabled={!key.trim()}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+          <h4 className="text-sm font-medium text-white mb-2">Preferred Provider</h4>
+          <select
+            value={preferredProvider}
+            onChange={(e) => {
+              setPreferredProvider(e.target.value);
+              localStorage.setItem('ai_preferred_provider', e.target.value);
+              aiService.preferredProvider = e.target.value;
+            }}
+            className="w-full bg-slate-800 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="auto">Auto (smart routing — recommended)</option>
+            <option value="groq">Groq (free, fast)</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic Claude</option>
+            <option value="huggingface">HuggingFace</option>
+          </select>
+          <p className="text-xs text-slate-500 mt-1">
+            Auto mode picks the cheapest capable model for each task automatically.
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  // ─── Step 8: Writing Preferences ───────────────────────────────────────
+  const PET_PEEVES = [
+    'Purple prose',
+    'Info dumps',
+    'Telling instead of showing',
+    '"Said" synonyms (exclaimed, proclaimed)',
+    'Adverb overuse (quickly, slowly, angrily)',
+    'Starting sentences with "Suddenly"',
+    'Cliché metaphors',
+    'Dream sequences as plot device',
+    'Mary Sue / perfect characters',
+    'Explaining the joke',
+    'On-the-nose dialogue',
+    'Head-hopping (random POV switches)',
+    'Filler words (very, really, just)',
+    'Passive voice overuse',
+    'Repetitive sentence structure',
+    'Melodramatic inner monologue'
+  ];
+
+  const FAVORITE_TECHNIQUES = [
+    'Subtext in dialogue',
+    'Unreliable narrator',
+    'Dry humor / deadpan',
+    'Show don\'t tell',
+    'Cliffhangers',
+    'Parallel storylines',
+    'Foreshadowing',
+    'Breaking the fourth wall',
+    'Stream of consciousness',
+    'In medias res (start mid-action)',
+    'Motifs & callbacks',
+    'Sardonic inner monologue',
+    'Atmospheric world-building',
+    'Snappy dialogue exchanges',
+    'Slow burn tension',
+    'Character-driven conflict'
+  ];
+
+  const renderWritingPreferences = () => (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="text-center mb-4">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-pink-500/20">
+          <Heart className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Your Writing Preferences</h2>
+        <p className="text-slate-400">
+          Tell the AI what you love and hate in writing. This directly shapes every piece of content it generates.
+        </p>
+      </div>
+
+      {/* POV & Tense */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Preferred POV</label>
+          <select
+            value={writingPreferences.pov}
+            onChange={(e) => setWritingPreferences(prev => ({ ...prev, pov: e.target.value }))}
+            className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">No preference</option>
+            <option value="first">First person (I/me)</option>
+            <option value="third-limited">Third person limited (he/she — one character)</option>
+            <option value="third-omni">Third person omniscient (narrator sees all)</option>
+            <option value="second">Second person (you)</option>
+            <option value="mixed">Mixed / rotating POV</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Preferred Tense</label>
+          <select
+            value={writingPreferences.tense}
+            onChange={(e) => setWritingPreferences(prev => ({ ...prev, tense: e.target.value }))}
+            className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">No preference</option>
+            <option value="past">Past tense (walked, said)</option>
+            <option value="present">Present tense (walks, says)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Chapter length & dialogue style */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Ideal Chapter Length</label>
+          <select
+            value={writingPreferences.chapterLength}
+            onChange={(e) => setWritingPreferences(prev => ({ ...prev, chapterLength: e.target.value }))}
+            className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">No preference</option>
+            <option value="short">Short (1,000–2,000 words)</option>
+            <option value="medium">Medium (2,000–4,000 words)</option>
+            <option value="long">Long (4,000–6,000 words)</option>
+            <option value="epic">Epic (6,000+ words)</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Dialogue Style</label>
+          <select
+            value={writingPreferences.dialogueStyle}
+            onChange={(e) => setWritingPreferences(prev => ({ ...prev, dialogueStyle: e.target.value }))}
+            className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">No preference</option>
+            <option value="snappy">Snappy & punchy (short exchanges)</option>
+            <option value="naturalistic">Naturalistic (realistic speech patterns)</option>
+            <option value="witty">Witty banter (clever, fast-paced)</option>
+            <option value="sparse">Sparse (minimal, says a lot with little)</option>
+            <option value="dramatic">Dramatic (theatrical, emotional)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Description density & content */}
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Description Density</label>
+          <select
+            value={writingPreferences.descriptionDensity}
+            onChange={(e) => setWritingPreferences(prev => ({ ...prev, descriptionDensity: e.target.value }))}
+            className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">No preference</option>
+            <option value="minimal">Minimal — let readers imagine</option>
+            <option value="balanced">Balanced — enough to ground</option>
+            <option value="rich">Rich — immersive detail</option>
+            <option value="lush">Lush — dense, literary style</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Profanity</label>
+          <select
+            value={writingPreferences.profanityLevel}
+            onChange={(e) => setWritingPreferences(prev => ({ ...prev, profanityLevel: e.target.value }))}
+            className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">No preference</option>
+            <option value="none">None — keep it clean</option>
+            <option value="mild">Mild (damn, hell)</option>
+            <option value="moderate">Moderate (realistic swearing)</option>
+            <option value="heavy">Heavy (unrestricted)</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Violence Level</label>
+          <select
+            value={writingPreferences.violenceLevel}
+            onChange={(e) => setWritingPreferences(prev => ({ ...prev, violenceLevel: e.target.value }))}
+            className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">No preference</option>
+            <option value="minimal">Minimal / implied</option>
+            <option value="moderate">Moderate — action scenes</option>
+            <option value="graphic">Graphic — detailed combat</option>
+            <option value="extreme">Extreme — no limits</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Pet Peeves */}
+      <div>
+        <h3 className="text-sm font-medium text-red-400 mb-2">Writing Pet Peeves — AI will AVOID these</h3>
+        <div className="flex flex-wrap gap-2">
+          {PET_PEEVES.map(peeve => {
+            const selected = writingPreferences.petPeeves?.includes(peeve);
+            return (
+              <button
+                key={peeve}
+                onClick={() => {
+                  setWritingPreferences(prev => ({
+                    ...prev,
+                    petPeeves: selected
+                      ? prev.petPeeves.filter(p => p !== peeve)
+                      : [...(prev.petPeeves || []), peeve]
+                  }));
+                }}
+                className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                  selected
+                    ? 'bg-red-600/30 text-red-400 border border-red-500/50'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                {selected && <X className="w-3 h-3 inline mr-1" />}
+                {peeve}
+              </button>
+            );
+          })}
+        </div>
+        <textarea
+          value={writingPreferences.customPetPeeves || ''}
+          onChange={(e) => setWritingPreferences(prev => ({ ...prev, customPetPeeves: e.target.value }))}
+          placeholder="Any other pet peeves? (e.g. 'characters who never eat or sleep', 'overuse of em dashes')"
+          rows={2}
+          className="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg mt-2 focus:border-red-500"
+        />
+      </div>
+
+      {/* Favorite Techniques */}
+      <div>
+        <h3 className="text-sm font-medium text-green-400 mb-2">Favorite Techniques — AI will PRIORITIZE these</h3>
+        <div className="flex flex-wrap gap-2">
+          {FAVORITE_TECHNIQUES.map(fav => {
+            const selected = writingPreferences.favorites?.includes(fav);
+            return (
+              <button
+                key={fav}
+                onClick={() => {
+                  setWritingPreferences(prev => ({
+                    ...prev,
+                    favorites: selected
+                      ? prev.favorites.filter(f => f !== fav)
+                      : [...(prev.favorites || []), fav]
+                  }));
+                }}
+                className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                  selected
+                    ? 'bg-green-600/30 text-green-400 border border-green-500/50'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                {selected && <CheckCircle className="w-3 h-3 inline mr-1" />}
+                {fav}
+              </button>
+            );
+          })}
+        </div>
+        <textarea
+          value={writingPreferences.customFavorites || ''}
+          onChange={(e) => setWritingPreferences(prev => ({ ...prev, customFavorites: e.target.value }))}
+          placeholder="Any other techniques you love? (e.g. 'footnote humor like Pratchett', 'nested mysteries')"
+          rows={2}
+          className="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg mt-2 focus:border-green-500"
+        />
+      </div>
+    </div>
+  );
+
   const renderCurrentStep = () => {
     // Quick import mode
     if (quickImportMode) return renderQuickImport();
-    
+
     switch (currentStep) {
       case 0: return renderModeSelection();
       case 1: return renderStoryFoundation();
@@ -1900,14 +2520,19 @@ IMPORTANT: Return ONLY a valid JSON array with NO markdown code blocks, NO expla
       case 3: return renderCharacterProfiles();
       case 4: return renderWorldRules();
       case 5: return renderPlotRoadmap();
-      case 6: return renderStyleTest();
-      case 7: return renderStyleInstructions();
+      case 6: return renderAISetup();
+      case 7: return renderStyleTest();
+      case 8: return renderWritingPreferences();
+      case 9: return renderStyleInstructions();
       default: return null;
     }
   };
 
   return (
     <div className="fixed inset-0 bg-slate-950 z-50 overflow-hidden flex flex-col">
+      {/* Welcome Slides Overlay */}
+      {showWelcome && !isEditMode && renderWelcome()}
+
       {/* Header */}
       <div className="bg-slate-900 border-b border-slate-800 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -2040,9 +2665,9 @@ IMPORTANT: Return ONLY a valid JSON array with NO markdown code blocks, NO expla
               Step {currentStep} of {steps.length}
             </div>
 
-            {currentStep < 5 ? (
+            {currentStep < 9 ? (
               <button
-                onClick={() => setCurrentStep(prev => Math.min(5, prev + 1))}
+                onClick={() => setCurrentStep(prev => Math.min(9, prev + 1))}
                 disabled={!canProceed()}
                 className="flex items-center gap-2 px-6 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
               >
