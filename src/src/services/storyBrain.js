@@ -142,11 +142,37 @@ class StoryBrain {
       } catch (_) { /* optional */ }
     }
 
+    // Layer on writing preferences (pet peeves, favorites, POV, etc.)
+    let preferencesGuidance = '';
+    try {
+      const prefs = await db.get('meta', 'writing_preferences');
+      if (prefs) {
+        const parts = [];
+        if (prefs.pov) parts.push(`POV: ${prefs.pov}`);
+        if (prefs.tense) parts.push(`Tense: ${prefs.tense}`);
+        if (prefs.dialogueStyle) parts.push(`Dialogue style: ${prefs.dialogueStyle}`);
+        if (prefs.descriptionDensity) parts.push(`Description density: ${prefs.descriptionDensity}`);
+        if (prefs.profanityLevel) parts.push(`Profanity level: ${prefs.profanityLevel}`);
+        if (prefs.violenceLevel) parts.push(`Violence level: ${prefs.violenceLevel}`);
+        if (prefs.chapterLength) parts.push(`Target chapter length: ${prefs.chapterLength}`);
+        const peeves = [...(prefs.petPeeves || [])];
+        if (prefs.customPetPeeves) peeves.push(prefs.customPetPeeves);
+        if (peeves.length > 0) parts.push(`NEVER DO: ${peeves.join(', ')}`);
+        const favs = [...(prefs.favorites || [])];
+        if (prefs.customFavorites) favs.push(prefs.customFavorites);
+        if (favs.length > 0) parts.push(`PRIORITIZE: ${favs.join(', ')}`);
+        if (parts.length > 0) {
+          preferencesGuidance = '\n=== WRITER PREFERENCES ===\n' + parts.join('\n');
+        }
+      }
+    } catch (_) { /* optional */ }
+
     // Assemble final system context
     const contextParts = [compressed];
     if (storySoFar) contextParts.push(storySoFar);
     if (arcGuidance) contextParts.push(arcGuidance);
     if (genreGuidance) contextParts.push('\n=== GENRE-SPECIFIC GUIDANCE ===\n' + genreGuidance);
+    if (preferencesGuidance) contextParts.push(preferencesGuidance);
 
     const result = {
       systemContext: contextParts.join('\n\n'),
