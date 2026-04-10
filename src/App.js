@@ -684,6 +684,14 @@ const OmniscienceV22 = () => {
   const [statFormulas, setStatFormulas] = useState({}); // { statKey: "STR + VIT * 2" }
   const [statUsage, setStatUsage] = useState({});
 
+  // ---- Stats enhancements state ----
+  const [showDiceRoller, setShowDiceRoller] = useState(false);
+  const [diceRollerActor, setDiceRollerActor] = useState(null);
+  const [diceResult, setDiceResult] = useState(null);
+  const [diceRollStat, setDiceRollStat] = useState('');
+  const [showStatCompare, setShowStatCompare] = useState(false);
+  const [statCompareKey, setStatCompareKey] = useState('');
+
   // ---- Personnel enhancements state ----
   const [showCharacterCompare, setShowCharacterCompare] = useState(false);
   const [compareActorId, setCompareActorId] = useState(null);
@@ -6447,10 +6455,24 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
             <h2 className="text-2xl font-bold text-white flex items-center">
               <BarChart2 className="mr-3 text-purple-500"/> STAT REGISTRY
             </h2>
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center flex-wrap">
               <span className="text-xs text-slate-400 flex items-center">
                 {worldState.statRegistry.length} stats ({coreStats.length} core, {additionalStatsList.length} additional)
               </span>
+              {/* Dice Roll Simulator */}
+              <button
+                onClick={() => setShowDiceRoller(v => !v)}
+                className={`flex items-center px-3 py-2 rounded border text-sm transition-colors ${showDiceRoller ? 'bg-yellow-700/40 border-yellow-600 text-yellow-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
+              >
+                🎲 Dice
+              </button>
+              {/* Cross-character stat comparison */}
+              <button
+                onClick={() => setShowStatCompare(v => !v)}
+                className={`flex items-center px-3 py-2 rounded border text-sm transition-colors ${showStatCompare ? 'bg-blue-700/40 border-blue-600 text-blue-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
+              >
+                <BarChart2 className="w-3.5 h-3.5 mr-1" /> Compare
+              </button>
               <Tooltip content="Create a new stat attribute that can be used by characters, items, and skills" position="left">
                 <button onClick={() => {
                   setEditingStat(null);
@@ -6461,7 +6483,92 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
               </Tooltip>
             </div>
           </div>
-          
+
+          {/* Dice Roll Simulator */}
+          {showDiceRoller && (
+            <div className="mb-4 p-4 bg-yellow-950/30 border border-yellow-700/40 rounded-xl">
+              <div className="flex items-center gap-4 flex-wrap">
+                <span className="font-bold text-yellow-300 text-sm">🎲 Dice Roll Simulator</span>
+                <select
+                  value={diceRollerActor?.id || ''}
+                  onChange={e => setDiceRollerActor(worldState.actors.find(a => a.id === e.target.value) || null)}
+                  className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                >
+                  <option value="">— Select character —</option>
+                  {worldState.actors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <select
+                  value={diceRollStat}
+                  onChange={e => setDiceRollStat(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                >
+                  <option value="">— Select stat —</option>
+                  {worldState.statRegistry.map(s => <option key={s.id} value={s.key}>{s.name}</option>)}
+                </select>
+                <button
+                  onClick={() => {
+                    const d20 = Math.floor(Math.random() * 20) + 1;
+                    const actorStat = diceRollerActor ? (diceRollerActor.baseStats?.[diceRollStat] || 0) : 0;
+                    const modifier = Math.floor((actorStat - 10) / 2); // D&D-style modifier
+                    setDiceResult({ roll: d20, modifier, total: d20 + modifier, stat: diceRollStat, actor: diceRollerActor?.name });
+                  }}
+                  className="bg-yellow-700 hover:bg-yellow-600 text-white font-bold px-4 py-1.5 rounded text-sm"
+                >
+                  Roll d20
+                </button>
+                {diceResult && (
+                  <div className="flex items-center gap-2 ml-2">
+                    <span className={`text-2xl font-black ${diceResult.roll === 20 ? 'text-yellow-300' : diceResult.roll === 1 ? 'text-red-400' : 'text-white'}`}>{diceResult.total}</span>
+                    <span className="text-xs text-slate-400">
+                      (d20: {diceResult.roll} {diceResult.modifier >= 0 ? '+' : ''}{diceResult.modifier} {diceResult.stat} mod{diceResult.actor ? ` — ${diceResult.actor}` : ''})
+                    </span>
+                    {diceResult.roll === 20 && <span className="text-yellow-300 font-bold text-sm">CRITICAL!</span>}
+                    {diceResult.roll === 1 && <span className="text-red-400 font-bold text-sm">FUMBLE!</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Cross-character stat comparison */}
+          {showStatCompare && (
+            <div className="mb-4 p-4 bg-blue-950/30 border border-blue-700/40 rounded-xl">
+              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                <span className="font-bold text-blue-300 text-sm">Cross-Character Stat Comparison</span>
+                <select
+                  value={statCompareKey}
+                  onChange={e => setStatCompareKey(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                >
+                  <option value="">— Select stat —</option>
+                  {worldState.statRegistry.map(s => <option key={s.id} value={s.key}>{s.name}</option>)}
+                </select>
+              </div>
+              {statCompareKey && (() => {
+                const values = worldState.actors
+                  .map(a => ({ name: a.name, val: a.baseStats?.[statCompareKey] ?? a.additionalStats?.[statCompareKey] ?? null }))
+                  .filter(x => x.val !== null)
+                  .sort((a, b) => b.val - a.val);
+                const maxVal = Math.max(...values.map(v => v.val), 1);
+                return values.length === 0 ? (
+                  <div className="text-xs text-slate-500">No characters have this stat.</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {values.map((v, i) => (
+                      <div key={v.name} className="flex items-center gap-2">
+                        <span className="text-xs text-slate-300 w-28 truncate">{i + 1}. {v.name}</span>
+                        <div className="flex-1 bg-slate-800 rounded-full h-2.5">
+                          <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${(v.val / maxVal) * 100}%` }} />
+                        </div>
+                        <span className="text-xs font-bold text-blue-300 w-8 text-right">{v.val}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Core Stats Section */}
           {coreStats.length > 0 && (
             <div className="mb-6">
