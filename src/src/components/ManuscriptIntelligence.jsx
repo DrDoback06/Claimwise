@@ -93,6 +93,22 @@ const ManuscriptIntelligence = ({ worldState, books, onClose, onApplySuggestions
   const [isMinimized, setIsMinimized] = useState(false);
   const [minimizedProgress, setMinimizedProgress] = useState(null);
 
+  // ---- Enhancement: Named extraction profiles ----
+  const [profiles, setProfiles] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('manuscript_profiles') || '[]'); } catch { return []; }
+  });
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [profileNameInput, setProfileNameInput] = useState('');
+
+  // ---- Enhancement: Batch chapter queue ----
+  const [batchQueue, setBatchQueue] = useState([]); // [{ bookId, chapterId, title, status: 'pending'|'processing'|'done'|'error' }]
+  const [showBatchPanel, setShowBatchPanel] = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+
+  // ---- Enhancement: Unknown entity review queue ----
+  const [unknownEntityQueue, setUnknownEntityQueue] = useState([]); // suggestions with type=unknown
+  const [showUnknownQueue, setShowUnknownQueue] = useState(false);
+
   useEffect(() => {
     loadBuzzWords();
     loadHistory();
@@ -454,6 +470,72 @@ const ManuscriptIntelligence = ({ worldState, books, onClose, onApplySuggestions
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [viewMode, focusedSuggestionIndex, suggestions, filterType, filterConfidence, showChapterModal]);
+
+  // ---- Enhancement: Save current settings as named extraction profile ----
+  const saveProfile = () => {
+    const name = profileNameInput.trim();
+    if (!name) return;
+    const profile = {
+      id: `profile_${Date.now()}`,
+      name,
+      filterConfidence,
+      filterType,
+      buzzWordIds: buzzWords.filter(b => b.enabled !== false).map(b => b.id),
+      createdAt: Date.now(),
+    };
+    const updated = [...profiles.filter(p => p.name !== name), profile];
+    setProfiles(updated);
+    try { localStorage.setItem('manuscript_profiles', JSON.stringify(updated)); } catch (_) {}
+    setProfileNameInput('');
+    setShowProfileMenu(false);
+    toastService.success(`Profile "${name}" saved`);
+  };
+
+  const applyProfile = (profile) => {
+    setFilterConfidence(profile.filterConfidence ?? 0);
+    setFilterType(profile.filterType ?? 'all');
+    setShowProfileMenu(false);
+    toastService.info(`Applied profile "${profile.name}"`);
+  };
+
+  const deleteProfile = (id) => {
+    const updated = profiles.filter(p => p.id !== id);
+    setProfiles(updated);
+    try { localStorage.setItem('manuscript_profiles', JSON.stringify(updated)); } catch (_) {}
+  };
+
+  // ---- Enhancement: Batch chapter queue processing ----
+  const addChapterToBatch = (bookId, chapter) => {
+    setBatchQueue(prev => {
+      if (prev.find(q => q.chapterId === chapter.id)) return prev;
+      return [...prev, { bookId, chapterId: chapter.id, title: chapter.title, status: 'pending' }];
+    });
+  };
+
+  const runBatchQueue = async () => {
+    if (batchRunning || batchQueue.length === 0) return;
+    setBatchRunning(true);
+    for (let i = 0; i < batchQueue.length; i++) {
+      const item = batchQueue[i];
+      if (item.status !== 'pending') continue;
+      setBatchQueue(prev => prev.map(q => q.chapterId === item.chapterId ? { ...q, status: 'processing' } : q));
+      try {
+        const booksArray = Array.isArray(books) ? books : (books ? Object.values(books) : []);
+        const book = booksArray.find(b => b.id === item.bookId);
+        const chapter = book?.chapters?.find(c => c.id === item.chapterId);
+        if (!chapter) throw new Error('Chapter not found');
+        const text = chapter.content || chapter.script || '';
+        if (text.trim().length > 50) {
+          await manuscriptProcessingService.processText(text, { bookId: item.bookId, chapterId: item.chapterId });
+        }
+        setBatchQueue(prev => prev.map(q => q.chapterId === item.chapterId ? { ...q, status: 'done' } : q));
+      } catch (e) {
+        setBatchQueue(prev => prev.map(q => q.chapterId === item.chapterId ? { ...q, status: 'error', error: e.message } : q));
+      }
+    }
+    setBatchRunning(false);
+    toastService.success('Batch processing complete');
+  };
 
   const loadBuzzWords = async () => {
     try {
@@ -1768,8 +1850,13 @@ const ManuscriptIntelligence = ({ worldState, books, onClose, onApplySuggestions
   const filteredSuggestions = suggestions.filter(s => {
     const typeMatch = filterType === 'all' || s.type === filterType;
     const confidenceMatch = s.confidence >= filterConfidence;
-    return typeMatch && confidenceMatch;
+    // If showing unknown queue, hide from main list
+    if (showUnknownQueue) return false;
+    return typeMatch && confidenceMatch && s.type !== 'unknown';
   });
+
+  // Unknown entities (type=unknown or very low confidence unclassified)
+  const unknownSuggestions = suggestions.filter(s => s.type === 'unknown' || (!s.type && s.confidence < 0.4));
 
   // Select all high confidence
   const selectAllHighConfidence = () => {
@@ -1936,6 +2023,53 @@ const ManuscriptIntelligence = ({ worldState, books, onClose, onApplySuggestions
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Named profiles */}
+          <div className="relative">
+            <button
+              onClick={() => setShowProfileMenu(v => !v)}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-sm flex items-center gap-1.5"
+              title="Extraction profiles — save/load settings"
+            >
+              <Layers className="w-4 h-4" />
+              Profiles {profiles.length > 0 && <span className="text-[10px] bg-purple-700 text-white rounded-full px-1.5">{profiles.length}</span>}
+            </button>
+            {showProfileMenu && (
+              <div className="absolute top-full right-0 mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-30 w-64 p-3">
+                <div className="text-xs font-bold text-slate-300 mb-2">Extraction Profiles</div>
+                {profiles.length === 0 && <div className="text-xs text-slate-500 mb-2">No saved profiles yet.</div>}
+                {profiles.map(p => (
+                  <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-slate-700 last:border-0">
+                    <span className="text-xs text-white">{p.name}</span>
+                    <div className="flex gap-1">
+                      <button onClick={() => applyProfile(p)} className="text-[10px] bg-purple-700 hover:bg-purple-600 text-white px-1.5 py-0.5 rounded">Apply</button>
+                      <button onClick={() => deleteProfile(p.id)} className="text-[10px] bg-red-800/60 hover:bg-red-700 text-red-300 px-1.5 py-0.5 rounded">Del</button>
+                    </div>
+                  </div>
+                ))}
+                <div className="mt-2 flex gap-1">
+                  <input
+                    value={profileNameInput}
+                    onChange={e => setProfileNameInput(e.target.value)}
+                    placeholder="Profile name..."
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
+                    onKeyDown={e => e.key === 'Enter' && saveProfile()}
+                  />
+                  <button onClick={saveProfile} className="text-xs bg-green-700 hover:bg-green-600 text-white px-2 py-1 rounded">Save</button>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Batch chapter queue */}
+          <button
+            onClick={() => setShowBatchPanel(v => !v)}
+            className={`px-3 py-2 rounded text-sm font-bold flex items-center gap-2 ${
+              showBatchPanel ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+            title="Batch chapter queue — process multiple chapters"
+          >
+            <Layers className="w-4 h-4" />
+            Batch {batchQueue.length > 0 && <span className="text-[10px] bg-indigo-700 text-white rounded-full px-1.5">{batchQueue.length}</span>}
+          </button>
           <button
             onClick={() => setShowKeyboardHelp(!showKeyboardHelp)}
             className="px-2 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-xs"
@@ -1946,8 +2080,8 @@ const ManuscriptIntelligence = ({ worldState, books, onClose, onApplySuggestions
           <button
             onClick={() => setViewMode(viewMode === 'history' ? 'input' : 'history')}
             className={`px-3 py-2 rounded text-sm font-bold flex items-center gap-2 ${
-              viewMode === 'history' 
-                ? 'bg-purple-600 text-white' 
+              viewMode === 'history'
+                ? 'bg-purple-600 text-white'
                 : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
             }`}
           >
@@ -2097,6 +2231,68 @@ const ManuscriptIntelligence = ({ worldState, books, onClose, onApplySuggestions
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Chapter Queue Panel */}
+      {showBatchPanel && (
+        <div className="bg-slate-900 border-b border-slate-800 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-bold text-indigo-300 text-sm flex items-center gap-1.5">
+              <Layers className="w-4 h-4" />
+              Batch Chapter Queue ({batchQueue.length} chapters)
+            </span>
+            <div className="flex items-center gap-2">
+              {batchQueue.some(q => q.status === 'pending') && (
+                <button
+                  onClick={runBatchQueue}
+                  disabled={batchRunning}
+                  className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white px-3 py-1 rounded font-bold"
+                >
+                  {batchRunning ? 'Running...' : 'Run All'}
+                </button>
+              )}
+              <button onClick={() => setBatchQueue([])} className="text-xs text-slate-500 hover:text-red-400">Clear</button>
+              <button onClick={() => setShowBatchPanel(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+          </div>
+          {batchQueue.length === 0 ? (
+            <div className="text-xs text-slate-500 py-2">
+              No chapters queued. Select chapters from the book list to add to the batch queue.
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+              {batchQueue.map(q => (
+                <div key={q.chapterId} className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border ${
+                  q.status === 'done' ? 'bg-green-900/30 border-green-700/50 text-green-300' :
+                  q.status === 'error' ? 'bg-red-900/30 border-red-700/50 text-red-300' :
+                  q.status === 'processing' ? 'bg-indigo-900/30 border-indigo-700/50 text-indigo-300 animate-pulse' :
+                  'bg-slate-800 border-slate-700 text-slate-300'
+                }`}>
+                  {q.status === 'done' ? <CheckCircle className="w-3 h-3" /> : q.status === 'error' ? <XCircle className="w-3 h-3" /> : q.status === 'processing' ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Clock className="w-3 h-3" />}
+                  {q.title}
+                  <button onClick={() => setBatchQueue(prev => prev.filter(x => x.chapterId !== q.chapterId))} className="ml-0.5 text-slate-500 hover:text-red-400"><X className="w-2.5 h-2.5" /></button>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Add chapters to batch */}
+          <div className="mt-2 border-t border-slate-800 pt-2">
+            <div className="text-[10px] text-slate-500 mb-1">Add chapters to batch:</div>
+            <div className="flex flex-wrap gap-1">
+              {(Array.isArray(books) ? books : (books ? Object.values(books) : [])).flatMap(b =>
+                (b.chapters || []).map(ch => ({ ...ch, bookId: b.id }))
+              ).filter(ch => !batchQueue.find(q => q.chapterId === ch.id)).slice(0, 12).map(ch => (
+                <button
+                  key={ch.id}
+                  onClick={() => addChapterToBatch(ch.bookId, ch)}
+                  className="text-[10px] bg-slate-800 hover:bg-indigo-900/40 text-slate-400 hover:text-indigo-300 border border-slate-700 hover:border-indigo-700/50 px-2 py-0.5 rounded-full"
+                >
+                  + {ch.title}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -2345,6 +2541,18 @@ You can also use buzz words like [item], [skill], [actor] to highlight specific 
                     </span>
                   </div>
 
+                  {/* Unknown entity queue toggle */}
+                  {unknownSuggestions.length > 0 && (
+                    <button
+                      onClick={() => setShowUnknownQueue(v => !v)}
+                      className={`px-3 py-1 text-xs font-bold rounded flex items-center gap-1 ${showUnknownQueue ? 'bg-yellow-700 text-yellow-100' : 'bg-yellow-900/40 border border-yellow-700/50 text-yellow-300'}`}
+                      title="Review unclassified entities"
+                    >
+                      <AlertCircle className="w-3 h-3" />
+                      {unknownSuggestions.length} Unknown
+                    </button>
+                  )}
+
                   {/* Save as Story Context Button */}
                   {inputMode === 'paste' && inputText && (
                     <button
@@ -2427,7 +2635,38 @@ You can also use buzz words like [item], [skill], [actor] to highlight specific 
 
             {/* Suggestions List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {filteredSuggestions.length === 0 && (
+              {/* Unknown entity queue */}
+              {showUnknownQueue && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2 px-1">
+                    <span className="font-bold text-yellow-300 text-sm flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> Unknown / Unclassified Entities ({unknownSuggestions.length})</span>
+                    <button onClick={() => setShowUnknownQueue(false)} className="text-slate-500 hover:text-white text-xs">← Back to main</button>
+                  </div>
+                  {unknownSuggestions.length === 0 ? (
+                    <div className="text-center text-slate-500 py-6 text-sm">No unclassified entities.</div>
+                  ) : unknownSuggestions.map(sugg => (
+                    <div key={sugg.id} className="bg-yellow-950/30 border border-yellow-700/40 rounded-lg p-3 mb-2">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="font-bold text-white text-sm">{sugg.data?.name || sugg.entityName || 'Unknown entity'}</div>
+                          <div className="text-xs text-slate-400 mt-0.5">{sugg.data?.description || sugg.rawText || ''}</div>
+                        </div>
+                        <div className="flex gap-1">
+                          {['actor','item','skill','location','event'].map(t => (
+                            <button key={t} onClick={() => {
+                              setSuggestions(prev => prev.map(s => s.id === sugg.id ? { ...s, type: t } : s));
+                              setShowUnknownQueue(false);
+                            }} className="text-[10px] bg-slate-700 hover:bg-purple-700 text-slate-300 hover:text-white px-1.5 py-0.5 rounded capitalize">{t}</button>
+                          ))}
+                          <button onClick={() => setSuggestions(prev => prev.filter(s => s.id !== sugg.id))} className="text-[10px] bg-red-800/50 text-red-300 hover:bg-red-700 px-1.5 py-0.5 rounded">Skip</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {filteredSuggestions.length === 0 && !showUnknownQueue && (
                 <div className="text-center text-slate-500 py-12">
                   <Filter className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>No suggestions match the current filters</p>
