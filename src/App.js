@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Users, Activity, Search, ChevronRight, ChevronDown, Shield, AlertTriangle, FileText, Briefcase, Zap, X, Terminal, Eye, Database, Crosshair, PenTool, CheckCircle, Save, RefreshCw, Archive, ShoppingBag, Clock, Edit3, Star, Filter, Lock, Sparkles, Plus, Minus, Trash2, Box, Layers, Settings as SettingsIcon, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, UserPlus, FilePlus, BarChart2, GitBranch, Network, History, BookMarked, Menu, TrendingUp, GripVertical, Package, Image as ImageIcon, Keyboard, Merge, CheckSquare, Square, MessageSquare } from 'lucide-react';
+import { BookOpen, Users, Activity, Search, ChevronRight, ChevronDown, Shield, AlertTriangle, FileText, Briefcase, Zap, X, Terminal, Eye, Database, Crosshair, PenTool, CheckCircle, Save, RefreshCw, Archive, ShoppingBag, Clock, Edit3, Star, Filter, Lock, Sparkles, Plus, Minus, Trash2, Box, Layers, Settings as SettingsIcon, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, UserPlus, FilePlus, BarChart2, GitBranch, Network, History, BookMarked, Menu, TrendingUp, GripVertical, Package, Image as ImageIcon, Keyboard, Merge, CheckSquare, Square, MessageSquare, Target, Brain, Globe, Lightbulb, ChevronLeft } from 'lucide-react';
 
 // Import services
 import db from './src/services/database';
@@ -106,6 +106,8 @@ import chapterNavigationService from './src/services/chapterNavigationService';
 // @deprecated - Using timelineEvents directly now
 // import personnelAnalysisService from './src/services/personnelAnalysisService';
 import upgradeTrackingService from './src/services/upgradeTrackingService';
+import storyContiguityAgent from './src/services/storyContiguityAgent';
+import StoryHealthPanel from './src/components/StoryHealthPanel';
 import './styles/theme.css';
 import './src/styles/rpgComponents.css';
 import './src/styles/rpgAnimations.css';
@@ -681,6 +683,17 @@ const OmniscienceV22 = () => {
   // Stats improvements state
   const [statFormulas, setStatFormulas] = useState({}); // { statKey: "STR + VIT * 2" }
   const [statUsage, setStatUsage] = useState({});
+
+  // ---- Personnel enhancements state ----
+  const [showCharacterCompare, setShowCharacterCompare] = useState(false);
+  const [compareActorId, setCompareActorId] = useState(null);
+  const [characterNotes, setCharacterNotes] = useState({}); // { actorId: 'notes text' }
+  const [showCharacterNotes, setShowCharacterNotes] = useState(false);
+  const [characterFactions, setCharacterFactions] = useState({}); // { actorId: ['faction1'] }
+  const [showFactionModal, setShowFactionModal] = useState(false);
+  const [allFactions, setAllFactions] = useState([]); // list of faction names
+  const [showMotivationEditor, setShowMotivationEditor] = useState(false);
+  const [actorMotivations, setActorMotivations] = useState({}); // { actorId: { goals, fears, desires, secrets } }
 
   // Initialize app with database
   useEffect(() => {
@@ -2749,6 +2762,261 @@ const OmniscienceV22 = () => {
                         <span className="text-white ml-2">{rawActor.role || 'Unassigned'}</span>
                       </div>
                     </div>
+
+                    {/* ---- Enhancement: Faction tags display ---- */}
+                    {(() => {
+                      const factions = (characterFactions[rawActor.id] || rawActor.factions || []);
+                      return factions.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {factions.map(f => (
+                            <span key={f} className="bg-purple-900/40 border border-purple-600 text-purple-300 text-xs px-2 py-0.5 rounded-full">
+                              {f}
+                            </span>
+                          ))}
+                          <button onClick={() => setShowFactionModal(true)} className="text-xs text-slate-500 hover:text-slate-300 px-1">+</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setShowFactionModal(true)} className="text-xs text-slate-500 hover:text-purple-400 mb-3 flex items-center gap-1">
+                          <Plus className="w-3 h-3" /> Add faction / group
+                        </button>
+                      );
+                    })()}
+
+                    {/* ---- Enhancement: Character action buttons row ---- */}
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <button
+                        onClick={() => {
+                          setShowCharacterNotes(true);
+                        }}
+                        className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded flex items-center gap-1 border border-slate-700"
+                      >
+                        <FileText className="w-3 h-3" /> Notes
+                      </button>
+                      <button
+                        onClick={() => setShowMotivationEditor(true)}
+                        className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded flex items-center gap-1 border border-slate-700"
+                      >
+                        <Target className="w-3 h-3" /> Motivations
+                      </button>
+                      <button
+                        onClick={() => {
+                          const other = worldState.actors.find(a => a.id !== rawActor.id);
+                          setCompareActorId(other?.id || null);
+                          setShowCharacterCompare(true);
+                        }}
+                        className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded flex items-center gap-1 border border-slate-700"
+                      >
+                        <Users className="w-3 h-3" /> Compare
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const cloneName = window.prompt('Name for the new character clone:', `${rawActor.name} (Copy)`);
+                          if (!cloneName) return;
+                          const cloned = {
+                            ...rawActor,
+                            id: `actor_${Date.now()}`,
+                            name: cloneName,
+                            createdAt: Date.now()
+                          };
+                          await saveToDatabase('actors', cloned);
+                          setWorldState(prev => ({ ...prev, actors: [...prev.actors, cloned] }));
+                          toastService.success(`Created clone: ${cloneName}`);
+                        }}
+                        className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded flex items-center gap-1 border border-slate-700"
+                      >
+                        <Plus className="w-3 h-3" /> Clone as Template
+                      </button>
+                      <button
+                        onClick={() => {
+                          const data = {
+                            name: rawActor.name,
+                            class: rawActor.class,
+                            role: rawActor.role,
+                            biography: rawActor.biography,
+                            baseStats: rawActor.baseStats,
+                            activeSkills: rawActor.activeSkills,
+                            inventory: rawActor.inventory,
+                            factions: characterFactions[rawActor.id] || rawActor.factions || [],
+                            motivations: actorMotivations[rawActor.id] || rawActor.motivations || {},
+                            notes: characterNotes[rawActor.id] || '',
+                          };
+                          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${rawActor.name.replace(/\s+/g, '_')}_character_sheet.json`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          toastService.success('Character sheet exported!');
+                        }}
+                        className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded flex items-center gap-1 border border-slate-700"
+                      >
+                        <Archive className="w-3 h-3" /> Export Sheet
+                      </button>
+                    </div>
+
+                    {/* ---- Enhancement: Character Notes panel ---- */}
+                    {showCharacterNotes && (
+                      <div className="mb-4 p-3 bg-slate-950 border border-teal-700 rounded">
+                        <div className="flex justify-between items-center mb-2">
+                          <div className="text-xs font-bold text-teal-400">CHARACTER NOTES (SCRATCHPAD)</div>
+                          <button onClick={() => setShowCharacterNotes(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                        </div>
+                        <textarea
+                          value={characterNotes[rawActor.id] || rawActor.notes || ''}
+                          onChange={async (e) => {
+                            const newNotes = e.target.value;
+                            setCharacterNotes(prev => ({ ...prev, [rawActor.id]: newNotes }));
+                            const updated = { ...rawActor, notes: newNotes };
+                            await saveToDatabase('actors', updated);
+                            setWorldState(prev => ({ ...prev, actors: prev.actors.map(a => a.id === rawActor.id ? updated : a) }));
+                          }}
+                          placeholder="Free-form notes about this character..."
+                          rows={5}
+                          className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm p-2 rounded resize-none focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    )}
+
+                    {/* ---- Enhancement: Motivation Editor ---- */}
+                    {showMotivationEditor && (
+                      <div className="mb-4 p-3 bg-slate-950 border border-orange-700 rounded">
+                        <div className="flex justify-between items-center mb-2">
+                          <div className="text-xs font-bold text-orange-400">CHARACTER MOTIVATIONS</div>
+                          <button onClick={() => setShowMotivationEditor(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          {['goals', 'fears', 'desires', 'secrets'].map(field => (
+                            <div key={field}>
+                              <label className="text-xs text-slate-400 capitalize mb-1 block">{field}</label>
+                              <textarea
+                                value={(actorMotivations[rawActor.id] || rawActor.motivations || {})[field] || ''}
+                                onChange={async (e) => {
+                                  const updated = {
+                                    ...(actorMotivations[rawActor.id] || rawActor.motivations || {}),
+                                    [field]: e.target.value
+                                  };
+                                  setActorMotivations(prev => ({ ...prev, [rawActor.id]: updated }));
+                                  const updatedActor = { ...rawActor, motivations: updated };
+                                  await saveToDatabase('actors', updatedActor);
+                                  setWorldState(prev => ({ ...prev, actors: prev.actors.map(a => a.id === rawActor.id ? updatedActor : a) }));
+                                }}
+                                placeholder={`Character's ${field}...`}
+                                rows={3}
+                                className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs p-2 rounded resize-none focus:outline-none focus:border-orange-500"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ---- Enhancement: Faction Modal ---- */}
+                    {showFactionModal && (
+                      <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onClick={() => setShowFactionModal(false)}>
+                        <div className="bg-slate-900 border border-purple-500 rounded-lg p-5 w-80" onClick={e => e.stopPropagation()}>
+                          <div className="flex justify-between mb-3">
+                            <h3 className="font-bold text-purple-300">Faction / Group Membership</h3>
+                            <button onClick={() => setShowFactionModal(false)}><X className="w-4 h-4 text-slate-500" /></button>
+                          </div>
+                          <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                            {(allFactions.length > 0 ? allFactions : ['Heroes', 'Villains', 'Neutral', 'Merchants', 'Guard', 'Rebels']).map(f => {
+                              const currentFactions = characterFactions[rawActor.id] || rawActor.factions || [];
+                              const isIn = currentFactions.includes(f);
+                              return (
+                                <button key={f}
+                                  onClick={async () => {
+                                    const updated = isIn ? currentFactions.filter(x => x !== f) : [...currentFactions, f];
+                                    setCharacterFactions(prev => ({ ...prev, [rawActor.id]: updated }));
+                                    const updatedActor = { ...rawActor, factions: updated };
+                                    await saveToDatabase('actors', updatedActor);
+                                    setWorldState(prev => ({ ...prev, actors: prev.actors.map(a => a.id === rawActor.id ? updatedActor : a) }));
+                                  }}
+                                  className={`w-full text-left px-3 py-2 rounded text-sm ${isIn ? 'bg-purple-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                                >
+                                  {isIn ? '✓ ' : ''}{f}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <input
+                            className="w-full bg-slate-800 border border-slate-600 text-white px-2 py-1 text-sm rounded"
+                            placeholder="+ Create new faction..."
+                            onKeyDown={async (e) => {
+                              if (e.key === 'Enter' && e.target.value.trim()) {
+                                const newF = e.target.value.trim();
+                                setAllFactions(prev => [...new Set([...prev, newF])]);
+                                const currentFactions = characterFactions[rawActor.id] || rawActor.factions || [];
+                                const updated = [...currentFactions, newF];
+                                setCharacterFactions(prev => ({ ...prev, [rawActor.id]: updated }));
+                                const updatedActor = { ...rawActor, factions: updated };
+                                await saveToDatabase('actors', updatedActor);
+                                setWorldState(prev => ({ ...prev, actors: prev.actors.map(a => a.id === rawActor.id ? updatedActor : a) }));
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ---- Enhancement: Character Comparison Modal ---- */}
+                    {showCharacterCompare && (
+                      <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowCharacterCompare(false)}>
+                        <div className="bg-slate-900 border border-blue-500 rounded-xl p-5 max-w-3xl w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                          <div className="flex justify-between mb-4">
+                            <h3 className="font-bold text-blue-300 text-lg">Character Comparison</h3>
+                            <button onClick={() => setShowCharacterCompare(false)}><X className="w-5 h-5 text-slate-500" /></button>
+                          </div>
+                          <div className="mb-3">
+                            <label className="text-xs text-slate-400 mb-1 block">Compare with:</label>
+                            <select
+                              value={compareActorId || ''}
+                              onChange={e => setCompareActorId(e.target.value)}
+                              className="bg-slate-800 border border-slate-600 text-white px-3 py-1.5 rounded text-sm w-full"
+                            >
+                              {worldState.actors.filter(a => a.id !== rawActor.id).map(a => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {(() => {
+                            const other = worldState.actors.find(a => a.id === compareActorId);
+                            if (!other) return <p className="text-slate-500 text-sm">Select a character above.</p>;
+                            const allStatKeys = [...new Set([
+                              ...Object.keys(rawActor.baseStats || {}),
+                              ...Object.keys(other.baseStats || {})
+                            ])];
+                            return (
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                {[rawActor, other].map(actor => (
+                                  <div key={actor.id}>
+                                    <div className="text-lg font-bold text-white mb-2">{actor.name}</div>
+                                    <div className="space-y-1">
+                                      <div className="text-xs text-slate-400">Class: <span className="text-white">{actor.class || '—'}</span></div>
+                                      <div className="text-xs text-slate-400">Role: <span className="text-white">{actor.role || '—'}</span></div>
+                                      <div className="text-xs text-slate-400 mt-2 font-bold">BASE STATS</div>
+                                      {allStatKeys.map(k => (
+                                        <div key={k} className="flex justify-between text-xs">
+                                          <span className="text-slate-400">{k}</span>
+                                          <span className={`font-bold ${(actor.baseStats?.[k] || 0) > ((actor === rawActor ? other : rawActor).baseStats?.[k] || 0) ? 'text-green-400' : 'text-white'}`}>
+                                            {actor.baseStats?.[k] ?? '—'}
+                                          </span>
+                                        </div>
+                                      ))}
+                                      <div className="text-xs text-slate-400 mt-2 font-bold">SKILLS</div>
+                                      <div className="text-xs text-white">{actor.activeSkills?.length || 0} active</div>
+                                      <div className="text-xs text-slate-400 mt-2 font-bold">INVENTORY</div>
+                                      <div className="text-xs text-white">{actor.inventory?.length || 0} items</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Nicknames Display & Editor */}
                     <div className="mb-6 p-3 bg-slate-950 border border-slate-700 rounded">
@@ -2818,6 +3086,8 @@ const OmniscienceV22 = () => {
                           { id: 'overview', label: 'Overview', icon: FileText },
                           { id: 'progression', label: 'Progression', icon: TrendingUp },
                           { id: 'timeline', label: 'Timeline', icon: Clock },
+                          { id: 'plot-timeline', label: 'Plot Beats', icon: GitBranch },
+                          { id: 'master-timeline', label: 'Master Timeline', icon: Activity },
                           { id: 'relationships', label: 'Relationships', icon: Network },
                           { id: 'dialogue', label: 'Dialogue', icon: MessageSquare },
                           { id: 'arc', label: 'Arc', icon: BarChart2 },
@@ -3459,6 +3729,32 @@ const OmniscienceV22 = () => {
                             items={worldState?.itemBank || []}
                             skills={worldState?.skillBank || []}
                           />
+                        )}
+
+                        {actorDetailTab === 'plot-timeline' && (
+                          <div className="space-y-2">
+                            <div className="text-xs text-slate-400 px-1 pb-1 border-b border-slate-800">
+                              Plot beats involving <span className="text-white font-bold">{rawActor?.name}</span>
+                            </div>
+                            <PlotTimeline
+                              books={worldState?.books || {}}
+                              actors={worldState?.actors || []}
+                              filterActorId={rawActor?.id}
+                            />
+                          </div>
+                        )}
+
+                        {actorDetailTab === 'master-timeline' && (
+                          <div className="space-y-2">
+                            <div className="text-xs text-slate-400 px-1 pb-1 border-b border-slate-800">
+                              All timeline events involving <span className="text-white font-bold">{rawActor?.name}</span>
+                            </div>
+                            <MasterTimeline
+                              books={worldState?.books || {}}
+                              actors={worldState?.actors || []}
+                              filterActorName={rawActor?.name}
+                            />
+                          </div>
                         )}
 
                         {actorDetailTab === 'relationships' && (
@@ -6514,8 +6810,8 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
               <Keyboard className="w-4 h-4" />
               </button>
           </Tooltip>
-          <Tooltip 
-            content="Search across all your story content - characters, items, chapters, and more" 
+          <Tooltip
+            content="Search across all your story content - characters, items, chapters, and more"
             shortcut="Ctrl+K"
             position="bottom"
           >
@@ -6526,6 +6822,8 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
               <Search className="w-4 h-4" />
             </button>
           </Tooltip>
+          {/* ---- New Feature A: Story Health Panel ---- */}
+          <StoryHealthPanel className="ml-2" />
             </div>
       </header>
       <div className="flex flex-1 overflow-hidden">
@@ -6643,6 +6941,27 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
                         const booksObj = books.reduce((acc, b) => ({ ...acc, [b.id]: b }), {});
                         setWorldState(prev => ({ ...prev, books: booksObj }));
                         setSessionStats(prev => ({ ...prev, chaptersEdited: prev.chaptersEdited + 1 }));
+
+                        // ---- New Feature A: Trigger Story Continuity Agent ----
+                        try {
+                          const allBooks = Object.values(booksObj);
+                          const latestBook = allBooks[allBooks.length - 1];
+                          const latestChapter = latestBook?.chapters?.[latestBook.chapters.length - 1];
+                          if (latestChapter) {
+                            const [freshActors, freshItems, freshSkills] = await Promise.all([
+                              db.getAll('actors'),
+                              db.getAll('itemBank'),
+                              db.getAll('skillBank'),
+                            ]);
+                            storyContiguityAgent.runAfterChapterSave({
+                              chapter: latestChapter,
+                              book: latestBook,
+                              actors: freshActors || [],
+                              itemBank: freshItems || [],
+                              skillBank: freshSkills || [],
+                            });
+                          }
+                        } catch (_) {}
                       }}
                       onEntityUpdate={async () => {
                         // Refresh worldState when entities are created/updated

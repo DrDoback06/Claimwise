@@ -18,7 +18,7 @@ import aiSuggestionService from '../services/aiSuggestionService';
  * Master Timeline Component
  * Horizontal scrolling timeline with chapter markers and event cards
  */
-const MasterTimeline = ({ books, actors, onClose }) => {
+const MasterTimeline = ({ books, actors, onClose, filterActorName: filterActorNameProp }) => {
   const [events, setEvents] = useState([]);
   const [filteredEvents, setFilteredEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +42,15 @@ const MasterTimeline = ({ books, actors, onClose }) => {
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState([]);
+
+  // ---- Enhancements ----
+  const [actMarkers, setActMarkers] = useState([]); // [{ label, chapterId, bookId, color }]
+  const [showActMarkerModal, setShowActMarkerModal] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [filterActorName, setFilterActorNameState] = useState(null); // character-scoped filtering
+  const [showEventTemplates, setShowEventTemplates] = useState(false);
+  const [parallelActors, setParallelActors] = useState([]); // for parallel lane view
+  const [showParallelView, setShowParallelView] = useState(false);
   const [showAISuggestions, setShowAISuggestions] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [newEvent, setNewEvent] = useState({
@@ -68,7 +77,20 @@ const MasterTimeline = ({ books, actors, onClose }) => {
 
   useEffect(() => {
     loadEvents();
+    // Load persisted act markers
+    try {
+      const saved = localStorage.getItem('masterTimeline_actMarkers');
+      if (saved) setActMarkers(JSON.parse(saved));
+    } catch (_) {}
   }, [books]);
+
+  // Apply filterActorName from prop (when embedded in Personnel tab)
+  useEffect(() => {
+    if (filterActorNameProp) {
+      setFilterActorNameState(filterActorNameProp);
+      setSelectedActors([filterActorNameProp]);
+    }
+  }, [filterActorNameProp]);
 
   /**
    * Load AI suggestions for timeline (foreshadowing, callback opportunities)
@@ -142,6 +164,41 @@ const MasterTimeline = ({ books, actors, onClose }) => {
       setIsLoadingSuggestions(false);
     }
   };
+
+  // ---- Enhancement: Act Markers ----
+  const saveActMarker = (marker) => {
+    const updated = [...actMarkers, { ...marker, id: Date.now() }];
+    setActMarkers(updated);
+    try { localStorage.setItem('masterTimeline_actMarkers', JSON.stringify(updated)); } catch (_) {}
+  };
+
+  const removeActMarker = (id) => {
+    const updated = actMarkers.filter(m => m.id !== id);
+    setActMarkers(updated);
+    try { localStorage.setItem('masterTimeline_actMarkers', JSON.stringify(updated)); } catch (_) {}
+  };
+
+  // ---- Enhancement: Heatmap data ----
+  const getHeatmapData = () => {
+    return chapterGroups.map(g => ({
+      label: getChapterLabel(g.bookId, g.chapterId),
+      count: g.events.length,
+      bookId: g.bookId,
+      chapterId: g.chapterId,
+    }));
+  };
+
+  // ---- Enhancement: Event templates ----
+  const eventTemplates = [
+    { label: 'Battle', type: 'milestone', titlePrefix: 'Battle of', color: 'red' },
+    { label: 'Discovery', type: 'milestone', titlePrefix: 'Discovery:', color: 'blue' },
+    { label: 'Death', type: 'character_appearance', titlePrefix: 'Death of', color: 'gray' },
+    { label: 'Romance', type: 'relationship_change', titlePrefix: 'Romance:', color: 'pink' },
+    { label: 'Betrayal', type: 'relationship_change', titlePrefix: 'Betrayal by', color: 'orange' },
+    { label: 'Travel', type: 'travel', titlePrefix: 'Journey to', color: 'cyan' },
+    { label: 'Skill Gained', type: 'skill_event', titlePrefix: 'Gained:', color: 'purple' },
+    { label: 'Item Found', type: 'item_event', titlePrefix: 'Found:', color: 'yellow' },
+  ];
 
   // Auto-extract events from all chapters
   const handleExtractEventsFromChapters = async () => {
@@ -587,6 +644,55 @@ const MasterTimeline = ({ books, actors, onClose }) => {
             <ZoomIn className="w-5 h-5" />
           </button>
           
+          {/* Act Markers button */}
+          <button
+            onClick={() => setShowActMarkerModal(v => !v)}
+            className={`p-2 rounded text-white flex items-center gap-1 text-sm ${showActMarkerModal ? 'bg-amber-700' : 'bg-slate-800 hover:bg-slate-700'}`}
+            title="Act Markers — divide your story into acts"
+          >
+            <Calendar className="w-4 h-4" />
+            Acts
+          </button>
+
+          {/* Heatmap toggle */}
+          <button
+            onClick={() => setShowHeatmap(v => !v)}
+            className={`p-2 rounded text-white flex items-center gap-1 text-sm ${showHeatmap ? 'bg-orange-700' : 'bg-slate-800 hover:bg-slate-700'}`}
+            title="Activity Heatmap — events per chapter"
+          >
+            <TrendingUp className="w-4 h-4" />
+          </button>
+
+          {/* Event Templates */}
+          <button
+            onClick={() => setShowEventTemplates(v => !v)}
+            className={`p-2 rounded text-white flex items-center gap-1 text-sm ${showEventTemplates ? 'bg-green-700' : 'bg-slate-800 hover:bg-slate-700'}`}
+            title="Event templates"
+          >
+            <Plus className="w-4 h-4" />
+            Template
+          </button>
+
+          {/* AI Insights Button */}
+          <button
+            onClick={loadAISuggestions}
+            disabled={isLoadingSuggestions}
+            className="p-2 bg-indigo-700 hover:bg-indigo-600 disabled:bg-slate-700 text-white rounded flex items-center gap-2"
+            title="Generate AI foreshadowing & callback insights"
+          >
+            <Sparkles className="w-5 h-5" />
+            {isLoadingSuggestions ? 'Analysing...' : 'AI Insights'}
+          </button>
+
+          {aiSuggestions.length > 0 && (
+            <button
+              onClick={() => setShowAISuggestions(v => !v)}
+              className={`p-2 rounded text-sm font-bold border ${showAISuggestions ? 'bg-indigo-900 border-indigo-500 text-indigo-300' : 'bg-slate-800 border-slate-600 text-slate-300 hover:border-indigo-500'}`}
+            >
+              {aiSuggestions.length} Insights {showAISuggestions ? '▲' : '▼'}
+            </button>
+          )}
+
           {onClose && (
             <button onClick={onClose} className="ml-2 text-slate-500 hover:text-white p-2">
               <X className="w-6 h-6" />
@@ -594,6 +700,38 @@ const MasterTimeline = ({ books, actors, onClose }) => {
           )}
         </div>
       </div>
+
+      {/* AI Suggestions Panel */}
+      {showAISuggestions && aiSuggestions.length > 0 && (
+        <div className="bg-indigo-950/60 border-b border-indigo-700 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-indigo-300 flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              AI Story Insights — Foreshadowing &amp; Callback Opportunities
+            </h3>
+            <button onClick={() => setShowAISuggestions(false)} className="text-slate-500 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-56 overflow-y-auto pr-1">
+            {aiSuggestions.map((s, i) => (
+              <div key={i} className="bg-indigo-900/40 border border-indigo-700/50 rounded-lg p-3">
+                {s.type && (
+                  <span className="text-[10px] uppercase font-bold text-indigo-400 mb-1 block tracking-wider">
+                    {s.type.replace(/_/g, ' ')}
+                  </span>
+                )}
+                <p className="text-xs text-slate-200 leading-relaxed">
+                  {s.suggestion || s.text || s.description || JSON.stringify(s)}
+                </p>
+                {s.chapter && (
+                  <p className="text-[10px] text-slate-500 mt-1">Chapter: {s.chapter}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filters Bar */}
       <div className="bg-slate-900 border-b border-slate-800 p-3">
@@ -688,6 +826,109 @@ const MasterTimeline = ({ books, actors, onClose }) => {
         </div>
       </div>
 
+      {/* ---- Enhancement: Activity Heatmap ---- */}
+      {showHeatmap && (
+        <div className="bg-slate-900 border-b border-orange-800 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-orange-300 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" /> Activity Heatmap — Events Per Chapter
+            </h3>
+            <button onClick={() => setShowHeatmap(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="flex gap-1 flex-wrap">
+            {getHeatmapData().map((d, i) => {
+              const max = Math.max(...getHeatmapData().map(x => x.count), 1);
+              const intensity = Math.round((d.count / max) * 5);
+              const colors = ['bg-slate-800', 'bg-orange-900', 'bg-orange-700', 'bg-orange-500', 'bg-orange-400', 'bg-orange-300'];
+              return (
+                <div key={i} className="flex flex-col items-center gap-1" title={`${d.label}: ${d.count} events`}>
+                  <div className={`w-8 h-8 rounded ${colors[intensity]} flex items-center justify-center text-[10px] text-white font-bold`}>
+                    {d.count}
+                  </div>
+                  <div className="text-[9px] text-slate-500 w-8 text-center truncate">{d.label.slice(0, 4)}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2 mt-2 items-center">
+            <span className="text-xs text-slate-500">Low</span>
+            {['bg-slate-800','bg-orange-900','bg-orange-700','bg-orange-500','bg-orange-400','bg-orange-300'].map((c,i) => (
+              <div key={i} className={`w-4 h-4 rounded ${c}`} />
+            ))}
+            <span className="text-xs text-slate-500">High</span>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Enhancement: Act Markers Panel ---- */}
+      {showActMarkerModal && (
+        <div className="bg-slate-900 border-b border-amber-700 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
+              <Calendar className="w-4 h-4" /> Act Markers
+            </h3>
+            <button onClick={() => setShowActMarkerModal(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="flex gap-2 flex-wrap mb-3">
+            {actMarkers.map(m => (
+              <div key={m.id} className="flex items-center gap-1 bg-amber-900/40 border border-amber-700 rounded px-2 py-1 text-xs text-amber-300">
+                <span>{m.label}</span>
+                <span className="text-slate-500">— {getChapterLabel(m.bookId, m.chapterId)}</span>
+                <button onClick={() => removeActMarker(m.id)} className="text-red-400 hover:text-red-300 ml-1"><X className="w-3 h-3" /></button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 items-center flex-wrap">
+            {['Act I', 'Act II', 'Act III', 'Prologue', 'Epilogue', 'Climax', 'Midpoint'].map(label => (
+              <button
+                key={label}
+                onClick={() => {
+                  const group = chapterGroups[0];
+                  if (group) saveActMarker({ label, bookId: group.bookId, chapterId: group.chapterId });
+                }}
+                className="text-xs bg-amber-800 hover:bg-amber-700 text-white px-2 py-1 rounded"
+              >
+                + {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ---- Enhancement: Event Templates ---- */}
+      {showEventTemplates && (
+        <div className="bg-slate-900 border-b border-green-800 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-green-300 flex items-center gap-2">
+              <Plus className="w-4 h-4" /> Event Templates
+            </h3>
+            <button onClick={() => setShowEventTemplates(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {eventTemplates.map(t => (
+              <button
+                key={t.label}
+                onClick={() => {
+                  setNewEvent({
+                    title: t.titlePrefix + ' ...',
+                    description: '',
+                    type: t.type,
+                    bookId: null,
+                    chapterId: null,
+                    actors: []
+                  });
+                  setShowAddEventModal(true);
+                  setShowEventTemplates(false);
+                }}
+                className="px-3 py-1.5 bg-green-900/40 border border-green-700 hover:bg-green-800/50 rounded text-xs text-green-300"
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Timeline Content */}
       <div className="flex-1 overflow-hidden">
         {loading ? (
@@ -719,7 +960,16 @@ const MasterTimeline = ({ books, actors, onClose }) => {
                     className="flex-shrink-0"
                     style={{ width: cardWidth + cardGap }}
                   >
-                    <div className="bg-slate-900 border border-slate-700 rounded-lg p-3">
+                    <div className={`bg-slate-900 border rounded-lg p-3 relative ${
+                      actMarkers.some(m => m.bookId === group.bookId && m.chapterId === group.chapterId)
+                        ? 'border-amber-500'
+                        : 'border-slate-700'
+                    }`}>
+                      {actMarkers.filter(m => m.bookId === group.bookId && m.chapterId === group.chapterId).map(m => (
+                        <div key={m.id} className="absolute -top-3 left-1 bg-amber-500 text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                          {m.label}
+                        </div>
+                      ))}
                       <div className="text-[10px] text-slate-500">{getBookLabel(group.bookId)}</div>
                       <div className="text-sm font-bold text-white truncate">
                         {getChapterLabel(group.bookId, group.chapterId)}
