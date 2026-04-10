@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Wand2, Save, Edit3, Eye, Link as LinkIcon, Search, Plus, X, Sparkles, Clock, Image as ImageIcon, Package, Zap, RefreshCw } from 'lucide-react';
+import { BookOpen, Wand2, Save, Edit3, Eye, Link as LinkIcon, Search, Plus, X, Sparkles, Clock, Image as ImageIcon, Package, Zap, RefreshCw, Download, CheckCircle, AlertTriangle, FileText, Layers } from 'lucide-react';
 import aiService from '../services/aiService';
 import db from '../services/database';
 import imageGenerationService from '../../services/imageGenerationService';
@@ -69,6 +69,15 @@ const EntityThumbnail = ({ entity, entityType, size = 'md' }) => {
  * Auto-Wiki Generation and Management System
  * Generates wiki entries from items/actors with AI, manages linking
  */
+// Wiki entry templates for structured content
+const WIKI_TEMPLATES = {
+  character: `## Overview\n\n## Appearance\n\n## Personality\n\n## Background\n\n## Abilities\n\n## Relationships\n\n## Story Role\n`,
+  location: `## Description\n\n## Geography\n\n## History\n\n## Inhabitants\n\n## Points of Interest\n\n## Story Significance\n`,
+  item: `## Description\n\n## Origin\n\n## Properties\n\n## Current Owner\n\n## History\n\n## Story Significance\n`,
+  faction: `## Overview\n\n## Goals & Ideology\n\n## Members\n\n## History\n\n## Allies & Enemies\n\n## Story Significance\n`,
+  magic: `## System Overview\n\n## Rules & Limitations\n\n## Practitioners\n\n## Origin\n\n## Story Significance\n`,
+};
+
 const WikiManager = ({ entities, entityType = 'item', onClose }) => {
   const [wikiEntries, setWikiEntries] = useState([]);
   const [selectedEntity, setSelectedEntity] = useState(null);
@@ -79,6 +88,12 @@ const WikiManager = ({ entities, entityType = 'item', onClose }) => {
   const [linkedEntries, setLinkedEntries] = useState([]);
   const [entityImage, setEntityImage] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+
+  // ---- Enhancements ----
+  const [bodySearchTerm, setBodySearchTerm] = useState('');
+  const [bodySearchResults, setBodySearchResults] = useState([]); // [{ entityName, snippet }]
+  const [showBodySearch, setShowBodySearch] = useState(false);
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
 
   useEffect(() => {
     loadWikiEntries();
@@ -130,6 +145,52 @@ const WikiManager = ({ entities, entityType = 'item', onClose }) => {
     } catch (error) {
       console.error('Failed to load wiki entries:', error);
     }
+  };
+
+  // ---- Enhancement: Full-text body search ----
+  const searchWikiBodies = () => {
+    if (!bodySearchTerm.trim()) { setBodySearchResults([]); return; }
+    const term = bodySearchTerm.toLowerCase();
+    const results = wikiEntries
+      .filter(e => (e.content || '').toLowerCase().includes(term))
+      .map(e => {
+        const idx = e.content.toLowerCase().indexOf(term);
+        const start = Math.max(0, idx - 40);
+        const snippet = '…' + e.content.slice(start, idx + 80) + '…';
+        return { entityId: e.entityId, entityName: e.entityName, snippet };
+      });
+    setBodySearchResults(results);
+    setShowBodySearch(true);
+  };
+
+  // ---- Enhancement: Completeness score per entry ----
+  const getCompletenessScore = (entry) => {
+    if (!entry?.content) return 0;
+    const templateKey = entry.entityType === 'actor' ? 'character' : (entry.entityType || 'item');
+    const template = WIKI_TEMPLATES[templateKey] || WIKI_TEMPLATES.item;
+    const sections = template.match(/## \w+/g) || [];
+    if (sections.length === 0) return 100;
+    const filled = sections.filter(s => entry.content.includes(s.replace('## ', ''))).length;
+    return Math.round((filled / sections.length) * 100);
+  };
+
+  // ---- Enhancement: Export wiki as HTML ----
+  const exportWikiHtml = () => {
+    const entries = wikiEntries;
+    if (entries.length === 0) { return; }
+    const entryHtml = entries.map(e => `
+      <section>
+        <h2>${e.entityName} <small style="font-size:0.6em;color:#888">[${e.entityType}]</small></h2>
+        <pre style="white-space:pre-wrap;font-family:Georgia,serif">${(e.content || '').replace(/</g,'&lt;')}</pre>
+        <hr/>
+      </section>`).join('\n');
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Wiki Export</title>
+      <style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333}h2{color:#1a1a2e}hr{border:none;border-top:1px solid #eee;margin:30px 0}</style>
+      </head><body><h1>Story Wiki</h1>${entryHtml}</body></html>`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'story_wiki.html'; a.click();
+    URL.revokeObjectURL(url);
   };
 
   /**
@@ -319,7 +380,45 @@ const WikiManager = ({ entities, entityType = 'item', onClose }) => {
             WIKI MANAGER
           </h2>
         </div>
+        <div className="flex items-center gap-2">
+          {/* Full-text body search */}
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={bodySearchTerm}
+              onChange={e => setBodySearchTerm(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && searchWikiBodies()}
+              placeholder="Search entry bodies..."
+              className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-xs w-44"
+            />
+            <button onClick={searchWikiBodies} className="text-xs bg-purple-700 hover:bg-purple-600 text-white px-2 py-1 rounded" title="Search inside wiki bodies">
+              <Search className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          {/* Export wiki */}
+          <button onClick={exportWikiHtml} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2 py-1 rounded flex items-center gap-1" title="Export wiki as HTML">
+            <Download className="w-3.5 h-3.5" />
+            Export
+          </button>
+        </div>
       </div>
+      {/* Body search results panel */}
+      {showBodySearch && bodySearchResults.length > 0 && (
+        <div className="bg-slate-900 border-b border-slate-800 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-purple-300">{bodySearchResults.length} result{bodySearchResults.length > 1 ? 's' : ''} for "{bodySearchTerm}"</span>
+            <button onClick={() => setShowBodySearch(false)} className="text-slate-500 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+          </div>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            {bodySearchResults.map((r, i) => (
+              <div key={i} className="text-xs">
+                <span className="text-white font-bold">{r.entityName}</span>
+                <span className="text-slate-400 ml-2">{r.snippet}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left sidebar: Entity list - Fixed width */}
@@ -408,10 +507,41 @@ const WikiManager = ({ entities, entityType = 'item', onClose }) => {
                           <Save className="w-4 h-4 inline mr-2" />
                           SAVE
                         </button>
+                        {/* Template insert menu */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowTemplateMenu(v => !v)}
+                            className="px-3 py-2 bg-indigo-800/60 hover:bg-indigo-700/60 text-indigo-300 border border-indigo-700/50 rounded font-bold text-sm flex items-center gap-1"
+                            title="Insert a structured template"
+                          >
+                            <Layers className="w-4 h-4" />
+                            Template
+                          </button>
+                          {showTemplateMenu && (
+                            <div className="absolute top-full left-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1 min-w-40">
+                              {Object.entries(WIKI_TEMPLATES).map(([key, tmpl]) => (
+                                <button
+                                  key={key}
+                                  onClick={() => {
+                                    setCurrentEntry(prev => ({ ...prev, content: (prev?.content || '') + '\n' + tmpl }));
+                                    setShowTemplateMenu(false);
+                                  }}
+                                  className="block w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700 capitalize"
+                                >
+                                  {key.charAt(0).toUpperCase() + key.slice(1)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         {currentEntry && (
-                          <div className="text-xs text-slate-400 mt-2 flex items-center gap-2">
+                          <div className="text-xs text-slate-400 flex items-center gap-2 ml-1">
                             <Clock className="w-3 h-3" />
-                            Last saved: {currentEntry.updatedAt ? new Date(currentEntry.updatedAt).toLocaleTimeString() : 'Never'}
+                            {currentEntry.updatedAt ? new Date(currentEntry.updatedAt).toLocaleTimeString() : 'Never'}
+                            {/* Completeness score */}
+                            <span className={`ml-2 font-bold ${getCompletenessScore(currentEntry) >= 80 ? 'text-green-400' : getCompletenessScore(currentEntry) >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+                              {getCompletenessScore(currentEntry)}% complete
+                            </span>
                           </div>
                         )}
                       </>
