@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { 
-  Zap, Users, Swords, Shield, Sparkles, Brain, Heart, 
-  Star, Lock, Unlock, ChevronRight, ChevronDown, X, 
+import {
+  Zap, Users, Swords, Shield, Sparkles, Brain, Heart,
+  Star, Lock, Unlock, ChevronRight, ChevronDown, X,
   Eye, Grid, Compass, ZoomIn, ZoomOut, Home, Plus, Minus,
-  Award, TrendingUp, GitBranch, Save, RotateCcw, Clock, Check
+  Award, TrendingUp, GitBranch, Save, RotateCcw, Clock, Check, Wand2, Tag, Loader2
 } from 'lucide-react';
 import db from '../services/database';
+import aiService from '../services/aiService';
+import toastService from '../../services/toastService';
 import chapterNavigationService from '../services/chapterNavigationService';
 
 /**
@@ -33,6 +35,10 @@ const SkillTreeSystem = ({
   const [books, setBooks] = useState([]);
   const [skillChapterData, setSkillChapterData] = useState({});
   
+  // ---- Enhancements ----
+  const [skillFlavorText, setSkillFlavorText] = useState({}); // { skillId: 'text' }
+  const [generatingFlavor, setGeneratingFlavor] = useState(null);
+
   // Drag state
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
@@ -46,6 +52,27 @@ const SkillTreeSystem = ({
   const canvasRef = useRef(null);
 
   // Load saved skill positions for selected actor
+  // ---- Enhancement: AI flavor text generator ----
+  const generateFlavorText = async (skill) => {
+    if (generatingFlavor === skill.id || skillFlavorText[skill.id] || skill.flavorText) return;
+    setGeneratingFlavor(skill.id);
+    try {
+      const system = 'You are a fantasy game designer. Write one sentence of evocative in-game flavor text for this skill — the kind you\'d see in italics on a skill card. Be atmospheric and specific.';
+      const prompt = `Skill: "${skill.name}" (${skill.branch || 'unknown'} branch, tier ${skill.tier || 1})\n${skill.description || ''}`;
+      const text = await aiService.callAI(prompt, 'creative', system);
+      if (text) {
+        setSkillFlavorText(prev => ({ ...prev, [skill.id]: text.trim() }));
+        // Persist
+        await db.update('skills', { ...skill, flavorText: text.trim() });
+        toastService.success('Flavor text generated');
+      }
+    } catch (e) {
+      console.warn('Flavor text generation failed:', e);
+    } finally {
+      setGeneratingFlavor(null);
+    }
+  };
+
   const loadSkillPositions = useCallback(async () => {
     if (!selectedActor) {
       setSkillPositions({});
@@ -1951,6 +1978,31 @@ const SkillTreeSystem = ({
               <p className="text-sm text-slate-300">
                 {selectedSkill.description || 'No description available.'}
               </p>
+              {/* Flavor text */}
+              {(skillFlavorText[selectedSkill.id] || selectedSkill.flavorText) ? (
+                <p className="text-xs text-indigo-300 italic mt-2 border-l-2 border-indigo-700 pl-2">
+                  "{skillFlavorText[selectedSkill.id] || selectedSkill.flavorText}"
+                </p>
+              ) : (
+                <button
+                  onClick={() => generateFlavorText(selectedSkill)}
+                  disabled={generatingFlavor === selectedSkill.id}
+                  className="mt-2 text-[10px] bg-indigo-900/40 hover:bg-indigo-800/50 text-indigo-400 px-2 py-1 rounded flex items-center gap-1"
+                >
+                  {generatingFlavor === selectedSkill.id ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Wand2 className="w-2.5 h-2.5" />}
+                  Generate Flavor Text
+                </button>
+              )}
+              {/* Category tags */}
+              {selectedSkill.tags && selectedSkill.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {selectedSkill.tags.map(t => (
+                    <span key={t} className="text-[10px] bg-slate-800 border border-slate-700 text-slate-400 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                      <Tag className="w-2 h-2" />{t}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Stat Modifiers */}
