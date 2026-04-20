@@ -1,8 +1,10 @@
 /* eslint-disable no-restricted-globals */
 
-// Service Worker for Claimwise Omniscience PWA
-const CACHE_NAME = 'claimwise-omniscience-v2';
-const RUNTIME_CACHE = 'claimwise-runtime-v2';
+// Service Worker for Loomwright PWA
+// Bump these when you want every installed client to purge its cache on next load.
+const CACHE_NAME = 'loomwright-shell-v1';
+const RUNTIME_CACHE = 'loomwright-runtime-v1';
+const DEPRECATED_CACHE_PREFIXES = ['claimwise-omniscience-', 'claimwise-runtime-'];
 
 // Only precache the shell - hashed assets are handled at runtime
 const PRECACHE_ASSETS = [
@@ -24,23 +26,30 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate event - clean up old caches
+// Activate event - clean up old caches (including legacy Claimwise names)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
+    (async () => {
+      const cacheNames = await caches.keys();
+      await Promise.all(
         cacheNames
           .filter((cacheName) => {
-            return cacheName !== CACHE_NAME && cacheName !== RUNTIME_CACHE;
+            if (cacheName === CACHE_NAME || cacheName === RUNTIME_CACHE) return false;
+            return true;
           })
           .map((cacheName) => {
-            console.log('[Service Worker] Deleting old cache:', cacheName);
+            console.log('[Loomwright SW] Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           })
       );
-    })
+      await self.clients.claim();
+      // Nudge open tabs to reload once so they pick up the new shell immediately.
+      const clientsList = await self.clients.matchAll({ includeUncontrolled: true });
+      clientsList.forEach((c) => {
+        try { c.postMessage({ type: 'LOOMWRIGHT_UPDATED' }); } catch (_e) {}
+      });
+    })()
   );
-  return self.clients.claim();
 });
 
 // Fetch event - network-first for navigation and JS/CSS, cache-first for other assets

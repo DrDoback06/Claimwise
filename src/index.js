@@ -22,26 +22,46 @@ root.render(
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
 
-// Register service worker for PWA
+// Register service worker for PWA (Loomwright)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/service-worker.js')
       .then((registration) => {
-        console.log('Service Worker registered successfully:', registration.scope);
-        
-        // Check for updates
+        console.log('[Loomwright] Service Worker registered:', registration.scope);
+
+        // When the waiting SW becomes installed and there is already a controller,
+        // we have a new version ready. Tell it to activate immediately.
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
+          if (!newWorker) return;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // New service worker available, prompt user to refresh
-              console.log('New service worker available');
+              console.log('[Loomwright] New build available. Activating...');
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
             }
           });
         });
       })
       .catch((error) => {
-        console.log('Service Worker registration failed:', error);
+        console.log('[Loomwright] Service Worker registration failed:', error);
       });
+
+    // When the SW activates a new shell it posts LOOMWRIGHT_UPDATED. Reload once
+    // per activation so the user instantly sees the new build without manually
+    // refreshing or clearing site data. A sessionStorage flag prevents loops.
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type === 'LOOMWRIGHT_UPDATED') {
+        if (!sessionStorage.getItem('lw-reloaded-for-update')) {
+          sessionStorage.setItem('lw-reloaded-for-update', '1');
+          window.location.reload();
+        }
+      }
+    });
+
+    // Clear the reload flag when the controller changes normally, so future
+    // updates will trigger a reload again.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      sessionStorage.removeItem('lw-reloaded-for-update');
+    });
   });
 }

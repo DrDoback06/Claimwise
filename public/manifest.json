@@ -1,7 +1,7 @@
 {
-  "short_name": "Claimwise Omniscience",
-  "name": "Claimwise Omniscience - Story Tracker",
-  "description": "AI-powered story tracking and writing assistant with offline capabilities",
+  "short_name": "Loomwright",
+  "name": "Loomwright — Story Studio",
+  "description": "Loomwright — AI-powered story tracking, writing, and world-building studio with offline capabilities.",
   "icons": [
     {
       "src": "favicon.ico",
@@ -24,17 +24,24 @@
   "start_url": ".",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#0f172a",
-  "background_color": "#0f172a",
+  "theme_color": "#0f1419",
+  "background_color": "#0f1419",
   "scope": "/",
   "categories": ["productivity", "writing", "books"],
   "screenshots": [],
   "shortcuts": [
     {
-      "name": "Writers Room",
+      "name": "Writer's Room",
       "short_name": "Write",
-      "description": "Open the Writers Room",
-      "url": "/?tab=writers-room",
+      "description": "Open the Writer's Room",
+      "url": "/?tab=story",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Canon Weaver",
+      "short_name": "Weaver",
+      "description": "Capture an idea and let Canon Weaver propose coordinated edits",
+      "url": "/?tab=lw_weaver",
       "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
     }
   ],

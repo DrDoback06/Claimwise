@@ -1072,13 +1072,14 @@ const OmniscienceV22 = () => {
     return (
       <div className="grimguff-app min-h-screen flex items-center justify-center p-8">
         <div className="text-center max-w-md w-full">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/30 animate-pulse">
-            <Shield className="w-10 h-10 text-white" />
+          <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-amber-500/30 animate-pulse">
+            <span className="text-slate-900 font-serif font-bold text-3xl leading-none">L<span className="text-xl opacity-70">w</span></span>
           </div>
-          <div className="text-white text-xl font-bold mb-2">GRIMGUFF TRACKER</div>
-          <div className="text-slate-400 text-sm mb-6">Initializing your story world...</div>
+          <div className="text-white text-2xl font-serif font-semibold mb-1 tracking-wide">Loomwright</div>
+          <div className="text-amber-400 text-[10px] font-mono tracking-[0.2em] uppercase mb-5">Story Studio</div>
+          <div className="text-slate-400 text-sm mb-6">Weaving your story world together...</div>
           <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 animate-pulse transition-all duration-500" style={{width: '60%'}}></div>
+            <div className="h-full bg-gradient-to-r from-amber-400 to-amber-600 animate-pulse transition-all duration-500" style={{width: '60%'}}></div>
           </div>
           <div className="mt-4">
             <LoadingSkeleton.Text lines={2} className="mx-auto max-w-xs" />

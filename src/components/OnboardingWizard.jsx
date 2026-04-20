@@ -882,12 +882,13 @@ const OnboardingWizard = ({ onComplete, existingData = null }) => {
   const renderModeSelection = () => (
     <div className="max-w-2xl mx-auto space-y-8">
       <div className="text-center mb-8">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-amber-500/30">
-          <Sparkles className="w-10 h-10 text-white" />
+        <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-amber-500/30">
+          <span className="text-slate-900 font-serif font-bold text-4xl leading-none">L<span className="text-2xl opacity-70">w</span></span>
         </div>
-        <h2 className="text-3xl font-bold text-white mb-3">Welcome to Story Setup</h2>
+        <div className="text-[10px] text-amber-400 font-mono tracking-[0.24em] uppercase mb-2">Loomwright</div>
+        <h2 className="text-3xl font-serif font-semibold text-white mb-3">Set your story's foundation</h2>
         <p className="text-slate-400 text-lg">
-          Let's configure your intelligent writing assistant
+          Paper-doll wardrobes, Canon Weaver, Voice Studio, and more \u2014 all tuned to your book.
         </p>
       </div>
 
@@ -1973,18 +1974,18 @@ IMPORTANT: Return ONLY a valid JSON array with NO markdown code blocks, NO expla
   // ─── Welcome Slides ───────────────────────────────────────
   const WELCOME_SLIDES = [
     {
-      title: 'Welcome to Claimwise Omniscience',
+      title: 'Welcome to Loomwright',
       icon: BookMarked,
       color: 'amber',
       content: (
         <div className="space-y-4 text-slate-300">
-          <p className="text-lg">Your AI-powered writing companion that <strong className="text-white">actually understands your story</strong>.</p>
+          <p className="text-lg">Your story studio that <strong className="text-white">actually understands your book</strong> — characters, world, voice, and all the threads between them.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
             {[
-              { icon: '🧠', text: 'Deep story memory — tracks characters, plots, world rules, and writing style across every chapter' },
-              { icon: '✍️', text: 'Intelligent writing — generates content that matches YOUR voice, not generic AI slop' },
-              { icon: '📊', text: 'Entity tracking — characters, items, skills, relationships, all managed automatically' },
-              { icon: '🎯', text: 'Smart suggestions — forward-thinking ideas based on your story\'s narrative arc' }
+              { icon: '🧵', text: 'Canon Weaver — one idea, coordinated edits across world, cast, plot, timeline, atlas, and chapters' },
+              { icon: '🎙', text: 'Voice Studio — tune your narrative voice and assign profiles per chapter' },
+              { icon: '🧭', text: 'Atlas AI — place pins extracted from chapter prose, filtered by chapter' },
+              { icon: '🛡', text: 'Character Wardrobe — paper-doll inventory scrubbable across every chapter' },
             ].map((item, i) => (
               <div key={i} className="flex gap-3 bg-slate-800/50 rounded-lg p-3">
                 <span className="text-2xl">{item.icon}</span>
@@ -2536,15 +2537,23 @@ IMPORTANT: Return ONLY a valid JSON array with NO markdown code blocks, NO expla
       {/* Header */}
       <div className="bg-slate-900 border-b border-slate-800 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">
-              {isEditMode ? 'Edit Story Setup' : "Writer's Universe Setup"}
-            </h1>
-            <p className="text-sm text-slate-400">
-              {isEditMode 
-                ? 'Review and update your story configuration' 
-                : "Let's configure your story's intelligent assistant"}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-md bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow shadow-amber-500/30 shrink-0">
+              <span className="text-slate-900 font-serif font-bold text-lg leading-none">L<span className="text-xs opacity-70">w</span></span>
+            </div>
+            <div>
+              <div className="text-[10px] text-amber-400 font-mono tracking-[0.2em] uppercase">
+                Loomwright · {isEditMode ? 'Edit Setup' : 'Story Setup'}
+              </div>
+              <h1 className="text-2xl font-serif font-semibold text-white tracking-wide">
+                {isEditMode ? 'Edit your story foundation' : 'Welcome to Loomwright'}
+              </h1>
+              <p className="text-sm text-slate-400">
+                {isEditMode
+                  ? 'Review and update your story configuration.'
+                  : "Let's set your story's foundation. You can change everything later from Settings."}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {isEditMode && (

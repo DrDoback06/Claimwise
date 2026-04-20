@@ -185,15 +185,15 @@ const NavigationSidebar = ({ activeTab, setActiveTab, isCollapsed = false }) => 
       ${isCollapsed ? 'w-16' : 'w-64'}
     `}>
       {/* Logo/Brand */}
-      <div className="p-4 border-b border-emerald-500/10">
+      <div className="p-4 border-b border-amber-500/20">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow shadow-amber-500/30">
+            <span className="text-slate-900 font-serif font-bold text-sm leading-none">L<span className="text-[10px] opacity-70">w</span></span>
           </div>
           {!isCollapsed && (
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-bold text-white truncate">GRIMGUFF</div>
-              <div className="text-[10px] text-emerald-400 font-mono">TRACKER</div>
+              <div className="text-sm font-serif font-semibold text-white tracking-wide">Loomwright</div>
+              <div className="text-[9px] text-amber-400 font-mono tracking-[0.18em] uppercase">Story Studio</div>
             </div>
           )}
         </div>
