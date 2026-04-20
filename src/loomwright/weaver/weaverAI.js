@@ -21,6 +21,7 @@
  */
 
 import aiService from '../../services/aiService';
+import storyBrain from '../../services/storyBrain';
 
 export const SYSTEM_COLORS = {
   World:    'oklch(72% 0.10 200)',
@@ -191,12 +192,30 @@ export async function proposeWeave(idea, worldState, bookId, options = {}) {
     '- 5 to 14 edits total.',
   ].join('\n');
 
+  // Pull the author's full voice/style stack (style reference, chapter
+  // memories, genre guide, writer preferences) and layer it into the system
+  // prompt so any Chapter `before/after` prose inside the proposal matches the
+  // book's actual voice — not generic AI filler.
+  let styleSystem = 'Return only valid JSON. Do not wrap in markdown.';
   try {
-    const response = await aiService.callAI(
-      prompt,
-      'structured',
-      'Return only valid JSON. Do not wrap in markdown.',
-    );
+    const { systemContext } = await storyBrain.getContext({
+      text: '',
+      chapterNumber: typeof currentChapter === 'number' ? currentChapter : null,
+      bookId,
+      chapterId: null,
+      action: 'scene',
+    });
+    if (systemContext) {
+      styleSystem = `You are the Canon Weaver. Match the book's voice EXACTLY when writing any chapter prose.
+
+${systemContext}
+
+Return only valid JSON. Do not wrap in markdown.`;
+    }
+  } catch (_err) { /* fall back to the bare JSON instruction */ }
+
+  try {
+    const response = await aiService.callAI(prompt, 'structured', styleSystem);
     const parsed = safeParseJSON(response);
     if (!parsed || !Array.isArray(parsed.edits)) return fallbackProposal(idea, mode);
     parsed.edits.forEach((e, i) => {

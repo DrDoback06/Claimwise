@@ -1,10 +1,27 @@
 /**
  * Multi-AI Service Layer
  * Integrates Offline AI (Transformers.js), ChatGPT, Claude, Gemini, Groq (FREE), and Hugging Face (FREE) APIs
+ *
+ * NOTE: Prose-writing callers should use storyBrain.generateProse() instead of
+ * calling aiService.callAI directly. storyBrain assembles the author's style
+ * reference, chapter memories, writer preferences and craft guidance so the
+ * output matches the book's voice (Continue Writing pipeline).
  */
 
 import offlineAIService from './offlineAIService';
 import intelligenceRouter from './intelligenceRouter';
+
+// Centralised model ids. Update here when Google/OpenAI/Anthropic rotate preview slugs.
+export const MODEL_IDS = {
+  geminiFast: 'gemini-2.5-flash',
+  geminiBalanced: 'gemini-2.5-flash',
+  geminiProse: 'gemini-2.5-pro',
+  gpt4o: 'gpt-4o',
+  gpt4oMini: 'gpt-4o-mini',
+  claudeHaiku: 'claude-haiku-4-5-20251001',
+  claudeSonnet: 'claude-sonnet-4-5-20250929',
+  claudeOpus: 'claude-opus-4-20250514',
+};
 
 class AIService {
   constructor() {
@@ -27,7 +44,7 @@ class AIService {
     this.apis = {
       gemini: {
         key: "",
-        endpoint: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent",
+        endpoint: `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_IDS.geminiBalanced}:generateContent`,
         requiresKey: true,
         free: false
       },
@@ -67,7 +84,17 @@ class AIService {
       huggingface: process.env.REACT_APP_HUGGINGFACE_API_KEY || ''
     };
     this.runtimeKeys = {};
-    this.useServerProxy = false;
+
+    // Auto-enable the ai-proxy netlify function in hosted builds so providers
+    // that block browser-origin CORS (notably Anthropic) work out of the box.
+    // Opt-out with REACT_APP_AI_DIRECT=1 (e.g. desktop/mobile builds that hit
+    // the APIs directly with a CORS-allowing auth header).
+    const explicitDirect = process.env.REACT_APP_AI_DIRECT === '1';
+    const host = (typeof window !== 'undefined' && window.location && window.location.hostname) || '';
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+    this.useServerProxy = !explicitDirect && (
+      process.env.NODE_ENV === 'production' || !isLocalHost
+    );
 
     // Load preferred provider from localStorage
     this.preferredProvider = localStorage.getItem('ai_preferred_provider') || 'auto';
@@ -327,7 +354,7 @@ class AIService {
    * Gemini API call
    */
   async callGemini(prompt, systemContext = "", abortController = null, model = null) {
-    const geminiModel = model || 'gemini-2.5-flash-preview-04-17';
+    const geminiModel = model || MODEL_IDS.geminiBalanced;
     if (this.useServerProxy) {
       return this.callProviderProxy('gemini', { prompt, systemContext, model: geminiModel }, abortController);
     }
@@ -811,8 +838,9 @@ class AIService {
     // Build the model chain: primary + fallbacks from router
     const modelChain = [];
 
-    // Add offline as first option if available
-    if (offlineAIService.isAvailable()) {
+    // Add offline as first option if available AND not in cooldown after recent failures
+    // (prevents hammering the huggingface CDN when it's returning 401 / auth errors).
+    if (offlineAIService.isAvailable() && !offlineAIService.isOnCooldown()) {
       modelChain.push({ provider: 'offline', model: null, id: 'offline' });
     }
 

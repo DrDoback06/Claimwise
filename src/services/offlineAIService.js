@@ -11,19 +11,45 @@ env.allowLocalModels = false; // Use CDN for model downloads
 env.allowRemoteModels = true;
 env.backends.onnx.wasm.proxy = false;
 
+// Exponential-backoff ceiling for failed loads. After this many minutes we
+// stop trying to reach the model host on every request (huggingface was
+// returning 401 on Xenova/Qwen2.5 and flooding the console).
+const FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
+
 class OfflineAIService {
   constructor() {
     this.model = null;
     this.tokenizer = null;
     this.isLoading = false;
     this.isReady = false;
-    this.modelName = 'Xenova/Qwen2.5-0.5B-Instruct'; // Lightweight, fast model
+    // Primary candidate + public fallbacks. We walk down the list if the model
+    // host refuses us (e.g. the previous Xenova/Qwen2.5 slug was gated).
+    this.modelCandidates = [
+      'HuggingFaceTB/SmolLM2-135M-Instruct',
+      'Xenova/Qwen2.5-0.5B-Instruct',
+    ];
+    this.modelName = this.modelCandidates[0];
     this.loadPromise = null;
     this.supportsWebGPU = false;
     this.supportsWASM = false;
-    
+
+    // Disable/cooldown state so we don't retry a dead provider on every AI call.
+    this.disabled = false;
+    this.lastFailureAt = 0;
+    this.failureCount = 0;
+
     // Check for WebGPU and WebAssembly support
     this._checkCapabilities();
+  }
+
+  /**
+   * Returns true if the model is currently within its failure cooldown and
+   * should be skipped by routers.
+   */
+  isOnCooldown() {
+    if (this.disabled) return true;
+    if (!this.lastFailureAt) return false;
+    return Date.now() - this.lastFailureAt < FAILURE_COOLDOWN_MS;
   }
 
   /**
@@ -76,40 +102,66 @@ class OfflineAIService {
       return this.loadPromise;
     }
 
+    if (this.isOnCooldown()) {
+      return Promise.reject(new Error('Offline AI is in cooldown after recent failures.'));
+    }
+
     this.isLoading = true;
-    console.log('[Offline AI] Loading model:', this.modelName);
 
     this.loadPromise = (async () => {
-      try {
-        // Load the text generation pipeline
-        // This will download the model on first use (~200-500MB)
-        this.model = await pipeline(
-          'text-generation',
-          this.modelName,
-          {
-            quantized: true, // Use quantized model for smaller size
-            progress_callback: (progress) => {
-              if (progress.status === 'progress') {
-                const percent = Math.round((progress.progress / progress.total) * 100);
-                console.log(`[Offline AI] Download progress: ${percent}%`);
+      let lastError = null;
+      for (const candidate of this.modelCandidates) {
+        try {
+          console.log('[Offline AI] Loading model:', candidate);
+          // eslint-disable-next-line no-await-in-loop
+          this.model = await pipeline(
+            'text-generation',
+            candidate,
+            {
+              quantized: true,
+              progress_callback: (progress) => {
+                if (progress.status === 'progress') {
+                  const percent = Math.round((progress.progress / progress.total) * 100);
+                  console.log(`[Offline AI] Download progress: ${percent}%`);
+                }
               }
             }
-          }
-        );
-
-        this.isReady = true;
-        this.isLoading = false;
-        console.log('[Offline AI] Model loaded successfully');
-        return true;
-      } catch (error) {
-        console.error('[Offline AI] Failed to load model:', error);
-        this.isLoading = false;
-        this.loadPromise = null;
-        throw error;
+          );
+          this.modelName = candidate;
+          this.isReady = true;
+          this.isLoading = false;
+          this.failureCount = 0;
+          this.lastFailureAt = 0;
+          console.log('[Offline AI] Model loaded successfully:', candidate);
+          return true;
+        } catch (err) {
+          lastError = err;
+          console.warn(`[Offline AI] Candidate failed (${candidate}):`, err?.message || err);
+        }
       }
+
+      this.isLoading = false;
+      this.loadPromise = null;
+      this.failureCount += 1;
+      this.lastFailureAt = Date.now();
+      if (this.failureCount >= 3) {
+        this.disabled = true;
+        console.warn('[Offline AI] Disabled after repeated failures. Use resetOfflineAI() to retry.');
+      }
+      throw lastError || new Error('Offline AI model failed to load');
     })();
 
     return this.loadPromise;
+  }
+
+  /**
+   * Manually re-enable offline AI after it has been disabled or put on cooldown.
+   */
+  reset() {
+    this.disabled = false;
+    this.failureCount = 0;
+    this.lastFailureAt = 0;
+    this.loadPromise = null;
   }
 
   /**

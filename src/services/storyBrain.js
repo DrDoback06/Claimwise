@@ -826,6 +826,78 @@ Return a JSON array of 3 suggestions:
 
   // ─── Utility ───────────────────────────────────────────────
 
+  // ─── Generic style-aware prose helper ───────────────────────
+  //
+  // Any surface that wants AI-generated prose in the author's voice must use
+  // this helper instead of calling aiService.callAI directly. It routes the
+  // request through the same Continue-Writing pipeline (smartContextEngine +
+  // styleReference + chapter memories + genre + writer preferences) so the
+  // output matches the book's voice.
+  //
+  // Usage:
+  //   const text = await storyBrain.generateProse({
+  //     action: 'scene',
+  //     userPrompt: 'Write a scene where X happens...',
+  //     bookId, chapterId, chapterNumber,
+  //   });
+
+  /**
+   * Generic prose generator. Wraps context + craft + aiService.callAI.
+   *
+   * @param {object} opts
+   * @param {string} opts.userPrompt            - The focused instruction for the AI.
+   * @param {string} [opts.action='scene']      - Writing action (continue|scene|dialogue|rewrite|expand|improve|mood|characterIntro|styleMatch|planning).
+   * @param {string} [opts.customPrompt]        - User-supplied extra instruction (from the "custom prompt" modal).
+   * @param {string} [opts.additionalInstructions] - Extra system-level guidance (e.g. template tips).
+   * @param {string} [opts.bookId]
+   * @param {string} [opts.chapterId]
+   * @param {number} [opts.chapterNumber]
+   * @param {string} [opts.textUpToCursor]      - Text for context assembly when different from the whole chapter.
+   * @param {string} [opts.moodPreset]
+   * @param {'creative'|'structured'|'analytical'} [opts.task='creative']
+   * @param {AbortController} [opts.abortController]
+   * @returns {Promise<string>} The generated text.
+   */
+  async generateProse(opts = {}) {
+    const {
+      userPrompt,
+      action = 'scene',
+      customPrompt = '',
+      additionalInstructions = '',
+      bookId = null,
+      chapterId = null,
+      chapterNumber = null,
+      textUpToCursor = '',
+      moodPreset = null,
+      task = 'creative',
+      abortController = null,
+    } = opts;
+
+    if (!userPrompt || typeof userPrompt !== 'string') {
+      throw new Error('storyBrain.generateProse: userPrompt is required');
+    }
+
+    const { systemContext } = await this.getContext({
+      text: textUpToCursor,
+      chapterNumber,
+      bookId,
+      chapterId,
+      action,
+    });
+
+    const craft = this.getCraftDirective(action, moodPreset);
+
+    const system = `You are the author of this story. Write in the EXACT same voice, style, and rhythm as the existing text.
+
+${craft}
+
+${systemContext}
+
+${customPrompt ? `CUSTOM INSTRUCTIONS:\n${customPrompt}\n` : ''}${additionalInstructions || ''}`;
+
+    return aiService.callAI(userPrompt, task, system, { abortController });
+  }
+
   /**
    * Clear all caches (call when story data changes).
    */

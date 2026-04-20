@@ -181,15 +181,26 @@ function AppInner() {
       clearTimeout(undoTimer);
       undoTimer = setTimeout(async () => {
         try {
-          const actors = await db.getAll('actors').catch(() => []);
-          const itemBank = await db.getAll('itemBank').catch(() => []);
-          const skillBank = await db.getAll('skillBank').catch(() => []);
-          const booksArr = await db.getAll('books').catch(() => []);
-          const plotThreads = await db.getAll('plotThreads').catch(() => []);
+          // Reload all writer-path stores so Cast / Items / Skills / Atlas etc.
+          // pick up anything the Entity Extraction Wizard, Canon Weaver, or
+          // any other flow added/updated/deleted via db.*.
+          const safe = (store) => db.getAll(store).catch(() => []);
+          const [
+            actors, itemBank, skillBank, booksArr, plotThreads,
+            places, floorplans, locations, factions, loreEntries, regions,
+          ] = await Promise.all([
+            safe('actors'), safe('itemBank'), safe('skillBank'), safe('books'),
+            safe('plotThreads'), safe('places'), safe('floorplans'),
+            safe('locations'), safe('factions'), safe('loreEntries'), safe('regions'),
+          ]);
           const booksObj = {};
           booksArr.forEach((b) => { booksObj[b.id] = b; });
           setWorldState((prev) => {
-            const next = { ...(prev || {}), actors, itemBank, skillBank, books: booksObj, plotThreads };
+            const next = {
+              ...(prev || {}),
+              actors, itemBank, skillBank, books: booksObj, plotThreads,
+              places, floorplans, locations, factions, loreEntries, regions,
+            };
             undoRedoManager.saveState?.(next, 'Legacy db write');
             setUndoRedoInfo(undoRedoManager.getHistoryInfo?.() || { canUndo: false, canRedo: false });
             return next;

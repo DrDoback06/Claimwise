@@ -3,6 +3,28 @@
  * Provides fuzzy matching for entities (actors, items, skills, stats) to prevent duplicates
  */
 
+import db from './database';
+
+const ALIAS_META_ID = 'entity_aliases';
+let _aliasCache = null;
+let _aliasLoadedAt = 0;
+const ALIAS_TTL = 30 * 1000;
+
+async function loadAliasMap() {
+  if (_aliasCache && Date.now() - _aliasLoadedAt < ALIAS_TTL) return _aliasCache;
+  try {
+    const raw = await db.get('meta', ALIAS_META_ID);
+    _aliasCache = raw?.value || { actors: {}, items: {}, skills: {}, places: {} };
+  } catch (_e) {
+    _aliasCache = { actors: {}, items: {}, skills: {}, places: {} };
+  }
+  _aliasLoadedAt = Date.now();
+  return _aliasCache;
+}
+
+// Let callers invalidate after a merge/nest so the next match sees the new alias.
+export function invalidateAliasCache() { _aliasCache = null; _aliasLoadedAt = 0; }
+
 class EntityMatchingService {
   /**
    * Calculate similarity between two strings (0-1)
@@ -107,6 +129,15 @@ class EntityMatchingService {
         return { item, confidence: 1.0, matchType: 'exact' };
       }
 
+      // Check alias matches (nested-name support)
+      if (Array.isArray(item.aliases)) {
+        for (const alias of item.aliases) {
+          if (String(alias).toLowerCase() === entityName.toLowerCase()) {
+            return { item, confidence: 0.95, matchType: 'alias' };
+          }
+        }
+      }
+
       // Calculate similarity
       const score = this.calculateSimilarity(entityName, item.name);
       if (score > bestScore) {
@@ -133,6 +164,14 @@ class EntityMatchingService {
         return { skill, confidence: 1.0, matchType: 'exact' };
       }
 
+      if (Array.isArray(skill.aliases)) {
+        for (const alias of skill.aliases) {
+          if (String(alias).toLowerCase() === entityName.toLowerCase()) {
+            return { skill, confidence: 0.95, matchType: 'alias' };
+          }
+        }
+      }
+
       // Calculate similarity
       const score = this.calculateSimilarity(entityName, skill.name);
       if (score > bestScore) {
@@ -142,6 +181,25 @@ class EntityMatchingService {
     }
 
     return bestMatch;
+  }
+
+  /**
+   * Resolve an alias (if any) to an existing entity id. Returns null otherwise.
+   * This pulls from the persisted meta:entity_aliases map so matches work
+   * across chapters without having to load every record.
+   */
+  async resolveAlias(entityName, type) {
+    if (!entityName || !type) return null;
+    const bucket = type === 'actor' ? 'actors'
+      : type === 'character' ? 'actors'
+      : type === 'item' ? 'items'
+      : type === 'skill' ? 'skills'
+      : type === 'place' ? 'places'
+      : null;
+    if (!bucket) return null;
+    const map = await loadAliasMap();
+    const targetId = map?.[bucket]?.[String(entityName).toLowerCase()];
+    return targetId || null;
   }
 
   /**

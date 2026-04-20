@@ -3,6 +3,7 @@
  */
 
 import aiService from '../../services/aiService';
+import storyBrain from '../../services/storyBrain';
 
 const ISSUE_TYPES = [
   { id: 'passive',    label: 'Passive voice',     color: 'oklch(70% 0.15 25)' },
@@ -63,8 +64,8 @@ export async function lintManuscript(text) {
   }
 }
 
-export async function rewriteSnippet(text, directive) {
-  const prompt = [
+export async function rewriteSnippet(text, directive, ctx = {}) {
+  const userPrompt = [
     `Rewrite this passage. Directive: ${directive || 'improve clarity and rhythm'}.`,
     `Keep meaning. Change only prose.`,
     ``,
@@ -73,7 +74,14 @@ export async function rewriteSnippet(text, directive) {
     `Return ONLY the rewritten passage, no commentary.`,
   ].join('\n');
   try {
-    const r = await aiService.callAI(prompt, 'creative', 'Return prose only.');
+    const r = await storyBrain.generateProse({
+      action: 'rewrite',
+      userPrompt,
+      additionalInstructions: 'Return prose only. No meta commentary, no markdown fences.',
+      bookId: ctx.bookId || null,
+      chapterId: ctx.chapterId || null,
+      chapterNumber: ctx.chapterNumber || null,
+    });
     return String(r || '').trim();
   } catch {
     return '(Rewrite unavailable \u2014 AI proxy offline.)';

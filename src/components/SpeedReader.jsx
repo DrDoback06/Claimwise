@@ -422,23 +422,24 @@ const SpeedReader = ({ worldState }) => {
   // Get current word
   const currentWord = words[currentIndex] || '';
 
-  // Calculate middle letter index
+  // Classic RSVP Optimal Recognition Point: the focal letter sits slightly
+  // left of the word's arithmetic centre, at a position that scales with
+  // word length. This matches the reading-research default used by Spritz /
+  // BeeLine-style readers. The previous implementation used Math.floor(len/2)
+  // which put the focal letter in the wrong place for short and long words.
   const getMiddleLetterIndex = (word) => {
     if (!word) return 0;
-    return Math.floor(word.length / 2);
+    const len = word.length;
+    if (len <= 1) return 0;
+    if (len <= 5) return 1;
+    if (len <= 9) return 2;
+    if (len <= 13) return 3;
+    return 4;
   };
 
-  // Calculate offset to center the middle letter at fixed point
-  // This approximates the width of characters (using 0.6em as average character width)
-  const calculateWordOffset = (word) => {
-    if (!word) return 0;
-    const middleIndex = getMiddleLetterIndex(word);
-    const beforeMiddle = word.substring(0, middleIndex);
-    // Approximate: each character is roughly 0.6em wide
-    const charWidth = fontSize * 0.6;
-    const offset = -beforeMiddle.length * charWidth;
-    return offset;
-  };
+  // (Kept for backwards compatibility with anything that imports
+  // calculateWordOffset but no longer used by the render path below.)
+  const calculateWordOffset = () => 0;
 
   // Enhancement 6: Bookmark functionality
   const saveBookmark = () => {
@@ -514,20 +515,62 @@ const SpeedReader = ({ worldState }) => {
     return words.slice(start, start + count);
   };
 
-  // Render word with center letter highlighted
+  // Render the current word with the focal letter pinned to the container's
+  // horizontal centre.
+  //
+  // Strategy: render the whole word as a single inline-block in a monospaced
+  // font so each character is exactly `1ch` wide. Position the inline-block
+  // at `left: 50%` and translate left by `(beforeLength + 0.5) ch` so the
+  // focal letter's centre lands exactly on the container centre regardless
+  // of word length.
+  //
+  // This replaces the previous approach that used a 0.6em approximation for
+  // char width \u2014 real glyph widths vary wildly (`i` vs `w`) and caused long
+  // words to drift left.
   const renderWord = (word) => {
     if (!word) return null;
-    
+
     const middleIndex = getMiddleLetterIndex(word);
     const beforeMiddle = word.substring(0, middleIndex);
     const middleLetter = word[middleIndex] || '';
     const afterMiddle = word.substring(middleIndex + 1);
 
+    const beforeClass = darkMode ? 'text-white' : 'text-slate-900';
+    const afterClass = darkMode ? 'text-slate-300' : 'text-slate-600';
+
+    // beforeLength + 0.5 so the CENTRE of the focal letter lands on the
+    // container's centre line.
+    const translateCh = (beforeMiddle.length + 0.5).toFixed(2);
+
     return (
-      <span className="inline-block">
-        <span className={darkMode ? 'text-white' : 'text-slate-900'}>{beforeMiddle}</span>
-        <span className="text-red-500 font-bold">{middleLetter}</span>
-        <span className={darkMode ? 'text-slate-300' : 'text-slate-600'}>{afterMiddle}</span>
+      <span
+        style={{
+          position: 'relative',
+          display: 'inline-block',
+          width: '100%',
+          height: '1.2em',
+          lineHeight: 1.2,
+          textAlign: 'left',
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: 0,
+            transform: `translateX(calc(-1ch * ${translateCh}))`,
+            // Monospace + tabular nums guarantees 1ch == one glyph width,
+            // which is the whole point of the transform above.
+            fontFamily:
+              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'pre',
+          }}
+        >
+          <span className={beforeClass}>{beforeMiddle}</span>
+          <span className="text-red-500 font-bold">{middleLetter}</span>
+          <span className={afterClass}>{afterMiddle}</span>
+        </span>
       </span>
     );
   };
@@ -650,7 +693,7 @@ const SpeedReader = ({ worldState }) => {
           <div className="absolute inset-0 bg-black/80 z-10 pointer-events-none" />
         )}
         
-        {/* Word display - centered by middle letter */}
+        {/* Word display - focal letter is pinned to the centre by renderWord */}
         <div
           ref={wordDisplayRef}
           className={`relative z-20 ${focusMode ? 'bg-black/90 p-8 rounded-lg' : ''}`}
@@ -659,24 +702,37 @@ const SpeedReader = ({ worldState }) => {
             fontWeight: 'bold',
             lineHeight: '1.2',
             userSelect: 'none',
+            // Fixed width so the focal-letter centre is always the viewport
+            // centre and doesn't shift with word length.
+            width: '60vw',
+            maxWidth: 640,
+            textAlign: 'center',
           }}
         >
           {currentWord ? (
-            <div
-              style={{
-                display: 'inline-block',
-                transform: currentWord ? `translateX(${calculateWordOffset(currentWord)}px)` : 'none',
-                transition: 'transform 0.1s ease-out',
-              }}
-            >
-              {renderWord(currentWord)}
-            </div>
+            renderWord(currentWord)
           ) : (
             <span className={darkMode ? 'text-slate-600' : 'text-slate-400'}>
               {words.length === 0 ? 'Load a chapter or upload a document to begin' : 'Ready'}
             </span>
           )}
         </div>
+        {/* Faint reticle line + wedge pair to make the focal spot obvious. */}
+        {currentWord ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-[21]"
+            style={{
+              left: '50%',
+              transform: 'translateX(-50%)',
+              // Position just above and below the word row.
+              top: `calc(50% - ${fontSize * 0.9}px)`,
+              height: `${fontSize * 1.8}px`,
+              width: 0,
+              borderLeft: `1px dashed ${darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
+            }}
+          />
+        ) : null}
 
         {/* Enhancement 8: Text preview */}
         {showPreview && currentWord && getPreviewWords().length > 0 && (

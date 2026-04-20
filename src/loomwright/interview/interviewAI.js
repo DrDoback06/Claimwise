@@ -4,6 +4,7 @@
  */
 
 import aiService from '../../services/aiService';
+import storyBrain from '../../services/storyBrain';
 
 export const PROMPT_DECK = [
   { id: 'fear',     label: 'What are you most afraid of?' },
@@ -33,8 +34,26 @@ function characterPrompt(actor, worldState) {
   return parts.join('\n');
 }
 
+async function buildStyleSystem(coreSystem, worldState) {
+  const bookId = worldState?.currentBookId || Object.keys(worldState?.books || {})[0] || null;
+  try {
+    const { systemContext } = await storyBrain.getContext({
+      text: '',
+      bookId,
+      chapterId: null,
+      chapterNumber: null,
+      action: 'dialogue',
+    });
+    if (systemContext) {
+      return `${coreSystem}\n\nSTYLE CONTEXT (match the book's voice):\n${systemContext}`;
+    }
+  } catch (_err) { /* no style context is fine */ }
+  return coreSystem;
+}
+
 export async function askActor(actor, question, worldState, transcript = []) {
-  const system = characterPrompt(actor, worldState);
+  const coreSystem = characterPrompt(actor, worldState);
+  const system = await buildStyleSystem(coreSystem, worldState);
   const history = transcript
     .map((m) => `${m.speaker}: ${m.text}`)
     .join('\n');
@@ -53,13 +72,14 @@ export async function askActor(actor, question, worldState, transcript = []) {
 }
 
 export async function askGroup(actors, question, worldState, transcript = [], director) {
-  const system = [
+  const coreSystem = [
     `You are the voice of a table of characters discussing a question from the interviewer.`,
     `Write their replies in the format "NAME: reply". Have each speaker keep to 1\u20132 paragraphs.`,
     `Characters present:`,
     ...actors.map((a) => `- ${a.name}: ${a.desc || a.role || ''}`),
     director ? `Director note: ${director}` : '',
   ].join('\n');
+  const system = await buildStyleSystem(coreSystem, worldState);
   const history = transcript
     .map((m) => (m.speaker ? `${m.speaker}: ${m.text}` : m.text))
     .join('\n');

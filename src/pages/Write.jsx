@@ -1,35 +1,37 @@
 /**
- * Write - Loomwright Writer's Room, Weaver-primary layout.
+ * Write - Loomwright Writer's Room, Writer | Weaver side-by-side layout.
  *
- * Pass 3 (M32) flips the old side-rail arrangement:
+ * Pass 4 (Writer Hub Overhaul) returns to the classic side-by-side that
+ * the user prefers: editor on the LEFT, Weaver / Story Analysis / Stash on
+ * the RIGHT, bottom-anchored AI Write bar runs full width inside the editor.
  *
- *   +------------------------------------------------+
- *   | slim top bar: Save + Focus + Analysis toggle   |
- *   +------------------------------------------------+
- *   | CANON WEAVER  (primary surface, ~55%)          |
- *   |   - sticky header keeps the idea-capture in    |
- *   |     view when the user scrolls                 |
- *   +------------------------------------------------+
- *   | compact toolbar (Sprint / Read / Language /    |
- *   |   Interview / Voice / Import)                  |
- *   +------------------------------------------------+
- *   | CHAPTER EDITOR (WritingCanvasPro, ~45%)        |
- *   |   - InlineSuggestions overlay lives here       |
- *   +------------------------------------------------+
+ *   +-------------------------------------------------------+
+ *   | TOP BAR: Writer's Room + connected-doc pill +         |
+ *   |   Sprint / Read book / Language / Interview /          |
+ *   |   Voice / Import / Analysis toggle / Focus            |
+ *   +-----------------------+-------------------------------+
+ *   | WRITER                | WEAVER  (Weaver/Analysis/Stash)|
+ *   | (WritingCanvasPro,    |                                |
+ *   |  includes its own     |                                |
+ *   |  AI Write bar at the  |                                |
+ *   |  bottom \u2014 full width |                                |
+ *   |  inside this column)  |                                |
+ *   +-----------------------+-------------------------------+
  *
- * - The "Analysis" button swaps the top pane between the Weaver and the
- *   Story Analysis surface (rather than opening a drawer).
- * - Pane split is a draggable horizontal resizer stored in localStorage
- *   under `lw-write-split`.
+ * - The old floating "compact editor toolbar" strip between the two panes
+ *   is removed \u2014 it leaked through modals and was redundant with the top
+ *   bar. See `pages/write/WriterSprintTimer.jsx` for the sprint controls.
+ * - Pane split is a draggable VERTICAL resizer stored in localStorage
+ *   under `lw-write-split` (now interpreted as editor width, not height).
  * - Focus mode hides everything except the editor, with a portal-mounted
  *   Exit chip so users can always escape.
- * - Z-layers are provided by `src/styles/z-layers.css` (M32).
+ * - Z-layers are provided by `src/styles/z-layers.css`.
  */
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Eye, Feather, MessageSquare, Focus, FileText, Gauge,
-  Sparkles, Mic2, AlignLeft,
+  Sparkles, Mic2, AlignLeft, BookOpen,
 } from 'lucide-react';
 import { useTheme } from '../loomwright/theme';
 import useIsMobile from '../loomwright/useIsMobile';
@@ -39,6 +41,7 @@ import CanonWeaver from '../loomwright/weaver/CanonWeaver';
 import LanguageWorkbench from '../loomwright/language/LanguageWorkbench';
 import InterviewMode from '../loomwright/interview/InterviewMode';
 import SpeedReader from '../components/SpeedReader';
+import StyleConnectionIndicator from '../components/StyleConnectionIndicator';
 import StoryAnalysisDrawer from './write/StoryAnalysisDrawer';
 import ManuscriptImportDrawer from './write/ManuscriptImportDrawer';
 import WriterSprintTimer from './write/WriterSprintTimer';
@@ -49,6 +52,8 @@ import VoiceDriftBanner from './write/VoiceDriftBanner';
 import WriterSeekRegistrar from './write/WriterSeekRegistrar';
 import PaneResizer from './write/PaneResizer';
 import FocusExitChip from './write/FocusExitChip';
+import BookReaderView from './write/BookReaderView';
+import WeaverStashDrawer from './write/WeaverStashDrawer';
 import { X } from 'lucide-react';
 
 const SPLIT_KEY = 'lw-write-split';
@@ -161,9 +166,10 @@ export default function WritePage({
   }, [splitRatio]);
 
   const [focusMode, setFocusMode] = useState(false);
-  const [topPane, setTopPane] = useState('weaver'); // 'weaver' | 'analysis'
+  // Right pane can be Canon Weaver, Story Analysis, or the new Weaver Stash.
+  const [rightPane, setRightPane] = useState('weaver'); // 'weaver' | 'analysis' | 'stash'
   const [openDrawer, setOpenDrawer] = useState(null);
-  // openDrawer: null | 'reader' | 'language-full' | 'interview' | 'import' | 'voice'
+  // openDrawer: null | 'reader' | 'language-full' | 'interview' | 'import' | 'voice' | 'book-reader'
   const editorHostRef = useRef(null);
 
   const onPatchWorldState = useCallback((patch) => {
@@ -176,12 +182,13 @@ export default function WritePage({
     }));
   }, [setWorldState]);
 
-  const topHeight = useMemo(() => `${(splitRatio * 100).toFixed(2)}%`, [splitRatio]);
-  const bottomHeight = useMemo(() => `${((1 - splitRatio) * 100).toFixed(2)}%`, [splitRatio]);
+  const leftWidth = useMemo(() => `${(splitRatio * 100).toFixed(2)}%`, [splitRatio]);
+  const rightWidth = useMemo(() => `${((1 - splitRatio) * 100).toFixed(2)}%`, [splitRatio]);
 
-  // On narrow screens we collapse Weaver into a tab above the editor
-  // instead of stacking; both use 50/50.
-  const stacked = !isMobile;
+  // On narrow screens (mobile/tablet portrait) we stack Writer on top of
+  // Weaver and swap the resizer. `sideBySide=true` is the desktop default
+  // that the user asked for.
+  const sideBySide = !isMobile;
 
   return (
     <Page>
@@ -190,7 +197,7 @@ export default function WritePage({
         <div
           className="lw-z-toolbar"
           style={{
-            display: 'flex', alignItems: 'center', gap: 8,
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
             padding: '8px 14px',
             borderBottom: `1px solid ${t.rule}`,
             background: t.sidebar,
@@ -201,9 +208,29 @@ export default function WritePage({
             style={{
               fontFamily: t.display, fontSize: 13, color: t.ink,
               letterSpacing: 0.04, fontWeight: 500,
+              display: 'inline-flex', alignItems: 'center', gap: 10,
             }}
           >
             Writer&rsquo;s Room
+            {/* Connected-document pill: docks to the heading so it no longer
+                floats over the canvas. The indicator is self-positioning so
+                we force it inline with a wrapper. */}
+            {currentChapter && bookTab ? (
+              <span
+                style={{
+                  position: 'relative',
+                  display: 'inline-flex', alignItems: 'center',
+                  height: 18, minWidth: 14,
+                }}
+              >
+                <StyleConnectionIndicator
+                  chapterId={currentChapter}
+                  bookId={bookTab}
+                  position="inline"
+                  size="small"
+                />
+              </span>
+            ) : null}
           </div>
           <div
             style={{
@@ -211,15 +238,48 @@ export default function WritePage({
               letterSpacing: 0.18, textTransform: 'uppercase',
             }}
           >
-            Weaver primary
+            Writer &middot; Weaver
           </div>
           <div style={{ flex: 1 }} />
+          <WriterSprintTimer />
           <CompactButton
-            icon={Sparkles}
-            label={topPane === 'weaver' ? 'Weaver' : 'Analysis'}
-            active
-            onClick={() => setTopPane((p) => (p === 'weaver' ? 'analysis' : 'weaver'))}
-            title="Swap top pane between Canon Weaver and Story Analysis"
+            icon={BookOpen} label="Book"
+            active={openDrawer === 'book-reader'}
+            onClick={() => setOpenDrawer(openDrawer === 'book-reader' ? null : 'book-reader')}
+            title="Open a read-through of every chapter in the current book"
+          />
+          <CompactButton
+            icon={Eye} label="Read"
+            active={openDrawer === 'reader'}
+            onClick={() => setOpenDrawer(openDrawer === 'reader' ? null : 'reader')}
+            title="Speed reader takeover of the current chapter"
+            hotkey="Ctrl+Shift+R"
+          />
+          <CompactButton
+            icon={Feather} label="Language"
+            active={openDrawer === 'language-full'}
+            onClick={() => setOpenDrawer(openDrawer === 'language-full' ? null : 'language-full')}
+            title="Grammar, rewrite, readability and thesaurus"
+            hotkey="Ctrl+Shift+L"
+          />
+          <CompactButton
+            icon={MessageSquare} label="Interview"
+            active={openDrawer === 'interview'}
+            onClick={() => setOpenDrawer(openDrawer === 'interview' ? null : 'interview')}
+            title="Chat with a character in voice; turn any line into a scene seed"
+            hotkey="Ctrl+Shift+I"
+          />
+          <CompactButton
+            icon={Mic2} label="Voice"
+            active={openDrawer === 'voice'}
+            onClick={() => setOpenDrawer(openDrawer === 'voice' ? null : 'voice')}
+            title="Voice profile + drift monitor"
+          />
+          <CompactButton
+            icon={FileText} label="Import"
+            active={openDrawer === 'import'}
+            onClick={() => setOpenDrawer(openDrawer === 'import' ? null : 'import')}
+            title="Import manuscript"
           />
           <CompactButton
             icon={Focus}
@@ -255,139 +315,24 @@ export default function WritePage({
         <div
           style={{
             flex: 1,
-            display: 'flex', flexDirection: 'column',
+            display: 'flex',
+            // Side-by-side on desktop; stacked on mobile.
+            flexDirection: sideBySide ? 'row' : 'column',
             minHeight: 0, background: t.bg,
           }}
         >
-          {/* Top pane: Weaver (primary) or Story Analysis. */}
+          {/* LEFT: Writer column */}
           <div
             style={{
-              height: stacked ? topHeight : 'auto',
-              flex: stacked ? 'none' : '0 0 auto',
-              minHeight: stacked ? 0 : 260,
-              borderBottom: `1px solid ${t.rule}`,
-              background: t.paper,
-              display: 'flex', flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Sticky pane header */}
-            <div
-              className="lw-z-toolbar"
-              style={{
-                position: 'sticky', top: 0,
-                padding: '8px 14px',
-                display: 'flex', alignItems: 'center', gap: 8,
-                background: t.sidebar, borderBottom: `1px solid ${t.rule}`,
-                flexShrink: 0,
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: t.mono, fontSize: 10, color: t.accent,
-                  letterSpacing: 0.18, textTransform: 'uppercase',
-                }}
-              >
-                {topPane === 'weaver' ? 'Canon Weaver' : 'Story Analysis'}
-              </div>
-              <div style={{ flex: 1 }} />
-              <CompactButton
-                icon={topPane === 'weaver' ? AlignLeft : Sparkles}
-                label={topPane === 'weaver' ? 'Analysis' : 'Weaver'}
-                onClick={() => setTopPane((p) => (p === 'weaver' ? 'analysis' : 'weaver'))}
-                title={topPane === 'weaver' ? 'Switch to Story Analysis' : 'Switch to Canon Weaver'}
-              />
-            </div>
-            <div style={{ flex: 1, overflow: 'auto', background: t.bg }}>
-              {topPane === 'weaver' ? (
-                <CanonWeaver
-                  scoped
-                  worldState={worldState}
-                  setWorldState={setWorldState}
-                  onPatchWorldState={onPatchWorldState}
-                  captureOnMount={captureOnMount}
-                  initialIdea={initialWeaveIdea}
-                  onCaptureConsumed={onCaptureConsumed}
-                />
-              ) : (
-                <StoryAnalysisDrawer
-                  worldState={worldState}
-                  onJumpToChapter={() => { /* via chapterNavigationService */ }}
-                />
-              )}
-            </div>
-          </div>
-
-          {stacked && <PaneResizer setRatio={setSplitRatio} />}
-
-          {/* Compact editor toolbar. */}
-          <div
-            className="lw-z-toolbar"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-              padding: '6px 14px',
-              borderTop: `1px solid ${t.rule}`,
-              borderBottom: `1px solid ${t.rule}`,
-              background: t.sidebar,
-              flexShrink: 0,
-            }}
-          >
-            <WriterSprintTimer />
-            <CompactButton
-              icon={Eye} label="Read"
-              active={openDrawer === 'reader'}
-              onClick={() => setOpenDrawer(openDrawer === 'reader' ? null : 'reader')}
-              title="Speed reader takeover of the current chapter"
-              hotkey="Ctrl+Shift+R"
-            />
-            <CompactButton
-              icon={Feather} label="Language"
-              active={openDrawer === 'language-full'}
-              onClick={() => setOpenDrawer(openDrawer === 'language-full' ? null : 'language-full')}
-              title="Grammar, rewrite, readability and thesaurus"
-              hotkey="Ctrl+Shift+L"
-            />
-            <CompactButton
-              icon={MessageSquare} label="Interview"
-              active={openDrawer === 'interview'}
-              onClick={() => setOpenDrawer(openDrawer === 'interview' ? null : 'interview')}
-              title="Chat with a character in voice; turn any line into a scene seed"
-              hotkey="Ctrl+Shift+I"
-            />
-            <CompactButton
-              icon={Mic2} label="Voice"
-              active={openDrawer === 'voice'}
-              onClick={() => setOpenDrawer(openDrawer === 'voice' ? null : 'voice')}
-              title="Voice profile + drift monitor"
-            />
-            <CompactButton
-              icon={FileText} label="Import"
-              active={openDrawer === 'import'}
-              onClick={() => setOpenDrawer(openDrawer === 'import' ? null : 'import')}
-              title="Import manuscript"
-            />
-            <div style={{ flex: 1 }} />
-            <div
-              style={{
-                fontFamily: t.mono, fontSize: 9, color: t.ink3,
-                letterSpacing: 0.18, textTransform: 'uppercase',
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-              }}
-              title="Pane split"
-            >
-              <Gauge size={10} /> {Math.round(splitRatio * 100)} / {Math.round((1 - splitRatio) * 100)}
-            </div>
-          </div>
-
-          {/* Bottom pane: editor. */}
-          <div
-            style={{
-              flex: stacked ? 'none' : 1,
-              height: stacked ? bottomHeight : 'auto',
-              minHeight: 160,
+              width: sideBySide ? leftWidth : '100%',
+              flex: sideBySide ? 'none' : 1,
+              minWidth: sideBySide ? 0 : undefined,
+              minHeight: sideBySide ? 0 : 320,
               display: 'flex', flexDirection: 'column',
               overflow: 'hidden',
               background: t.bg,
+              borderRight: sideBySide ? `1px solid ${t.rule}` : 'none',
+              borderBottom: sideBySide ? 'none' : `1px solid ${t.rule}`,
             }}
           >
             <VersionSlider
@@ -416,6 +361,98 @@ export default function WritePage({
               <SelectionRewriteMenu scopeSelector=".lw-writer-surface" />
               <InlineSuggestions scopeSelector=".lw-writer-surface" worldState={worldState} />
               <WriterSeekRegistrar scopeSelector=".lw-writer-surface" />
+            </div>
+          </div>
+
+          <PaneResizer
+            setRatio={setSplitRatio}
+            orientation={sideBySide ? 'vertical' : 'horizontal'}
+          />
+
+          {/* RIGHT: Weaver / Analysis / Stash */}
+          <div
+            style={{
+              width: sideBySide ? rightWidth : '100%',
+              flex: sideBySide ? 'none' : '0 0 auto',
+              minHeight: sideBySide ? 0 : 260,
+              background: t.paper,
+              display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              className="lw-z-toolbar"
+              style={{
+                position: 'sticky', top: 0,
+                padding: '8px 14px',
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: t.sidebar, borderBottom: `1px solid ${t.rule}`,
+                flexShrink: 0,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: t.mono, fontSize: 10, color: t.accent,
+                  letterSpacing: 0.18, textTransform: 'uppercase',
+                }}
+              >
+                {rightPane === 'weaver' ? 'Canon Weaver'
+                  : rightPane === 'analysis' ? 'Story Analysis'
+                  : 'Weaver Stash'}
+              </div>
+              <div style={{ flex: 1 }} />
+              <CompactButton
+                icon={Sparkles}
+                label="Weaver"
+                active={rightPane === 'weaver'}
+                onClick={() => setRightPane('weaver')}
+                title="Canon Weaver"
+              />
+              <CompactButton
+                icon={AlignLeft}
+                label="Analysis"
+                active={rightPane === 'analysis'}
+                onClick={() => setRightPane('analysis')}
+                title="Story Analysis"
+              />
+              <CompactButton
+                icon={FileText}
+                label="Stash"
+                active={rightPane === 'stash'}
+                onClick={() => setRightPane('stash')}
+                title="Pending AI drafts from Weaver + templates"
+              />
+              <div
+                style={{
+                  fontFamily: t.mono, fontSize: 9, color: t.ink3,
+                  letterSpacing: 0.18, textTransform: 'uppercase',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  marginLeft: 6,
+                }}
+                title="Pane split (writer / weaver)"
+              >
+                <Gauge size={10} /> {Math.round(splitRatio * 100)} / {Math.round((1 - splitRatio) * 100)}
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', background: t.bg }}>
+              {rightPane === 'weaver' ? (
+                <CanonWeaver
+                  scoped
+                  worldState={worldState}
+                  setWorldState={setWorldState}
+                  onPatchWorldState={onPatchWorldState}
+                  captureOnMount={captureOnMount}
+                  initialIdea={initialWeaveIdea}
+                  onCaptureConsumed={onCaptureConsumed}
+                />
+              ) : rightPane === 'analysis' ? (
+                <StoryAnalysisDrawer
+                  worldState={worldState}
+                  onJumpToChapter={() => { /* via chapterNavigationService */ }}
+                />
+              ) : (
+                <WeaverStashDrawer bookId={bookTab} chapterId={currentChapter} />
+              )}
             </div>
           </div>
         </div>
@@ -471,6 +508,15 @@ export default function WritePage({
         width={540}
       >
         <VoicePanel worldState={worldState} />
+      </Drawer>
+
+      <Drawer
+        open={openDrawer === 'book-reader'}
+        onClose={() => setOpenDrawer(null)}
+        title="Book reader"
+        width={960}
+      >
+        <BookReaderView bookId={bookTab} onClose={() => setOpenDrawer(null)} />
       </Drawer>
     </Page>
   );

@@ -198,7 +198,7 @@ console.error('Preview generation failed:', error);
   const textToRewrite = selectedText || originalText;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm lw-z-modal flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col relative">
         {/* Style Connection Indicator */}
         <StyleConnectionIndicator

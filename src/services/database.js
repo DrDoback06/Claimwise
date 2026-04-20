@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'ClaimwiseOmniscience';
-const DB_VERSION = 24; // Loomwright pass 3: settings + storyMap + actorSkillProgress + regions
+const DB_VERSION = 25; // Pass 4: weaverStash (AI drafts from Weaver + templates)
 
 // Loomwright undo coverage: fire a lightweight DOM event so the App can
 // observe every write through the db without each legacy component having
@@ -14,7 +14,7 @@ const UNDO_TRACKED_STORES = new Set([
   'actors', 'books', 'itemBank', 'skillBank', 'statRegistry',
   'plotThreads', 'plotQuests', 'factions', 'places', 'floorplans',
   'loreEntries', 'wiki', 'wikiEntries', 'meta', 'relationships',
-  'characterArcs', 'timelineEvents', 'locations',
+  'characterArcs', 'timelineEvents', 'locations', 'weaverStash',
 ]);
 function _emitDbChange(op, storeName, data) {
   if (typeof window === 'undefined' || !window.dispatchEvent) return;
@@ -55,7 +55,13 @@ class ClaimwiseDB {
         this.db = request.result;
         // Add error handler for database errors
         this.db.onerror = (event) => {
-          console.error('Database error:', event.target.error);
+          const err = event?.target?.error;
+          console.error(
+            'Database error:',
+            err?.name || 'UnknownError',
+            err?.message || '(no message)',
+            err
+          );
         };
         resolve(this.db);
       };
@@ -697,6 +703,21 @@ class ClaimwiseDB {
             regionStore.createIndex('createdAt', 'createdAt', { unique: false });
           }
         }
+
+        // Migration for version 25: Weaver Stash. Any AI surface that
+        // generates prose proposals (Canon Weaver, Chapter Templates, etc.)
+        // writes into this store instead of inserting straight into the
+        // chapter. The right pane renders the stash list with Bring Over /
+        // Edit / Discard actions.
+        if (oldVersion < 25) {
+          if (!db.objectStoreNames.contains('weaverStash')) {
+            const stash = db.createObjectStore('weaverStash', { keyPath: 'id' });
+            stash.createIndex('bookId', 'bookId', { unique: false });
+            stash.createIndex('chapterId', 'chapterId', { unique: false });
+            stash.createIndex('status', 'status', { unique: false });
+            stash.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+        }
       };
     });
   }
@@ -783,13 +804,25 @@ class ClaimwiseDB {
     await this.ensureInitialized();
     // Invalidate cache for this store
     this._invalidateStoreCache(storeName);
-    
+
     const transaction = this.db.transaction([storeName], 'readwrite');
     const store = transaction.objectStore(storeName);
     return new Promise((resolve, reject) => {
       const request = store.add(data);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        _emitDbChange('add', storeName, data);
+        resolve(request.result);
+      };
+      request.onerror = () => {
+        const err = request.error;
+        console.error(
+          `Database add(${storeName}) failed:`,
+          err?.name || 'UnknownError',
+          err?.message || '(no message)',
+          { data }
+        );
+        reject(err);
+      };
     });
   }
 
@@ -993,7 +1026,16 @@ class ClaimwiseDB {
     const result = await new Promise((resolve, reject) => {
       const request = store.put(data);
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        const err = request.error;
+        console.error(
+          `Database update(${storeName}) failed:`,
+          err?.name || 'UnknownError',
+          err?.message || '(no message)',
+          { id: data?.id }
+        );
+        reject(err);
+      };
     });
     // Loomwright undo coverage (HANDOFF \u00a75.13): emit a DOM event for any
     // writer-path store change so App.js can snapshot worldState into the

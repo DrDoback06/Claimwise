@@ -990,6 +990,39 @@ function WeaverBody({ worldState, setWorldState, onPatchWorldState, captureOnMou
       onPatchWorldState?.(patch);
     }
 
+    // Mirror accepted Chapter prose edits into the Weaver Stash so the
+    // author can preview / edit / bring them over into the actual chapter
+    // body from the Stash drawer rather than only seeing the note form
+    // attached to the chapter object.
+    const chapterEdits = accepted.filter(
+      (e) => e.system === 'Chapter' && e.action === 'suggest-edit' && e.payload?.after
+    );
+    if (chapterEdits.length) {
+      (async () => {
+        try {
+          // Dynamic import keeps the weaver bundle light if the stash is
+          // never opened.
+          const stash = await import('../../services/weaverStashService');
+          for (const e of chapterEdits) {
+            await stash.addStashItem({
+              title: e.title || `Weaver: ${e.target || 'chapter edit'}`,
+              content: e.payload?.after || '',
+              source: 'weaver',
+              bookId,
+              chapterId: currentChapter || null,
+              meta: {
+                editId: e.id, target: e.target,
+                before: e.payload?.before || '',
+                reasoning: e.reasoning || '',
+              },
+            });
+          }
+        } catch (err) {
+          console.warn('[CanonWeaver] could not stash chapter edits:', err);
+        }
+      })();
+    }
+
     const entry = {
       id: `h_${Date.now()}`,
       title: (idea || weaveMode).slice(0, 140),

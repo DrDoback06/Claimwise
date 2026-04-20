@@ -7,7 +7,7 @@ import {
   Maximize2, Minimize2, Settings, RefreshCw, Eye, EyeOff,
   Edit3, Lock, Unlock, Undo2, Redo2, Zap, Palette,
   PenTool, MessageSquare, Image, UserPlus, MoreHorizontal, BarChart3,
-  MapPin, Calendar, Heart, Briefcase
+  MapPin, Calendar, Heart, Briefcase, Plus
 } from 'lucide-react';
 import FloatingPanel from './FloatingPanel';
 import MoodMeter from './MoodMeter';
@@ -142,6 +142,7 @@ const WritingCanvasPro = ({
   const [detectedItems, setDetectedItems] = useState([]);
   const [actors, setActors] = useState([]);
   const [items, setItems] = useState([]);
+  const [places, setPlaces] = useState([]);
   
   // Entity extraction wizard state
   const [showEntityWizard, setShowEntityWizard] = useState(false);
@@ -297,8 +298,10 @@ const WritingCanvasPro = ({
     try {
       const loadedActors = await db.getAll('actors');
       const loadedItems = await db.getAll('itemBank');
+      const loadedPlaces = await db.getAll('locations').catch(() => []);
       setActors(loadedActors || []);
       setItems(loadedItems || []);
+      setPlaces(loadedPlaces || []);
 
       // Load books
       const loadedBooks = await db.getAll('books');
@@ -536,6 +539,49 @@ const WritingCanvasPro = ({
     }
   };
 
+  // Spin up a fresh chapter inside the current book and load it into the editor.
+  // Chapter image/symbol generation is intentionally NOT run here \u2014 it's slow
+  // and its failure used to silently swallow the whole create. We generate
+  // symbols lazily on next open.
+  const handleAddChapter = async () => {
+    if (!currentBook) {
+      toastService.error('No book selected \u2014 open a book first.');
+      return;
+    }
+    try {
+      const newChapter = await contextEngine.addChapter(currentBook.id, {
+        title: `Chapter ${(allChapters?.length || 0) + 1}`,
+        content: '',
+      });
+      const chapters = await contextEngine.getAllChaptersWithStatus();
+      setAllChapters(chapters);
+      await loadChapter({ ...newChapter, bookId: currentBook.id });
+      setShowChapterSelector(false);
+      toastService.success(`Created ${newChapter.title}`);
+    } catch (error) {
+      console.error('[WritingCanvasPro] Add chapter failed:', error?.name, error?.message, error);
+      toastService.error(`Could not create chapter: ${error?.message || 'unknown error'}`);
+    }
+  };
+
+  // Write the current chapter to IndexedDB without triggering entity extraction
+  // or opening the wizard. Use this for in-progress / partial chapters where
+  // running the expensive extraction pipeline would just waste tokens.
+  const handleSaveDraft = async () => {
+    if (!currentChapter || !currentBook) return;
+    setIsSaving(true);
+    try {
+      const finalContent = compileContent();
+      await contextEngine.updateChapterContent(currentBook.id, currentChapter.id, finalContent);
+      setLastSaved(new Date());
+      onSave?.();
+    } catch (error) {
+      console.error('[WritingCanvasPro] Save draft failed:', error?.name, error?.message, error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!currentChapter || !currentBook) return;
     
@@ -581,13 +627,15 @@ const WritingCanvasPro = ({
   const handleEntityWizardComplete = async () => {
     setShowEntityWizard(false);
     
-    // Reload actors, items, skills in case they were created/updated
+    // Reload actors, items, skills, places in case they were created/updated
     const loadedActors = await db.getAll('actors');
     const loadedItems = await db.getAll('itemBank');
     const loadedSkills = await db.getAll('skillBank');
+    const loadedPlaces = await db.getAll('locations').catch(() => []);
     setActors(loadedActors || []);
     setItems(loadedItems || []);
     setSkills(loadedSkills || []);
+    setPlaces(loadedPlaces || []);
     
     // Notify parent (App.js) to refresh worldState so Personnel/Item Vault/Skill Bank tabs show new entities
     if (onEntityUpdate) {
@@ -837,6 +885,24 @@ ${options.additionalInstructions || ''}`;
     
     setPreviewPanel({ isOpen: false, content: '', source: 'continue', isLoading: false });
   };
+
+  // Listen for the Weaver Stash "Bring over" action. The stash drawer
+  // dispatches a `loomwright:insert-at-cursor` CustomEvent carrying the text
+  // to drop into the chapter; we reuse the same insert path as AI Write
+  // buttons so tracked-changes mode still applies.
+  useEffect(() => {
+    const onInsert = (ev) => {
+      const text = ev?.detail?.text;
+      if (typeof text === 'string' && text.trim()) {
+        handleInsertAtCursor(text);
+      }
+    };
+    window.addEventListener('loomwright:insert-at-cursor', onInsert);
+    return () => window.removeEventListener('loomwright:insert-at-cursor', onInsert);
+    // handleInsertAtCursor closes over plenty of state; recompute listener
+    // when writingMode flips so draft vs. review paths stay in sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [writingMode]);
 
   // ============================================
   // AI WRITING FUNCTIONS
@@ -1574,7 +1640,7 @@ Rewrite with the mood adjustments. Only return the rewritten text:`;
             </button>
 
             {showChapterSelector && (
-              <div className="absolute top-full left-0 mt-2 w-72 bg-slate-800 border border-slate-700 
+              <div className="absolute top-full left-0 mt-2 w-72 bg-slate-800 border border-slate-700
                 rounded-lg shadow-xl z-30 max-h-80 overflow-y-auto">
                 {allChapters.map(chapter => (
                   <button
@@ -1593,6 +1659,15 @@ Rewrite with the mood adjustments. Only return the rewritten text:`;
                     {chapter.completed && <CheckCircle className="w-5 h-5 text-green-500" />}
                   </button>
                 ))}
+                <div className="border-t border-slate-700" />
+                <button
+                  onClick={handleAddChapter}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-amber-300 hover:bg-slate-700 transition-colors"
+                  title="Create a new chapter in the current book"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="font-medium">New Chapter</span>
+                </button>
               </div>
             )}
           </div>
@@ -1688,15 +1763,27 @@ Rewrite with the mood adjustments. Only return the rewritten text:`;
             </span>
           )}
 
+          {/* Save draft (no extraction) */}
+          <button
+            onClick={handleSaveDraft}
+            disabled={isSaving || !currentChapter}
+            className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600
+              disabled:bg-slate-800 disabled:opacity-50 rounded-lg text-white font-medium transition-colors"
+            title="Save chapter without running entity extraction (use while the chapter is still in progress)"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            SAVE
+          </button>
+
           {/* Save & Extract button */}
           <button
             onClick={handleSave}
-            disabled={isSaving}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 
+            disabled={isSaving || !currentChapter}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500
               disabled:bg-slate-700 rounded-lg text-white font-medium transition-colors"
             title="Save chapter and extract entities (triggers Entity Extraction Wizard)"
           >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             SAVE & EXTRACT
           </button>
 
@@ -1858,16 +1945,10 @@ Rewrite with the mood adjustments. Only return the rewritten text:`;
 
             {/* AI Writing Tools Toolbar */}
             <div className="mt-3 mb-4 bg-slate-800/70 rounded-xl border border-slate-700 overflow-visible relative">
-              {/* Style Connection Indicator */}
-              {currentChapter?.id && currentBook?.id && (
-                <StyleConnectionIndicator
-                  chapterId={currentChapter.id}
-                  bookId={currentBook.id}
-                  position="top-right"
-                  size="small"
-                />
-              )}
-              
+              {/* The connected-document pill is rendered in the Writer's Room
+                  top bar now (see pages/Write.jsx). Keeping it there avoids a
+                  duplicate floating widget in the canvas. */}
+
               <div className="flex items-center justify-between p-2 border-b border-slate-700/50">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500 px-2 font-medium">✨ AI Write:</span>
@@ -2694,7 +2775,7 @@ Rewrite with the mood adjustments. Only return the rewritten text:`;
 
       {/* Prompt Modal */}
       {showPromptModal && pendingGeneration && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm lw-z-modal flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col relative">
             {/* Style Connection Indicator */}
             {currentChapter?.id && currentBook?.id && (
@@ -2846,6 +2927,7 @@ Rewrite with the mood adjustments. Only return the rewritten text:`;
           actors={actors || []}
           items={items || []}
           skills={skills || []}
+          places={places || []}
           statRegistry={[]}
           books={books || []}
           onComplete={handleEntityWizardComplete}

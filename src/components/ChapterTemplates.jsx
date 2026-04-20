@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Sparkles, Swords, MessageSquare, BookOpen, Save, X, Plus, Trash2 } from 'lucide-react';
 import db from '../services/database';
-import aiService from '../services/aiService';
+import storyBrain from '../services/storyBrain';
+import { addStashItem } from '../services/weaverStashService';
+import toastService from '../services/toastService';
 
 /**
  * Chapter Templates System
@@ -169,25 +171,59 @@ const ChapterTemplates = ({ onApplyTemplate, onClose, currentChapter = null }) =
       );
 
       if (shouldEnhance) {
-        // Generate content using AI
-        const context = await buildTemplateContext();
-        const prompt = `Generate a chapter following this template structure:
+        // Route through storyBrain so the generated prose inherits the book's
+        // style reference, chapter memories, genre guide and writer
+        // preferences (same pipeline as Continue Writing). Without this the
+        // template produces off-style filler.
+        const extraContext = await buildTemplateContext();
+        const userPrompt = `Write a new chapter that follows this template structure. Keep every section heading exactly as given and fill each with prose in the book's own voice.
 
+TEMPLATE STRUCTURE:
 ${template.structure}
 
-Tips to follow:
-${template.tips.map(t => `- ${t}`).join('\n')}
+Do NOT introduce unrelated characters, settings, or worlds; only use the story's existing canon.`;
 
-Context:
-${context}
+        const additionalInstructions = [
+          'TEMPLATE TIPS:',
+          ...template.tips.map((t) => `- ${t}`),
+          '',
+          extraContext ? `EXTRA CONTEXT:\n${extraContext}` : '',
+        ].filter(Boolean).join('\n');
 
-Generate the chapter content following this structure. Write in the style and voice from the style profile.`;
-
-        const generated = await aiService.callAI(prompt, 'creative');
-        onApplyTemplate({
-          ...template,
-          generatedContent: generated
+        const generated = await storyBrain.generateProse({
+          action: 'scene',
+          userPrompt,
+          additionalInstructions,
+          bookId: currentChapter?.bookId || null,
+          chapterId: currentChapter?.id || null,
+          chapterNumber: currentChapter?.number || null,
         });
+
+        // Per user request: template outputs live in the Weaver Stash until
+        // the author explicitly brings them over. We stash here and close
+        // the template modal; the stash drawer on the right pane shows it.
+        try {
+          await addStashItem({
+            title: `Template: ${template.name}`,
+            content: generated,
+            source: 'template',
+            bookId: currentChapter?.bookId || null,
+            chapterId: currentChapter?.id || null,
+            meta: { templateId: template.id, templateName: template.name },
+          });
+          toastService.success(`"${template.name}" draft saved to Weaver Stash.`);
+        } catch (stashErr) {
+          console.warn('[ChapterTemplates] Could not stash draft, falling back to direct apply:', stashErr);
+          onApplyTemplate({
+            ...template,
+            generatedContent: generated,
+            source: 'template',
+          });
+          return;
+        }
+
+        // Close the modal without inserting into the chapter.
+        onClose?.();
       } else {
         // Just apply the structure
         onApplyTemplate({
@@ -274,7 +310,7 @@ Generate the chapter content following this structure. Write in the style and vo
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur flex items-center justify-center p-4">
+    <div className="fixed inset-0 lw-z-modal bg-black/80 backdrop-blur flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-green-500/50 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="p-6 border-b border-slate-800 flex justify-between items-center">

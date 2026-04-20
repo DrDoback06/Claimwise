@@ -169,7 +169,7 @@ const EntityInterjectionModal = ({
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center lw-z-modal p-4">
       <div className="bg-slate-900 rounded-xl border border-purple-500/30 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col relative">
         {/* Style Connection Indicator */}
         <StyleConnectionIndicator

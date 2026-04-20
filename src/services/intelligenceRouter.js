@@ -53,9 +53,9 @@ const MODEL_REGISTRY = [
 
   // === BALANCED TIER (good quality, moderate cost) ===
   {
-    id: 'gemini-2.5-flash-preview',
+    id: 'gemini-2.5-flash',
     provider: 'gemini',
-    model: 'gemini-2.5-flash-preview-04-17',
+    model: 'gemini-2.5-flash',
     tier: 'balanced',
     capability: 7,
     speed: 7,

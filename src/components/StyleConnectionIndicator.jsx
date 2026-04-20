@@ -55,8 +55,15 @@ const StyleConnectionIndicator = ({
     }
   };
 
+  // When `position="inline"`, the indicator drops its absolute positioning
+  // and lays out in the normal document flow. We use this so the Writer's
+  // Room header can pin the pill next to the title instead of floating over
+  // the canvas.
+  const isInline = position === 'inline';
   const getPositionClasses = () => {
     switch (position) {
+      case 'inline':
+        return 'relative';
       case 'top-left':
         return 'top-2 left-2';
       case 'bottom-right':
@@ -67,7 +74,6 @@ const StyleConnectionIndicator = ({
         // Offset from right edge to avoid blocking X button (X button is typically ~40px from right)
         return 'top-2 right-12';
       default:
-        // Default to top-right with offset
         return 'top-2 right-12';
     }
   };
@@ -94,8 +100,11 @@ const StyleConnectionIndicator = ({
 
   if (connections.length === 0) {
     // Still show indicator even if no connections found
+    const wrapperCls = isInline
+      ? 'relative inline-flex items-center gap-1.5 bg-slate-900/98 backdrop-blur-md border border-yellow-500/50 rounded-md px-2 py-1'
+      : `absolute ${getPositionClasses()} z-[100] flex items-center gap-1.5 bg-slate-900/98 backdrop-blur-md border-2 border-yellow-500/50 rounded-lg px-2.5 py-2 shadow-2xl`;
     return (
-      <div className={`absolute ${getPositionClasses()} z-[100] flex items-center gap-1.5 bg-slate-900/98 backdrop-blur-md border-2 border-yellow-500/50 rounded-lg px-2.5 py-2 shadow-2xl`}>
+      <div className={wrapperCls}>
         <AlertCircle className={`${getSizeClasses()} text-yellow-400`} />
         <span className="text-xs text-yellow-300 font-medium">No connections</span>
       </div>
@@ -107,8 +116,12 @@ const StyleConnectionIndicator = ({
   const builtInDocs = connections.filter(c => c.type === 'built-in');
 
   return (
-    <div className={`absolute ${getPositionClasses()} z-[100]`}>
-      <div className="flex items-center gap-1.5 bg-slate-900/95 backdrop-blur-sm border-2 border-slate-600 rounded-lg px-2 py-1.5 shadow-2xl">
+    <div className={isInline ? 'relative inline-flex' : `absolute ${getPositionClasses()} z-[100]`}>
+      <div className={
+        isInline
+          ? 'flex items-center gap-1.5 bg-slate-900/95 backdrop-blur-sm border border-slate-600 rounded-md px-2 py-1'
+          : 'flex items-center gap-1.5 bg-slate-900/95 backdrop-blur-sm border-2 border-slate-600 rounded-lg px-2 py-1.5 shadow-2xl'
+      }>
         {/* Status Summary */}
         <div className="flex items-center gap-1">
           {allConnected ? (
