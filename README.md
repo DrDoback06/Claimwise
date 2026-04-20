@@ -1,5 +1,7 @@
 # Loomwright
 
+> Deploy trigger: 2026-04-20
+
 Loomwright is the standalone Story Studio app — an AI-assisted writing,
 tracking and world-building environment.
 
