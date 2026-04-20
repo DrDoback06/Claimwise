@@ -41,7 +41,7 @@ class SyncService {
   /**
    * Download JSON file
    */
-  async downloadJSON(filename = `claimwise-backup-${Date.now()}.json`) {
+  async downloadJSON(filename = `loomwright-backup-${Date.now()}.json`) {
     try {
       const jsonData = await this.exportToJSON();
       const blob = new Blob([jsonData], { type: 'application/json' });

@@ -1186,6 +1186,8 @@ function dispatchWeaveEdits(worldState, accepted, bookId, chapterId) {
   return patch;
 }
 
+export { WeaverBody };
+
 export default function CanonWeaver(props) {
   const onPatchWorldState = (patch) => {
     props.setWorldState?.((prev) => ({

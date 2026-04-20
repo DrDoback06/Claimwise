@@ -1,321 +1,206 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Users, BarChart2, Zap, Briefcase, PenTool, BookOpen, GitBranch, 
-  BookMarked, Network, Activity, Clock, TrendingUp, AlertTriangle, 
-  History, Search, Archive, RefreshCw, Settings, FileText,
-  ChevronRight, ChevronDown, Layers, Map, Brain, Link, Shield,
-  Home, Sparkles, Package, Eye, Mic, Compass, Feather, Sun, Coffee,
-  Smartphone, BookOpenCheck
-} from 'lucide-react';
-import Tooltip from './Tooltip';
-
 /**
- * Navigation configuration with grouped categories
+ * NavigationSidebar — Loomwright 5-group verb nav.
+ *
+ * Groups: Today • Write • Track • Explore • Settings.
+ * Themed with useTheme(); no Tailwind slate chrome.
  */
-const NAVIGATION_CONFIG = [
+
+import React, { useState, useEffect } from 'react';
+import {
+  Home, PenTool, Users, Map, Settings as SettingsIcon,
+  Briefcase, Zap, BarChart2, Mic, Compass, BookMarked, GitBranch, Feather,
+  ChevronRight,
+} from 'lucide-react';
+import { useTheme } from '../loomwright/theme';
+
+const NAV = [
   {
-    id: 'creation',
-    label: 'Creation',
-    icon: Layers,
-    tooltip: 'Create and manage game entities - characters, items, skills, and stats',
-    items: [
-      { id: 'personnel', label: 'Personnel', icon: Users, tooltip: 'Manage characters, their stats, equipment, and story roles', shortcut: 'Alt+1' },
-      { id: 'items', label: 'Item Vault', icon: Briefcase, tooltip: 'Create and manage items with stats, skills, and quests', shortcut: 'Alt+2' },
-      { id: 'inventory', label: 'Inventory', icon: Package, tooltip: 'Diablo-style equipment and inventory management with paper doll view' },
-      { id: 'skills', label: 'Skill Bank', icon: Zap, tooltip: 'Define skills, abilities, and passive effects', shortcut: 'Alt+3' },
-      { id: 'stats', label: 'Stat Registry', icon: BarChart2, tooltip: 'Configure core and custom stats for your game system', shortcut: 'Alt+4' },
-    ]
+    id: 'today',
+    label: 'Today',
+    icon: Home,
+    tabs: [{ id: 'today', label: 'Today', icon: Home, tooltip: 'Morning brief + daily sparks' }],
   },
   {
-    id: 'writing',
-    label: 'Writing',
+    id: 'write',
+    label: 'Write',
     icon: PenTool,
-    tooltip: 'Write your story with AI assistance and automatic entity extraction',
-    items: [
-      { id: 'story', label: "Writer's Room", icon: PenTool, tooltip: 'Write chapters with AI assistance, entity extraction, and consistency checking', shortcut: 'Alt+5' },
-      { id: 'bible', label: 'Series Bible', icon: BookOpen, tooltip: 'Organize books, chapters, and maintain your story structure', shortcut: 'Alt+6' },
-      { id: 'manuscript', label: 'Manuscript Intelligence', icon: FileText, tooltip: 'Extract entities, analyze text, and auto-populate your world', shortcut: 'Alt+7' },
-      { id: 'speedreader', label: 'Speed Reader', icon: Eye, tooltip: 'Read at high speed with word-by-word display and centered positioning' },
-    ]
+    tabs: [{ id: 'write', label: "Writer's Room", icon: Feather, tooltip: 'Drafting + Canon Weaver + prose tools' }],
   },
   {
-    id: 'visualization',
-    label: 'Visualization',
+    id: 'track',
+    label: 'Track',
+    icon: Users,
+    tabs: [
+      { id: 'cast', label: 'Cast', icon: Users, tooltip: 'Characters and their full arcs' },
+      { id: 'items_library', label: 'Items Library', icon: Briefcase, tooltip: 'Every item, equipment and artifact' },
+      { id: 'skills_library', label: 'Skills Library', icon: Zap, tooltip: 'Skills, abilities and skill tree' },
+      { id: 'stats_library', label: 'Stats Library', icon: BarChart2, tooltip: 'Stat registry and analysis' },
+      { id: 'voice_studio', label: 'Voice Studio', icon: Mic, tooltip: 'Tune and assign writing voices' },
+    ],
+  },
+  {
+    id: 'explore',
+    label: 'Explore',
     icon: Map,
-    tooltip: 'Visual maps and timelines to track your story world',
-    items: [
-      { id: 'plottimeline', label: 'Plot Timeline', icon: TrendingUp, tooltip: 'Visual plot beat tracker with chapter assignments' },
-      { id: 'mindmap', label: 'Story Mind Map', icon: Brain, tooltip: 'Visual web showing how all story elements connect', shortcut: 'Alt+8' },
-      { id: 'ukmap', label: 'UK Map', icon: Activity, tooltip: 'Geographic visualization of locations and events', shortcut: 'Alt+9' },
-      { id: 'timeline', label: 'Master Timeline', icon: Clock, tooltip: 'Chronological view of all story events', shortcut: 'Alt+0' },
-      { id: 'characterarcs', label: 'Character Arcs', icon: TrendingUp, tooltip: 'Track character development and emotional journeys' },
-      { id: 'skilltree', label: 'Skill Tree Visual', icon: GitBranch, tooltip: 'Interactive skill tree visualization' },
-    ]
+    tabs: [
+      { id: 'atlas', label: 'Atlas', icon: Compass, tooltip: 'Regional map, floorplans and places' },
+      { id: 'world', label: 'World', icon: BookMarked, tooltip: 'Wiki, lore, factions and mind map' },
+      { id: 'plot_timeline', label: 'Plot & Timeline', icon: GitBranch, tooltip: 'Beats, threads, quests, timeline and narrative graph' },
+    ],
   },
   {
-    id: 'analysis',
-    label: 'Analysis',
-    icon: Shield,
-    tooltip: 'Analyze relationships, plot threads, and check for inconsistencies',
-    items: [
-      { id: 'relationships', label: 'Relationships', icon: Link, tooltip: 'Track character relationships and dynamics' },
-      { id: 'plotthreads', label: 'Plot & Quests', icon: BookMarked, tooltip: 'Plot threads, quest tracking, and story beats' },
-      { id: 'worldlore', label: 'World / Lore', icon: Shield, tooltip: 'World-building lore entries and factions' },
-      { id: 'consistency', label: 'Story Analysis', icon: Shield, tooltip: 'Consistency checking and plot thread tracking' },
-      { id: 'wiki', label: 'Wiki Manager', icon: BookMarked, tooltip: 'Comprehensive encyclopedia of your story world' },
-      { id: 'storymap', label: 'Story Map', icon: Network, tooltip: 'Narrative structure and scene connections' },
-    ]
+    id: 'settings',
+    label: 'Settings',
+    icon: SettingsIcon,
+    tabs: [{ id: 'settings', label: 'Settings', icon: SettingsIcon, tooltip: 'Keys, providers, data and preferences' }],
   },
-  {
-    id: 'loomwright',
-    label: 'Loomwright',
-    icon: Feather,
-    tooltip: 'Loomwright redesign surface — Canon Weaver, Voice Studio, Atlas AI, Language Workbench, Interview Mode, and more',
-    items: [
-      { id: 'lw_weaver',    label: 'Canon Weaver',      icon: Sparkles,    tooltip: 'Capture an idea and let AI propose changes across world, cast, plot, timeline, atlas, and chapters' },
-      { id: 'lw_voice',     label: 'Voice Studio',      icon: Mic,         tooltip: 'Tune, A/B compare, teach, and assign writing voice profiles to chapters' },
-      { id: 'lw_atlas',     label: 'Atlas AI',          icon: Compass,     tooltip: 'Regional map and floorplan view with chapter-linked places' },
-      { id: 'lw_language',  label: 'Language Workbench',icon: FileText,    tooltip: 'Inline check, thesaurus, rewrite, and readability metrics for your manuscript' },
-      { id: 'lw_interview', label: 'Interview Mode',    icon: Users,       tooltip: 'Solo and group chat with your characters, with prompt deck and saved quotes' },
-      { id: 'lw_spark',     label: 'Daily Spark',       icon: Zap,         tooltip: 'Typed editorial sparks: contradictions, voice drift, discoveries, what-ifs' },
-      { id: 'lw_brief',     label: 'Morning Brief',     icon: Coffee,      tooltip: 'Start-of-day summary of noticed/worry/delight items' },
-      { id: 'lw_providers', label: 'AI Providers',      icon: Settings,    tooltip: 'Provider list, per-task routing, usage and budget' },
-      { id: 'lw_mobile',    label: 'Mobile Preview',    icon: Smartphone,  tooltip: 'Mobile shells: Today, Writing, Capture (Capacitor-ready)' },
-      { id: 'lw_docs',      label: 'Design & Docs',     icon: BookOpenCheck, tooltip: 'IA spec, diagrams, aesthetic directions, enhancement roadmap' },
-    ]
-  },
-  {
-    id: 'tools',
-    label: 'Tools',
-    icon: Settings,
-    tooltip: 'Search, backup, sync, and application settings',
-    items: [
-      { id: 'storysetup', label: 'Story Setup', icon: Sparkles, tooltip: 'Edit your story profile, style, characters, and world rules from the wizard' },
-      { id: 'search', label: 'Search & Filter', icon: Search, tooltip: 'Find anything across your entire story world', shortcut: 'Ctrl+K' },
-      { id: 'versioncontrol', label: 'Version Control', icon: History, tooltip: 'Track changes and restore previous versions' },
-      { id: 'backup', label: 'Backup Manager', icon: Archive, tooltip: 'Export and import your story data' },
-      { id: 'sync', label: 'Sync Manager', icon: RefreshCw, tooltip: 'Synchronize across devices (requires cloud setup)' },
-      { id: 'settings', label: 'Settings', icon: Settings, tooltip: 'API keys, preferences, and application configuration' },
-    ]
-  }
 ];
 
-/**
- * NavigationSidebar - Grouped, collapsible navigation with contextual tooltips
- */
-const NavigationSidebar = ({ activeTab, setActiveTab, isCollapsed = false }) => {
-  const [expandedGroups, setExpandedGroups] = useState(() => {
-    // Load from localStorage or default to all expanded
-    const saved = localStorage.getItem('nav_expanded_groups');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return NAVIGATION_CONFIG.map(g => g.id);
-      }
-    }
-    return NAVIGATION_CONFIG.map(g => g.id);
+export default function NavigationSidebar({ activeTab, setActiveTab, isCollapsed = false }) {
+  const t = useTheme();
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      const raw = localStorage.getItem('lw_nav_expanded');
+      if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return NAV.map((g) => g.id);
   });
 
-  // Recently accessed items (last 5-10)
-  const [recentlyAccessed, setRecentlyAccessed] = useState(() => {
-    const saved = localStorage.getItem('nav_recently_accessed');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // Clean up any corrupted data - remove icon property if it exists (can't be serialized)
-        return parsed.map(item => {
-          const { icon, ...cleanItem } = item;
-          return cleanItem;
-        });
-      } catch {
-        // If parsing fails, clear corrupted data
-        localStorage.removeItem('nav_recently_accessed');
-        return [];
-      }
-    }
-    return [];
-  });
-
-  // Track tab access
   useEffect(() => {
-    if (activeTab && activeTab !== 'home') {
-      const item = {
-        id: activeTab,
-        label: NAVIGATION_CONFIG
-          .flatMap(g => g.items)
-          .find(i => i.id === activeTab)?.label || activeTab,
-        // Don't store icon - it can't be serialized. We'll look it up when rendering.
-        accessedAt: Date.now()
-      };
-      
-      setRecentlyAccessed(prev => {
-        const filtered = prev.filter(i => i.id !== item.id);
-        const updated = [item, ...filtered].slice(0, 10); // Keep last 10
-        localStorage.setItem('nav_recently_accessed', JSON.stringify(updated));
-        return updated;
-      });
-    }
-  }, [activeTab]);
+    try { localStorage.setItem('lw_nav_expanded', JSON.stringify(expanded)); } catch { /* ignore */ }
+  }, [expanded]);
 
-  // Save expanded state to localStorage
-  useEffect(() => {
-    localStorage.setItem('nav_expanded_groups', JSON.stringify(expandedGroups));
-  }, [expandedGroups]);
-
-  const toggleGroup = (groupId) => {
-    setExpandedGroups(prev => 
-      prev.includes(groupId) 
-        ? prev.filter(id => id !== groupId)
-        : [...prev, groupId]
-    );
-  };
-
-  // Find which group contains the active tab
-  const activeGroup = NAVIGATION_CONFIG.find(group => 
-    group.items.some(item => item.id === activeTab)
-  );
+  const toggle = (id) =>
+    setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   return (
-    <nav className={`
-      bg-gradient-to-b from-[#0f1419] to-[#1a1f26] 
-      border-r border-emerald-500/10 
-      flex flex-col overflow-y-auto overflow-x-hidden
-      transition-all duration-300
-      ${isCollapsed ? 'w-16' : 'w-64'}
-    `}>
-      {/* Logo/Brand */}
-      <div className="p-4 border-b border-amber-500/20">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow shadow-amber-500/30">
-            <span className="text-slate-900 font-serif font-bold text-sm leading-none">L<span className="text-[10px] opacity-70">w</span></span>
+    <nav
+      style={{
+        width: isCollapsed ? 64 : 224,
+        flexShrink: 0,
+        background: t.sidebar,
+        borderRight: `1px solid ${t.rule}`,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        transition: 'width 180ms ease',
+      }}
+    >
+      {/* Brand */}
+      <div style={{ padding: '16px 14px', borderBottom: `1px solid ${t.rule}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div
+            style={{
+              width: 30, height: 30, borderRadius: t.radius,
+              background: t.accent, color: t.onAccent,
+              display: 'grid', placeItems: 'center',
+              fontFamily: t.display, fontWeight: 600, fontSize: 14, lineHeight: 1,
+            }}
+          >
+            Lw
           </div>
           {!isCollapsed && (
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-serif font-semibold text-white tracking-wide">Loomwright</div>
-              <div className="text-[9px] text-amber-400 font-mono tracking-[0.18em] uppercase">Story Studio</div>
+            <div>
+              <div style={{ fontFamily: t.display, fontSize: 15, fontWeight: 500, color: t.ink, lineHeight: 1 }}>Loomwright</div>
+              <div style={{ fontFamily: t.mono, fontSize: 9, color: t.accent, letterSpacing: 0.18, textTransform: 'uppercase', marginTop: 4 }}>
+                Story Studio
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Home Button */}
-      <div className="px-2 py-2">
-        <Tooltip
-          content="Your story dashboard - current chapter, progress, and quick actions"
-          shortcut="Alt+H"
-          position="right"
-        >
-          <button
-            onClick={() => setActiveTab('home')}
-            className={`
-              w-full flex items-center gap-2 px-3 py-2.5 rounded-lg
-              transition-all duration-200
-              ${activeTab === 'home'
-                ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30 shadow-lg shadow-amber-500/10'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
-              }
-            `}
-          >
-            <Home className={`w-5 h-5 shrink-0 ${activeTab === 'home' ? 'animate-pulse' : ''}`} />
-            {!isCollapsed && (
-              <>
-                <span className="flex-1 text-left text-sm font-bold">
-                  Home
-                </span>
-                {activeTab === 'home' && (
-                  <div className="w-2 h-2 rounded-full bg-amber-400" />
-                )}
-              </>
-            )}
-          </button>
-        </Tooltip>
-      </div>
+      {/* Nav */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
+        {NAV.map((group) => {
+          const Icon = group.icon;
+          const hasActive = group.tabs.some((tab) => tab.id === activeTab);
+          const isExpanded = expanded.includes(group.id);
+          const single = group.tabs.length === 1;
 
-      {/* Divider */}
-      <div className="mx-4 border-b border-slate-700/50 mb-2" />
-
-      {/* Navigation Groups */}
-      <div className="flex-1 py-2 space-y-1">
-        {NAVIGATION_CONFIG.map(group => {
-          const isExpanded = expandedGroups.includes(group.id);
-          const hasActiveItem = group.items.some(item => item.id === activeTab);
-          const GroupIcon = group.icon;
+          if (single) {
+            const tab = group.tabs[0];
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={group.id}
+                onClick={() => setActiveTab(tab.id)}
+                title={tab.tooltip}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  width: '100%',
+                  padding: '8px 10px',
+                  margin: '2px 0',
+                  background: active ? t.accentSoft : 'transparent',
+                  color: active ? t.ink : t.ink2,
+                  border: `1px solid ${active ? t.accent : 'transparent'}`,
+                  borderRadius: t.radius,
+                  cursor: 'pointer',
+                  fontFamily: t.font, fontSize: 12, textAlign: 'left',
+                }}
+              >
+                <Icon size={15} />
+                {!isCollapsed && <span style={{ fontWeight: active ? 600 : 500 }}>{group.label}</span>}
+              </button>
+            );
+          }
 
           return (
-            <div key={group.id} className="px-2">
-              {/* Group Header */}
-              <Tooltip
-                content={group.tooltip}
-                position="right"
-                disabled={!isCollapsed}
+            <div key={group.id} style={{ marginTop: 6 }}>
+              <button
+                onClick={() => toggle(group.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  width: '100%',
+                  padding: '6px 10px',
+                  background: 'transparent',
+                  color: hasActive ? t.accent : t.ink3,
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: t.mono, fontSize: 9, letterSpacing: 0.18, textTransform: 'uppercase',
+                  textAlign: 'left',
+                }}
               >
-                <button
-                  onClick={() => toggleGroup(group.id)}
-                  className={`
-                    w-full flex items-center gap-2 px-3 py-2 rounded-lg
-                    transition-all duration-200
-                    ${hasActiveItem 
-                      ? 'bg-emerald-500/10 text-emerald-400' 
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                    }
-                  `}
-                >
-                  <GroupIcon className="w-4 h-4 shrink-0" />
-                  {!isCollapsed && (
-                    <>
-                      <span className="flex-1 text-left text-xs font-semibold uppercase tracking-wider">
-                        {group.label}
-                      </span>
-                      <ChevronRight 
-                        className={`w-4 h-4 transition-transform duration-200 ${
-                          isExpanded ? 'rotate-90' : ''
-                        }`} 
-                      />
-                    </>
-                  )}
-                </button>
-              </Tooltip>
-
-              {/* Group Items */}
+                <Icon size={13} />
+                {!isCollapsed && (
+                  <>
+                    <span style={{ flex: 1 }}>{group.label}</span>
+                    <ChevronRight
+                      size={12}
+                      style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 120ms' }}
+                    />
+                  </>
+                )}
+              </button>
               {(isExpanded || isCollapsed) && (
-                <div className={`
-                  mt-1 space-y-0.5
-                  ${isCollapsed ? '' : 'ml-2 pl-2 border-l border-slate-700/50'}
-                `}>
-                  {group.items.map(item => {
-                    const ItemIcon = item.icon;
-                    const isActive = activeTab === item.id;
-
+                <div style={{ paddingLeft: isCollapsed ? 0 : 8, marginTop: 2 }}>
+                  {group.tabs.map((tab) => {
+                    const TabIcon = tab.icon;
+                    const active = activeTab === tab.id ||
+                      (tab.id === 'cast' && activeTab === 'cast_detail');
                     return (
-                      <Tooltip
-                        key={item.id}
-                        content={item.tooltip}
-                        shortcut={item.shortcut}
-                        position="right"
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        title={tab.tooltip}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          width: '100%',
+                          padding: '7px 10px',
+                          margin: '1px 0',
+                          background: active ? t.accentSoft : 'transparent',
+                          color: active ? t.ink : t.ink2,
+                          border: `1px solid ${active ? t.accent : 'transparent'}`,
+                          borderRadius: t.radius,
+                          cursor: 'pointer',
+                          fontFamily: t.font, fontSize: 12, textAlign: 'left',
+                        }}
+                        onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = t.paper; }}
+                        onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
                       >
-                        <button
-                          onClick={() => setActiveTab(item.id)}
-                          className={`
-                            w-full flex items-center gap-2 px-3 py-2 rounded-lg
-                            transition-all duration-200
-                            ${isActive 
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/10' 
-                              : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
-                            }
-                          `}
-                        >
-                          <ItemIcon className={`w-4 h-4 shrink-0 ${isActive ? 'animate-pulse' : ''}`} />
-                          {!isCollapsed && (
-                            <span className="flex-1 text-left text-sm font-medium truncate">
-                              {item.label}
-                            </span>
-                          )}
-                          {isActive && !isCollapsed && (
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                          )}
-                        </button>
-                      </Tooltip>
+                        <TabIcon size={14} />
+                        {!isCollapsed && <span style={{ fontWeight: active ? 600 : 500 }}>{tab.label}</span>}
+                      </button>
                     );
                   })}
                 </div>
@@ -325,63 +210,9 @@ const NavigationSidebar = ({ activeTab, setActiveTab, isCollapsed = false }) => 
         })}
       </div>
 
-      {/* Recently Accessed Section */}
-      {!isCollapsed && recentlyAccessed.length > 0 && (
-        <>
-          <div className="mx-4 border-b border-slate-700/50 my-2" />
-          <div className="px-2 py-2">
-            <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
-              Recently Accessed
-            </div>
-            <div className="space-y-0.5">
-              {recentlyAccessed.slice(0, 5).map(item => {
-                // Look up icon from NAVIGATION_CONFIG since it can't be stored in localStorage
-                const navItem = NAVIGATION_CONFIG
-                  .flatMap(g => g.items)
-                  .find(i => i.id === item.id);
-                // Ensure ItemIcon is a valid React component, not an object
-                const ItemIcon = (navItem?.icon && typeof navItem.icon === 'function') 
-                  ? navItem.icon 
-                  : FileText;
-                const isActive = activeTab === item.id;
-                return (
-                  <Tooltip
-                    key={item.id}
-                    content={`Last accessed ${new Date(item.accessedAt).toLocaleTimeString()}`}
-                    position="right"
-                  >
-                    <button
-                      onClick={() => setActiveTab(item.id)}
-                      className={`
-                        w-full flex items-center gap-2 px-3 py-1.5 rounded-lg
-                        transition-all duration-200 text-xs
-                        ${isActive 
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                          : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 border border-transparent'
-                        }
-                      `}
-                    >
-                      <ItemIcon className="w-3.5 h-3.5 shrink-0" />
-                      <span className="flex-1 text-left truncate">{item.label}</span>
-                    </button>
-                  </Tooltip>
-                );
-              })}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Footer */}
-      {!isCollapsed && (
-        <div className="p-4 border-t border-emerald-500/10">
-          <div className="text-[10px] text-slate-500 text-center font-mono">
-            v22.0 // OMNISCIENCE
-          </div>
-        </div>
-      )}
+      <div style={{ padding: '10px 14px', borderTop: `1px solid ${t.rule}`, fontFamily: t.mono, fontSize: 9, color: t.ink3, textAlign: 'center', letterSpacing: 0.14 }}>
+        LOOMWRIGHT · v1.0
+      </div>
     </nav>
   );
-};
-
-export default NavigationSidebar;
+}

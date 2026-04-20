@@ -450,6 +450,8 @@ function ProvidersBody({ worldState, setWorldState, scoped = false }) {
   );
 }
 
+export { ProvidersBody };
+
 export default function AIProviders(props) {
   return <ProvidersBody {...props} />;
 }

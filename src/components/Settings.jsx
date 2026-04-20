@@ -163,7 +163,7 @@ const Settings = ({ onClose, onRerunOnboarding }) => {
       const url = URL.createObjectURL(dataBlob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `claimwise-export-${Date.now()}.json`;
+      link.download = `loomwright-export-${Date.now()}.json`;
       link.click();
       URL.revokeObjectURL(url);
       alert('Data exported successfully!');

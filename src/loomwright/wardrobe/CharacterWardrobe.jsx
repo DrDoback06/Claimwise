@@ -674,6 +674,8 @@ function WardrobeBody({
   );
 }
 
+export { WardrobeBody };
+
 export default function CharacterWardrobe(props) {
   return (
     <LoomwrightShell scrollable>

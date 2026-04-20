@@ -220,6 +220,8 @@ function BriefBody({ worldState }) {
   );
 }
 
+export { BriefBody };
+
 export default function MorningBrief(props) {
   return (
     <LoomwrightShell>

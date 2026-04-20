@@ -511,6 +511,8 @@ function InterviewBody({ worldState, setWorldState }) {
   );
 }
 
+export { InterviewBody };
+
 export default function InterviewMode(props) {
   return (
     <LoomwrightShell scrollable={false}>

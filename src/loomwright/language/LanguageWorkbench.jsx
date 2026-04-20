@@ -583,6 +583,8 @@ function WorkbenchBody({ worldState }) {
   );
 }
 
+export { WorkbenchBody };
+
 export default function LanguageWorkbench(props) {
   return (
     <LoomwrightShell scrollable={false}>

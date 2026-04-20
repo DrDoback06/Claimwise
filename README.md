@@ -1,70 +1,64 @@
-# Getting Started with Create React App
+# Loomwright
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Loomwright is the standalone Story Studio app — an AI-assisted writing,
+tracking and world-building environment.
 
-## Available Scripts
+It supersedes the earlier Claimwise prototype: every useful capability
+from that prototype has been absorbed into a single coherent Loomwright
+surface. There is no Claimwise UI in this project.
 
-In the project directory, you can run:
+## Information architecture
 
-### `npm start`
+The app has five verb-based nav groups:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **Today** — Morning Brief + Daily Spark feed.
+- **Write** — `WritingCanvasPro` editor (centre) + Canon Weaver rail (right).
+  Toolbar drawers for Story Analysis (consistency + structural), Language
+  Workbench (grammar / rewrite / readability), Interview Mode (character
+  dialogue), Speed Reader, and manuscript import.
+- **Track** — `Cast` list → per-character detail with Profile / Arc /
+  Progression / Timeline / Relationships / Voice / Dialogue / Plot /
+  Wardrobe / Stats / Skills tabs. Plus Items Library, Skills Library,
+  Stats Library and Voice Studio.
+- **Explore** — Atlas (regional map, floorplans, places), World
+  (wiki / lore / factions / mind map), Plot & Timeline (beats,
+  threads & quests, chronological timeline, narrative graph).
+- **Settings** — Keys & AI providers, Data & history (backup / sync /
+  version control), Preferences, Story Setup (re-run the wizard).
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Stack
 
-### `npm test`
+Same as the original prototype so there is no migration risk:
+Create React App + Tailwind + IndexedDB (`loomwright/theme` on top).
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Local development
 
-### `npm run build`
+```bash
+npm install
+npm start
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Build
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```bash
+npm run build
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+The output in `build/` is a static PWA bundle suitable for Netlify, Vercel
+or any static host. `netlify.toml` is already configured.
 
-### `npm run eject`
+## Onboarding
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+On first launch a Loomwright-chromed onboarding wizard collects your
+story premise, characters, world rules, plot beats, style preferences
+and AI provider keys. Its output is written straight into the shared
+IndexedDB stores that every Loomwright surface reads from, so Today /
+Cast / Atlas / World / Plot & Timeline all populate the moment the
+wizard finishes.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Data storage
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+All user data lives client-side in IndexedDB (database name
+`ClaimwiseOmniscience`, kept for backward compatibility with existing
+installs). Nothing is sent anywhere unless you configure cloud sync
+or an AI provider key in Settings.

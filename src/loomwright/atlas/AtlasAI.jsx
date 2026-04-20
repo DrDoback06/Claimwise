@@ -700,3 +700,6 @@ export default function AtlasAI(props) {
     </LoomwrightShell>
   );
 }
+
+export { AtlasBody };
+

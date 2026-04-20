@@ -168,7 +168,7 @@ const SyncManager = ({ onClose, onDataImported }) => {
                     <p className="text-sm text-yellow-400 mb-2">Data too large for QR code. Use file export instead.</p>
                     <a
                       href={qrCodeData.url}
-                      download="claimwise-backup.json"
+                      download="loomwright-backup.json"
                       className="text-blue-400 hover:text-blue-300 underline"
                     >
                       Download backup file
