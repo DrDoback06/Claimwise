@@ -17,10 +17,12 @@ import WorkspaceMiniBrief from './_shared/WorkspaceMiniBrief';
 import EnhancedItemVault from '../components/EnhancedItemVault';
 import NewItemModal from './items/NewItemModal';
 import InventoryMatrix from './cast/InventoryMatrix';
+import ProvenancePane from './items/ProvenancePane';
 
 const TABS = [
-  { id: 'vault',  label: 'Vault' },
-  { id: 'matrix', label: 'Life matrix' },
+  { id: 'vault',      label: 'Vault' },
+  { id: 'matrix',     label: 'Life matrix' },
+  { id: 'provenance', label: 'Provenance' },
 ];
 
 export default function ItemsLibraryPage({ worldState, setWorldState }) {
@@ -51,6 +53,9 @@ export default function ItemsLibraryPage({ worldState, setWorldState }) {
         )}
         {tab === 'matrix' && (
           <InventoryMatrix worldState={worldState} setWorldState={setWorldState} />
+        )}
+        {tab === 'provenance' && (
+          <ProvenancePane worldState={worldState} />
         )}
       </PageBody>
 

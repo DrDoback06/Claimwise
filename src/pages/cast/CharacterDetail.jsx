@@ -7,8 +7,9 @@
  *   Dialogue • Plot • Wardrobe • Stats • Skills.
  */
 
-import React, { useMemo, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Check, Trash2, Edit3, Quote } from 'lucide-react';
+import db from '../../services/database';
 import { useTheme } from '../../loomwright/theme';
 import { Page, PageHeader, PageBody, TabStrip } from '../_shared/PageChrome';
 
@@ -125,6 +126,226 @@ function VoicePane({ character }) {
   );
 }
 
+/**
+ * BiographyChaptersPane - shows the per-chapter biography snippets that the
+ * chapterApplyService / extraction appended to `actor.biographyChapters[]`.
+ * Each entry can be accepted (promoted into the main `biography`), edited
+ * inline, or discarded. Keeps the hand-written `biography` separate so auto
+ * suggestions never clobber an author-curated bio.
+ */
+function BiographyChaptersPane({ character }) {
+  const t = useTheme();
+  const initial = Array.isArray(character?.biographyChapters) ? character.biographyChapters : [];
+  const [entries, setEntries] = useState(initial);
+  const [editingId, setEditingId] = useState(null);
+  const [editedText, setEditedText] = useState('');
+  useEffect(() => {
+    setEntries(Array.isArray(character?.biographyChapters) ? character.biographyChapters : []);
+  }, [character?.id, character?.biographyChapters]);
+
+  if (entries.length === 0) return null;
+
+  const persist = async (next) => {
+    setEntries(next);
+    try {
+      await db.update('actors', { ...character, biographyChapters: next });
+    } catch (err) {
+      console.warn('[Bio chapters] persist failed:', err?.message || err);
+    }
+  };
+
+  const accept = async (entry) => {
+    const base = (character.biography || '').trim();
+    const merged = base ? `${base}\n\n${entry.text}` : entry.text;
+    const next = entries.filter((e) => e.id !== entry.id);
+    try {
+      await db.update('actors', { ...character, biography: merged, biographyChapters: next });
+      setEntries(next);
+    } catch (err) { console.warn('[Bio chapters] accept failed:', err?.message || err); }
+  };
+
+  const discard = (id) => persist(entries.filter((e) => e.id !== id));
+
+  const saveEdit = async () => {
+    const id = editingId;
+    if (!id) return;
+    const next = entries.map((e) => (e.id === id ? { ...e, text: editedText } : e));
+    await persist(next);
+    setEditingId(null);
+    setEditedText('');
+  };
+
+  return (
+    <div
+      style={{
+        padding: 14,
+        background: t.paper,
+        border: `1px solid ${t.rule}`,
+        borderRadius: t.radius,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div style={{ fontFamily: t.display, fontSize: 14, color: t.ink, fontWeight: 500 }}>
+          Auto-biography (per chapter)
+        </div>
+        <div
+          style={{
+            fontFamily: t.mono, fontSize: 9, color: t.ink3,
+            letterSpacing: 0.14, textTransform: 'uppercase',
+          }}
+        >
+          {entries.length} pending
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {entries.map((e) => (
+          <div
+            key={e.id}
+            style={{
+              padding: 10,
+              border: `1px solid ${t.rule}`,
+              borderRadius: t.radius,
+              background: t.bg,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontFamily: t.mono, fontSize: 9, color: t.ink3,
+                letterSpacing: 0.14, textTransform: 'uppercase', marginBottom: 6,
+              }}
+            >
+              Ch.{e.chapterNumber || e.chapterId || '?'}
+              <span style={{ flex: 1 }} />
+              {editingId === e.id ? (
+                <>
+                  <button type="button" onClick={saveEdit} style={pillBtn(t, true)}>Save</button>
+                  <button type="button" onClick={() => { setEditingId(null); setEditedText(''); }} style={pillBtn(t)}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    title="Edit this auto-generated snippet"
+                    onClick={() => { setEditingId(e.id); setEditedText(e.text || ''); }}
+                    style={pillBtn(t)}
+                  >
+                    <Edit3 size={10} /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    title="Merge this snippet into the main biography"
+                    onClick={() => accept(e)}
+                    style={pillBtn(t, true)}
+                  >
+                    <Check size={10} /> Accept
+                  </button>
+                  <button
+                    type="button"
+                    title="Discard"
+                    onClick={() => discard(e.id)}
+                    style={pillBtn(t)}
+                  >
+                    <Trash2 size={10} /> Discard
+                  </button>
+                </>
+              )}
+            </div>
+            {editingId === e.id ? (
+              <textarea
+                value={editedText}
+                onChange={(ev) => setEditedText(ev.target.value)}
+                rows={4}
+                style={{
+                  width: '100%',
+                  background: t.paper,
+                  color: t.ink,
+                  border: `1px solid ${t.rule}`,
+                  borderRadius: t.radius,
+                  padding: 8,
+                  fontFamily: t.serif || t.sans,
+                  fontSize: 13, lineHeight: 1.5,
+                }}
+              />
+            ) : (
+              <div style={{ color: t.ink, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                {e.text}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * QuotedLinesPane - shows lines the chapter-apply pipeline captured for this
+ * character as `actor.snapshots[chapterId].quotedLines`. A fast way to see
+ * their voice in action without digging through every chapter by hand.
+ */
+function QuotedLinesPane({ character }) {
+  const t = useTheme();
+  const lines = useMemo(() => {
+    const snaps = character?.snapshots || {};
+    const out = [];
+    Object.entries(snaps).forEach(([chapterId, snap]) => {
+      const qs = Array.isArray(snap?.quotedLines) ? snap.quotedLines : [];
+      qs.forEach((text, i) => out.push({ chapterId, text, key: `${chapterId}_${i}` }));
+    });
+    return out;
+  }, [character?.snapshots]);
+  if (lines.length === 0) return null;
+  return (
+    <div
+      style={{
+        padding: 14,
+        background: t.paper,
+        border: `1px solid ${t.rule}`,
+        borderRadius: t.radius,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <Quote size={12} style={{ color: t.accent }} />
+        <div style={{ fontFamily: t.display, fontSize: 14, color: t.ink, fontWeight: 500 }}>
+          Quoted lines captured from chapters
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {lines.slice(0, 40).map((q) => (
+          <div key={q.key} style={{ display: 'flex', gap: 8 }}>
+            <div
+              style={{
+                fontFamily: t.mono, fontSize: 9, color: t.ink3,
+                letterSpacing: 0.14, textTransform: 'uppercase',
+                minWidth: 48,
+              }}
+            >
+              Ch.{q.chapterId}
+            </div>
+            <div style={{ color: t.ink, fontSize: 13, lineHeight: 1.5, fontStyle: 'italic' }}>
+              &ldquo;{q.text}&rdquo;
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function pillBtn(t, active = false) {
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '3px 8px',
+    background: active ? t.accentSoft : 'transparent',
+    color: active ? t.ink : t.ink2,
+    border: `1px solid ${active ? t.accent : t.rule}`,
+    borderRadius: t.radius,
+    cursor: 'pointer',
+    fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+  };
+}
+
 function SkillsPane({ character, worldState }) {
   const t = useTheme();
   const skills = worldState?.skillBank || [];
@@ -185,10 +406,6 @@ export default function CharacterDetailPage({
   onNavigateToCharacter,
 }) {
   const t = useTheme();
-  const [tab, setTab] = useState('profile');
-  const [relView, setRelView] = useState('hub');
-  const [showPull, setShowPull] = useState(false);
-
   const actors = worldState?.actors || [];
   const books = worldState?.books || {};
   const itemBank = worldState?.itemBank || [];
@@ -198,6 +415,15 @@ export default function CharacterDetailPage({
     () => actors.find((a) => a.id === selectedCharacterId) || actors[0] || null,
     [actors, selectedCharacterId]
   );
+
+  // When chapter extraction has dropped things onto the character the
+  // "Journey" tab is the most interesting landing view (auto-assigned
+  // items show up there). Fall back to Profile when nothing has been
+  // auto-populated yet.
+  const hasInventory = Array.isArray(character?.inventory) && character.inventory.length > 0;
+  const [tab, setTab] = useState(hasInventory ? 'journey' : 'profile');
+  const [relView, setRelView] = useState('hub');
+  const [showPull, setShowPull] = useState(false);
 
   if (!character) {
     return (
@@ -216,6 +442,7 @@ export default function CharacterDetailPage({
         return (
           <div style={{ display: 'grid', gap: 12 }}>
             <EnhancedCharacterCard character={character} worldState={worldState} isSelected />
+            <BiographyChaptersPane character={character} />
             <CharacterStorylineCards character={character} books={books} />
             <CallbacksAndMemoriesDisplay character={character} books={books} />
           </div>
@@ -318,7 +545,15 @@ export default function CharacterDetailPage({
                 }}
               >
                 <RelationshipNetworkGraph
-                  relationships={character?.relationships || []}
+                  relationships={(worldState?.relationships || [])
+                    .filter((r) => r.actorA === character.id || r.actorB === character.id)
+                    .map((r) => ({
+                      id: r.id,
+                      from: r.actorA,
+                      to: r.actorB,
+                      kind: r.kind,
+                      strength: r.strength,
+                    }))}
                   characters={actors}
                   onNodeClick={(id) => onNavigateToCharacter?.(id)}
                 />
@@ -337,6 +572,7 @@ export default function CharacterDetailPage({
       case 'dialogue':
         return (
           <div style={{ display: 'grid', gap: 12 }}>
+            <QuotedLinesPane character={character} />
             <DialogueExtract
               character={character}
               worldState={worldState}

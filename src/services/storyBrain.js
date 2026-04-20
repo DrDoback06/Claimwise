@@ -899,6 +899,111 @@ ${customPrompt ? `CUSTOM INSTRUCTIONS:\n${customPrompt}\n` : ''}${additionalInst
   }
 
   /**
+   * Assemble a rich per-character context snippet suitable for injection
+   * into dialogue / scene / interview prompts. Pulls every field that
+   * chapterApplyService auto-populates (biographyChapters, activeSkills,
+   * inventory, relationships, quotedLines from snapshots) plus the
+   * handcrafted `biography` / `voiceProfile`.
+   *
+   * Callers can concat the returned string into their `additionalInstructions`
+   * when calling storyBrain.generateProse so the model actually uses the
+   * richer character profile the extraction pipeline now builds up.
+   */
+  async buildCharacterContext(actorId, opts = {}) {
+    const { maxChars = 2400 } = opts;
+    try {
+      const actor = await db.get('actors', actorId);
+      if (!actor) return '';
+
+      const parts = [`=== CHARACTER: ${actor.name} ===`];
+      if (actor.role) parts.push(`Role: ${actor.role}`);
+      if (actor.class) parts.push(`Class: ${actor.class}`);
+      if (actor.nicknames?.length) parts.push(`Also known as: ${actor.nicknames.join(', ')}`);
+      if (actor.biography) parts.push(`Biography: ${actor.biography}`);
+
+      // Auto biography snippets the author hasn't accepted yet still give
+      // the model hints about recent chapters.
+      if (Array.isArray(actor.biographyChapters) && actor.biographyChapters.length > 0) {
+        parts.push('Recent chapter notes:');
+        actor.biographyChapters.slice(-5).forEach((e) => {
+          parts.push(`  [Ch.${e.chapterNumber || e.chapterId}] ${e.text}`);
+        });
+      }
+
+      if (actor.baseStats) {
+        const stats = Object.entries(actor.baseStats)
+          .filter(([, v]) => typeof v === 'number')
+          .map(([k, v]) => `${k}:${v}`).join(' ');
+        if (stats) parts.push(`Stats: ${stats}`);
+      }
+
+      // Resolve active skills against the bank for readable names.
+      if (Array.isArray(actor.activeSkills) && actor.activeSkills.length > 0) {
+        try {
+          const bank = await db.getAll('skillBank');
+          const resolved = actor.activeSkills.map((s) => {
+            const id = typeof s === 'string' ? s : s?.id;
+            const val = typeof s === 'object' ? (s?.val || 1) : 1;
+            const skill = bank.find((b) => b.id === id);
+            return skill ? `${skill.name}(lv${val})` : null;
+          }).filter(Boolean);
+          if (resolved.length) parts.push(`Skills: ${resolved.join(', ')}`);
+        } catch (_e) { /* noop */ }
+      }
+
+      if (Array.isArray(actor.inventory) && actor.inventory.length > 0) {
+        try {
+          const bank = await db.getAll('itemBank');
+          const resolved = actor.inventory.map((entry) => {
+            const id = typeof entry === 'string' ? entry : entry?.id;
+            const item = bank.find((b) => b.id === id);
+            return item?.name || null;
+          }).filter(Boolean);
+          if (resolved.length) parts.push(`Inventory: ${resolved.slice(0, 12).join(', ')}`);
+        } catch (_e) { /* noop */ }
+      }
+
+      // Pull relationships that touch this actor.
+      try {
+        const rels = await db.getAll('relationships');
+        const mine = rels.filter((r) => r.actorA === actor.id || r.actorB === actor.id).slice(0, 8);
+        if (mine.length) {
+          const actors = await db.getAll('actors');
+          const lines = mine.map((r) => {
+            const other = r.actorA === actor.id ? r.actorB : r.actorA;
+            const name = actors.find((a) => a.id === other)?.name || other;
+            return `  ${name}${r.kind ? ` (${r.kind})` : ''}${r.lastChange ? ` - ${r.lastChange}` : ''}`;
+          });
+          parts.push('Relationships:'); parts.push(...lines);
+        }
+      } catch (_e) { /* noop */ }
+
+      // Sample quoted lines so the model can echo the character's cadence.
+      const quotes = [];
+      Object.entries(actor.snapshots || {}).forEach(([chapterId, snap]) => {
+        (Array.isArray(snap?.quotedLines) ? snap.quotedLines : []).forEach((text) => {
+          quotes.push({ chapterId, text });
+        });
+      });
+      if (quotes.length) {
+        parts.push('Quoted lines (voice reference):');
+        quotes.slice(-6).forEach((q) => parts.push(`  "${q.text}"`));
+      }
+
+      if (actor.voiceProfile) {
+        parts.push(`Voice sliders: ${JSON.stringify(actor.voiceProfile.sliders || actor.voiceProfile)}`);
+      }
+
+      let out = parts.join('\n');
+      if (out.length > maxChars) out = out.slice(0, maxChars) + '\n[...character context truncated...]';
+      return out;
+    } catch (err) {
+      console.warn('[storyBrain] buildCharacterContext failed:', err?.message || err);
+      return '';
+    }
+  }
+
+  /**
    * Clear all caches (call when story data changes).
    */
   clearCache() {

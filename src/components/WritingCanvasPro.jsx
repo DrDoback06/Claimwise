@@ -593,19 +593,52 @@ const WritingCanvasPro = ({
       setLastSaved(new Date());
       onSave?.();
       
-      // Extract events using Master Timeline's proven method
+      // Extract events using Master Timeline's proven method, then run the
+      // new chapterApplyService so high-confidence skills / items / stats /
+      // relationships / appearances land directly on the actor records
+      // before the wizard opens. Low-confidence rows still fall through to
+      // the wizard review queue.
       if (finalContent && finalContent.trim().length >= 50) {
         try {
-          const events = await chapterDataExtractionService.extractEventsFromChapter(
-            finalContent,
-            currentChapter.id,
-            currentBook.id,
-            actors || []
-          );
+          const [events, entities, characterData] = await Promise.all([
+            chapterDataExtractionService.extractEventsFromChapter(
+              finalContent, currentChapter.id, currentBook.id, actors || []
+            ),
+            chapterDataExtractionService.extractEntitiesFromChapter(
+              finalContent, currentChapter.id, currentBook.id
+            ).catch((e) => { console.warn('[save] entity extraction failed:', e); return null; }),
+            chapterDataExtractionService.extractCharacterDataFromChapter(
+              finalContent, currentChapter.id, currentBook.id, actors || []
+            ).catch((e) => { console.warn('[save] character-data extraction failed:', e); return null; }),
+          ]);
 
           // Save events to timelineEvents table
           for (const event of events) {
             await dataConsistencyService.addTimelineEventSafe(event);
+          }
+
+          // Auto-assign to actors. Threshold = 0.8 means only confident rows
+          // touch the actor records; anything below that still shows up in
+          // the wizard for manual review.
+          try {
+            const { applyExtractionToActors } = await import('../services/chapterApplyService');
+            const applyStats = await applyExtractionToActors({
+              entities,
+              characterData,
+              chapterId: currentChapter.id,
+              bookId: currentBook.id,
+              chapterNumber: currentChapter.number || currentChapter.id,
+              confidenceThreshold: 0.8,
+            });
+            if (applyStats.skillsAssigned || applyStats.itemsAssigned
+                || applyStats.statChangesApplied || applyStats.relationshipsUpserted) {
+              toastService.success(
+                `Auto-assigned: ${applyStats.skillsAssigned} skills, ${applyStats.itemsAssigned} items, `
+                + `${applyStats.statChangesApplied} stat changes, ${applyStats.relationshipsUpserted} relationships.`
+              );
+            }
+          } catch (applyErr) {
+            console.warn('[WritingCanvasPro] chapterApplyService failed:', applyErr);
           }
 
           // Show Entity Extraction Wizard (mandatory)

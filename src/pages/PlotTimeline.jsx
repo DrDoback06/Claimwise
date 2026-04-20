@@ -23,12 +23,11 @@ import PlotBeatTracker from '../components/PlotBeatTracker';
 import PlotThreadTracker from '../components/PlotThreadTracker';
 import PlotQuestTab from '../components/PlotQuestTab';
 import MasterTimeline from '../components/MasterTimeline';
-import PlotTimelineLegacy from '../components/PlotTimeline';
 import StoryMap from '../components/StoryMap';
 import ConsistencyChecker from '../components/ConsistencyChecker';
 import CharacterArcMapper from '../components/CharacterArcMapper';
 import toastService from '../services/toastService';
-import { dispatchWeaver } from '../loomwright/weaver/weaverAI';
+import { runSweep } from '../loomwright/weaver/weaverAI';
 import { DanglingThreads, ThreadDensityHeatmap, ParallelPOV, PlantPayoff } from './plot/PlotInsights';
 
 const TABS = [
@@ -50,11 +49,7 @@ export default function PlotTimelinePage({ worldState, bookTab, currentChapter, 
   const skillBank = worldState?.skillBank || [];
   const books = Object.values(worldState?.books || {});
 
-  const runSweep = () => {
-    dispatchWeaver({ mode: 'sweep', autoRun: true });
-    toastService.info?.('Canon Weaver continuity sweep queued.');
-    onNavigate?.('write');
-  };
+  const sweep = () => runSweep({ scope: 'plot', onNavigate, toast: toastService });
 
   return (
     <Page>
@@ -66,7 +61,7 @@ export default function PlotTimelinePage({ worldState, bookTab, currentChapter, 
         actions={
           <button
             type="button"
-            onClick={runSweep}
+            onClick={sweep}
             title="Ask Canon Weaver to sweep the book for plot drift"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -137,10 +132,7 @@ export default function PlotTimelinePage({ worldState, bookTab, currentChapter, 
           <CharacterArcMapper actors={actors} books={books} onClose={() => {}} />
         )}
         {tab === 'chrono' && (
-          <div style={{ display: 'grid', gap: 14 }}>
-            <MasterTimeline books={books} actors={actors} onClose={() => {}} />
-            <PlotTimelineLegacy books={books} onClose={() => {}} />
-          </div>
+          <MasterTimeline books={books} actors={actors} onClose={() => {}} />
         )}
         {tab === 'graph' && (
           <div style={{ height: '100%', minHeight: 540 }}>

@@ -126,7 +126,9 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
     });
   }, [currentRegion, setWorldState]);
 
-  const exportPNG = () => {
+  // SVG export preserves vector fidelity; PNG export rasterises it through a
+  // canvas so the user can drop the map into docs, beta-reader packs etc.
+  const exportSVG = () => {
     const svg = document.querySelector('.lw-atlas-region svg');
     if (!svg) { toastService.warn?.('No region map to export.'); return; }
     const serializer = new XMLSerializer();
@@ -139,6 +141,49 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
     a.click();
     URL.revokeObjectURL(url);
     toastService.success?.('Atlas SVG exported.');
+  };
+
+  const exportPNG = async () => {
+    const svg = document.querySelector('.lw-atlas-region svg');
+    if (!svg) { toastService.warn?.('No region map to export.'); return; }
+    try {
+      const serializer = new XMLSerializer();
+      const src = serializer.serializeToString(svg);
+      const svgBlob = new Blob([src], { type: 'image/svg+xml;charset=utf-8' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = svgUrl;
+      });
+      // Render at 2x for retina-friendly exports.
+      const bbox = svg.getBoundingClientRect();
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.floor(bbox.width * scale));
+      canvas.height = Math.max(1, Math.floor(bbox.height * scale));
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#f6f2e8';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(svgUrl);
+      canvas.toBlob((blob) => {
+        if (!blob) { toastService.warn?.('PNG export failed.'); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `loomwright-atlas-${Date.now()}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toastService.success?.('Atlas PNG exported.');
+      }, 'image/png');
+    } catch (err) {
+      console.warn('[Atlas] PNG export failed:', err);
+      toastService.warn?.('PNG export failed - falling back to SVG.');
+      exportSVG();
+    }
   };
 
   const addProposalToPlaces = async (proposal) => {
@@ -253,6 +298,53 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
     toastService.info?.(next.locked ? `${existing.name} pin locked.` : `${existing.name} pin unlocked.`);
   };
 
+  // Generic patch used by the inspector's rename / note / kind / manual-coord
+  // edits. Keeps worldState + IndexedDB in sync.
+  const patchPlace = async (id, patch) => {
+    const existing = places.find((p) => p.id === id);
+    if (!existing) return;
+    const next = { ...existing, ...patch, updatedAt: Date.now() };
+    try { await db.update('places', next); } catch (e) { /* noop */ }
+    setWorldState?.((prev) => ({
+      ...(prev || {}),
+      places: (prev?.places || []).map((p) => (p.id === id ? next : p)),
+    }));
+  };
+
+  const deletePlace = async (id) => {
+    const existing = places.find((p) => p.id === id);
+    if (!existing) return;
+    try { await db.delete('places', id); } catch (e) { /* noop */ }
+    setWorldState?.((prev) => ({
+      ...(prev || {}),
+      places: (prev?.places || []).filter((p) => p.id !== id),
+    }));
+    if (selectedId === id) setSelectedId(places[0]?.id || null);
+    toastService.success?.(`Deleted ${existing.name}.`);
+  };
+
+  const duplicatePlace = async (id) => {
+    const existing = places.find((p) => p.id === id);
+    if (!existing) return;
+    const copy = {
+      ...existing,
+      id: `place_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: `${existing.name} (copy)`,
+      x: (typeof existing.x === 'number' ? existing.x : 50) + 3,
+      y: (typeof existing.y === 'number' ? existing.y : 50) + 3,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      locked: false,
+    };
+    try { await db.add('places', copy); } catch (e) { /* noop */ }
+    setWorldState?.((prev) => ({
+      ...(prev || {}),
+      places: [...(prev?.places || []), copy],
+    }));
+    setSelectedId(copy.id);
+    toastService.success?.(`Duplicated as ${copy.name}.`);
+  };
+
   const commitPolygon = (poly) => {
     const nextLand = [...((currentRegion?.landMasses) || []), poly];
     commitRegionPatch(currentRegionId, { landMasses: nextLand });
@@ -322,6 +414,7 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
             minWidth: 260,
           }}
         >
+          <TabButton label="World" active={tab === 'world'} onClick={() => setTab('world')} />
           <TabButton label="Region" active={tab === 'region'} onClick={() => setTab('region')} />
           <TabButton label="Floorplan" active={tab === 'floor'} onClick={() => setTab('floor')} />
           <TabButton label="Generate" active={tab === 'generate'} onClick={() => setTab('generate')} />
@@ -452,6 +545,34 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
 
             <div style={{ width: 1, height: 18, background: t.rule }} />
 
+            {/* Chapter scrubber - dims pins whose chapterIds are beyond the
+                selected chapter so the author can see how the world grew
+                chapter by chapter. */}
+            {maxChapter > 1 && (
+              <label
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '4px 8px',
+                  background: t.paper2,
+                  border: `1px solid ${t.rule}`, borderRadius: t.radius,
+                  fontFamily: t.mono, fontSize: 10,
+                  letterSpacing: 0.12, textTransform: 'uppercase',
+                  color: t.ink2,
+                }}
+                title="Limit the atlas to places seen by this chapter"
+              >
+                Ch.{currentChapter}
+                <input
+                  type="range"
+                  min={1}
+                  max={maxChapter}
+                  value={currentChapter}
+                  onChange={(e) => setCurrentChapter(Number(e.target.value))}
+                  style={{ width: 80 }}
+                />
+              </label>
+            )}
+
             {/* Fog-of-war */}
             <button
               type="button"
@@ -498,7 +619,8 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
             <button
               type="button"
               onClick={exportPNG}
-              aria-label="Export atlas as SVG"
+              aria-label="Export atlas as PNG"
+              title="Export the current region as a PNG"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '5px 10px',
@@ -508,7 +630,23 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
                 letterSpacing: 0.12, textTransform: 'uppercase', cursor: 'pointer',
               }}
             >
-              <Download size={11} /> Export
+              <Download size={11} /> PNG
+            </button>
+            <button
+              type="button"
+              onClick={exportSVG}
+              aria-label="Export atlas as SVG"
+              title="Export the current region as a vector SVG"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '5px 10px',
+                background: 'transparent', color: t.ink2,
+                border: `1px solid ${t.rule}`, borderRadius: t.radius,
+                fontFamily: t.mono, fontSize: 10,
+                letterSpacing: 0.12, textTransform: 'uppercase', cursor: 'pointer',
+              }}
+            >
+              <Download size={11} /> SVG
             </button>
           </>
         )}
@@ -526,19 +664,32 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
       </header>
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <PlacesSidebar
-          places={regionPlaces}
-          proposals={proposals}
-          selectedId={selectedId}
-          onSelect={(id) => { setSelectedId(id); setSelectedProposal(null); }}
-          onSelectProposal={(pr) => { setSelectedProposal(pr); setSelectedId(null); }}
-          showProposals={showProposals}
-          onToggleProposals={setShowProposals}
-          onAddProposal={addProposalToPlaces}
-          onMergeProposal={mergeProposal}
-          onDismissProposal={dismissProposal}
-        />
+        {/* World tab shows a full-width cards grid; sidebar is only useful
+            inside a single region. */}
+        {tab !== 'world' && (
+          <PlacesSidebar
+            places={regionPlaces}
+            proposals={proposals}
+            selectedId={selectedId}
+            onSelect={(id) => { setSelectedId(id); setSelectedProposal(null); }}
+            onSelectProposal={(pr) => { setSelectedProposal(pr); setSelectedId(null); }}
+            showProposals={showProposals}
+            onToggleProposals={setShowProposals}
+            onAddProposal={addProposalToPlaces}
+            onMergeProposal={mergeProposal}
+            onDismissProposal={dismissProposal}
+          />
+        )}
         <main style={{ flex: 1, display: 'flex', minHeight: 0, minWidth: 0 }}>
+          {tab === 'world' && (
+            <WorldView
+              regions={regions}
+              places={places}
+              currentChapter={currentChapter}
+              onEnterRegion={(id) => { setCurrentRegionId(id); setTab('region'); }}
+              onCreateRegion={createRegion}
+            />
+          )}
           {tab === 'region' && (
             <>
               <div className="lw-atlas-region" style={{ flex: 1, display: 'flex', minWidth: 0 }}>
@@ -577,6 +728,9 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
                 onOpenFloorplan={openFloorplan}
                 onNavigate={onNavigate}
                 onToggleLock={toggleLock}
+                onPatchPlace={patchPlace}
+                onDeletePlace={deletePlace}
+                onDuplicatePlace={duplicatePlace}
               />
             </>
           )}
@@ -615,6 +769,142 @@ export default function AtlasBuilder({ worldState, setWorldState, onNavigate }) 
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * WorldView - phase 2 top-level multi-region canvas. Shows every region as
+ * a card; double-click (or the "Open" button) zooms into the classic Region
+ * editor. Region images double as card thumbnails when uploaded; otherwise
+ * the pane shows a generated mini grid of its places.
+ *
+ * This is intentionally a thin pass - cross-region routes and world-level
+ * timeline scrubbing are queued for a follow-up commit, but having the
+ * panel here means the user can already manage a dozen regions without
+ * living in the picker dropdown.
+ */
+function WorldView({ regions, places, currentChapter, onEnterRegion, onCreateRegion }) {
+  const t = useTheme();
+  const byRegion = useMemo(() => {
+    const out = new Map();
+    (regions || []).forEach((r) => out.set(r.id, []));
+    (places || []).forEach((p) => {
+      if (!p.regionId) return;
+      if (!out.has(p.regionId)) out.set(p.regionId, []);
+      out.get(p.regionId).push(p);
+    });
+    return out;
+  }, [regions, places]);
+
+  return (
+    <div style={{ flex: 1, overflow: 'auto', padding: 20, background: t.bg }}>
+      <div
+        style={{
+          fontFamily: t.mono, fontSize: 10, color: t.accent,
+          letterSpacing: 0.18, textTransform: 'uppercase', marginBottom: 10,
+        }}
+      >
+        World map &middot; Ch.{currentChapter}
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gap: 14,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+        }}
+      >
+        {(regions || []).map((r) => {
+          const rp = byRegion.get(r.id) || [];
+          return (
+            <button
+              key={r.id}
+              type="button"
+              onDoubleClick={() => onEnterRegion?.(r.id)}
+              onClick={() => onEnterRegion?.(r.id)}
+              style={{
+                position: 'relative',
+                display: 'flex', flexDirection: 'column',
+                minHeight: 160,
+                padding: 0,
+                background: t.paper,
+                border: `1px solid ${t.rule}`,
+                borderRadius: t.radius,
+                overflow: 'hidden',
+                cursor: 'pointer',
+                color: t.ink,
+                textAlign: 'left',
+              }}
+            >
+              {r.referenceImage ? (
+                <img
+                  src={r.referenceImage}
+                  alt={r.name}
+                  style={{
+                    width: '100%', height: 100,
+                    objectFit: 'cover', opacity: 0.8,
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: '100%', height: 100,
+                    background: `linear-gradient(135deg, ${t.paper2}, ${t.bg})`,
+                    position: 'relative',
+                  }}
+                >
+                  {/* Tiny scatter of dots so regions without a reference
+                      image still look like maps. */}
+                  {rp.slice(0, 12).map((p, i) => (
+                    <span
+                      key={p.id || i}
+                      style={{
+                        position: 'absolute',
+                        left: `${typeof p.x === 'number' ? Math.min(96, Math.max(2, p.x)) : (i * 7) % 96}%`,
+                        top: `${typeof p.y === 'number' ? Math.min(92, Math.max(2, p.y * 1.35)) : 10 + ((i * 13) % 80)}%`,
+                        width: 4, height: 4, borderRadius: 999,
+                        background: kindColor(p.kind),
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+              <div style={{ padding: 12 }}>
+                <div style={{ fontFamily: t.display, fontSize: 15, fontWeight: 500, color: t.ink }}>
+                  {r.name}
+                </div>
+                <div
+                  style={{
+                    fontFamily: t.mono, fontSize: 9, color: t.ink3,
+                    letterSpacing: 0.14, textTransform: 'uppercase',
+                    marginTop: 4,
+                  }}
+                >
+                  {rp.length} place{rp.length === 1 ? '' : 's'}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+        {/* Add-region tile. */}
+        <button
+          type="button"
+          onClick={onCreateRegion}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            minHeight: 160,
+            background: 'transparent',
+            border: `1px dashed ${t.rule}`,
+            borderRadius: t.radius,
+            color: t.ink2,
+            cursor: 'pointer',
+            fontFamily: t.mono, fontSize: 11,
+            letterSpacing: 0.14, textTransform: 'uppercase',
+          }}
+        >
+          <Plus size={14} style={{ marginRight: 6 }} /> Add region
+        </button>
+      </div>
     </div>
   );
 }

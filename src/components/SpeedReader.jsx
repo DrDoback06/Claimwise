@@ -160,15 +160,24 @@ const SpeedReader = ({ worldState }) => {
     }
   }, [selectedBook, selectedChapter, sourceType]);
 
-  // Tokenize text into words
+  // Tokenize text into words.
+  //
+  // Previous implementation split on a CAPTURING punctuation group, which
+  // preserved standalone `.`, `,`, `!`, `?` etc. as their own RSVP words -
+  // the user rightly flagged that they flash through as blank-looking
+  // single-character tokens. This version:
+  //   1. Splits on whitespace only.
+  //   2. Strips leading/trailing punctuation from each token so "good." -> "good".
+  //   3. Drops any token that ends up empty or punctuation-only.
+  //   4. Keeps intra-word apostrophes and hyphens intact ("don't", "half-built").
   const tokenizeText = (text) => {
     if (!text) return [];
-    
-    // Split by whitespace and punctuation, preserving punctuation
+    // Edge-only punctuation stripper. Unicode dashes + curly quotes included.
+    const PUNCT_EDGE = /^[\s.,!?;:\u2014\u2013\u2026\-"'`\u2018\u2019\u201C\u201D()[\]{}]+|[\s.,!?;:\u2014\u2013\u2026\-"'`\u2018\u2019\u201C\u201D()[\]{}]+$/g;
     return text
-      .split(/(\s+|[.,!?;:—–\-"''()\[\]{}]+)/)
-      .filter(token => token.trim().length > 0)
-      .map(token => token.trim());
+      .split(/\s+/)
+      .map((token) => token.replace(PUNCT_EDGE, ''))
+      .filter((token) => token.length > 0 && /\p{L}|\p{N}/u.test(token));
   };
 
   // Handle document upload

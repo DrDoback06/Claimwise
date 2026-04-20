@@ -18,13 +18,16 @@ import WorkspaceMiniBrief from './_shared/WorkspaceMiniBrief';
 import WikiManager from '../components/WikiManager';
 import WorldLoreTab from '../components/WorldLoreTab';
 import StoryMindMap from '../components/StoryMindMap';
+import ConsistencyChecker from '../components/ConsistencyChecker';
 import toastService from '../services/toastService';
-import { dispatchWeaver } from '../loomwright/weaver/weaverAI';
+import { runSweep } from '../loomwright/weaver/weaverAI';
 
+// ProvenancePane was deleted from World in the consolidation pass - it now
+// lives on the Items Library page where item chains belong. Audit is now a
+// real in-line ConsistencyChecker (the old CTA-wrapper only queued a sweep).
 const TABS = [
   { id: 'wiki',       label: 'Wiki'        },
   { id: 'factions',   label: 'Factions'    },
-  { id: 'provenance', label: 'Provenance'  },
   { id: 'mindmap',    label: 'Mind map'    },
   { id: 'audit',      label: 'Lore audit'  },
 ];
@@ -396,138 +399,53 @@ function FactionsPane({ worldState }) {
   );
 }
 
-function ProvenancePane({ worldState }) {
-  const t = useTheme();
-  const items = (worldState?.itemBank || []).filter((i) => i.track && Object.keys(i.track).length);
-  if (items.length === 0) {
-    return (
-      <div
-        style={{
-          padding: 30,
-          textAlign: 'center',
-          color: t.ink3,
-          fontSize: 12,
-          border: `1px dashed ${t.rule}`,
-          borderRadius: t.radius,
-          background: t.paper,
-        }}
-      >
-        No artefacts with chapter tracks yet. Canon Weaver logs provenance when
-        items change hands &mdash; accept an edit like &ldquo;Mira hands the
-        sword to Tobyn&rdquo; to see it appear here.
-      </div>
-    );
-  }
-  const actors = worldState?.actors || [];
-  return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      {items.map((it) => {
-        const chapters = Object.keys(it.track).map(Number).sort((a, b) => a - b);
-        return (
-          <div
-            key={it.id}
-            style={{
-              padding: 14,
-              background: t.paper,
-              border: `1px solid ${t.rule}`,
-              borderRadius: t.radius,
-            }}
-          >
-            <div
-              style={{
-                fontFamily: t.display, fontSize: 16, color: t.ink,
-                marginBottom: 8,
-              }}
-            >
-              {it.name}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              {chapters.map((ch, i) => {
-                const rec = it.track[ch];
-                const a = actors.find((x) => x.id === rec.actorId);
-                return (
-                  <React.Fragment key={ch}>
-                    {i > 0 && <span style={{ color: t.ink3 }}>&rarr;</span>}
-                    <div
-                      style={{
-                        padding: '4px 8px',
-                        background: t.bg,
-                        border: `1px solid ${t.rule}`,
-                        borderRadius: t.radius,
-                        fontSize: 11,
-                        color: t.ink,
-                      }}
-                      title={rec.note || ''}
-                    >
-                      <span style={{ color: t.accent, fontFamily: t.mono, marginRight: 4 }}>ch.{ch}</span>
-                      {a?.name || 'Unknown'}
-                      {rec.slotId && rec.slotId !== 'pack' && (
-                        <span style={{ color: t.ink3, marginLeft: 4 }}>&middot; {rec.slotId}</span>
-                      )}
-                    </div>
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// ProvenancePane now lives at `pages/items/ProvenancePane.jsx` - Items
+// Library is the right home for an item-chain-of-custody view.
 
-function AuditPane({ onNavigate }) {
+function AuditHeader({ onNavigate }) {
   const t = useTheme();
-  const runSweep = () => {
-    dispatchWeaver({ mode: 'sweep', autoRun: true });
-    toastService.info?.('Canon Weaver continuity sweep queued. Opening the Writer\'s Room.');
-    onNavigate?.('write');
-  };
+  const sweep = () => runSweep({ scope: 'world', onNavigate, toast: toastService });
   return (
     <div
       style={{
-        padding: 24,
+        padding: 14,
         background: t.paper,
         border: `1px solid ${t.rule}`,
         borderRadius: t.radius,
         display: 'flex',
-        flexDirection: 'column',
+        alignItems: 'center',
         gap: 12,
-        maxWidth: 680,
       }}
     >
-      <div
-        style={{
-          fontFamily: t.mono, fontSize: 10, color: t.accent,
-          letterSpacing: 0.18, textTransform: 'uppercase',
-        }}
-      >
-        Lore consistency auditor
-      </div>
-      <div style={{ fontFamily: t.display, fontSize: 22, color: t.ink, lineHeight: 1.25 }}>
-        Spot drift before a reader does.
-      </div>
-      <div style={{ fontSize: 13, color: t.ink2, lineHeight: 1.55 }}>
-        Runs a Canon Weaver continuity sweep across every chapter, character, and
-        world-entry. Flags things like &ldquo;Harrow is 3 days east in ch.4 but 5
-        days east in ch.11&rdquo; and proposes one-click reconciles. Nothing is
-        changed without your accept.
+      <div style={{ flex: 1 }}>
+        <div
+          style={{
+            fontFamily: t.mono, fontSize: 10, color: t.accent,
+            letterSpacing: 0.18, textTransform: 'uppercase', marginBottom: 4,
+          }}
+        >
+          Lore consistency auditor
+        </div>
+        <div style={{ fontSize: 13, color: t.ink2, lineHeight: 1.55 }}>
+          The live checker below scans your canon for drift. For a deeper AI-assisted
+          pass run a Canon Weaver continuity sweep &mdash; it proposes one-click
+          reconciles without committing anything automatically.
+        </div>
       </div>
       <button
         type="button"
-        onClick={runSweep}
+        onClick={sweep}
         style={{
-          alignSelf: 'flex-start',
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          padding: '8px 14px',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '6px 12px',
           background: t.accent, color: t.onAccent,
           border: `1px solid ${t.accent}`, borderRadius: t.radius,
-          fontFamily: t.mono, fontSize: 11,
+          fontFamily: t.mono, fontSize: 10,
           letterSpacing: 0.14, textTransform: 'uppercase',
           cursor: 'pointer',
         }}
       >
-        <Wand2 size={13} /> Run continuity sweep
+        <Wand2 size={11} /> Run sweep
       </button>
     </div>
   );
@@ -561,9 +479,6 @@ export default function WorldPage({ worldState, setWorldState, onNavigate }) {
         {tab === 'factions' && (
           <FactionsPane worldState={worldState} />
         )}
-        {tab === 'provenance' && (
-          <ProvenancePane worldState={worldState} />
-        )}
         {tab === 'mindmap' && (
           <div style={{ height: '100%', minHeight: 540 }}>
             <StoryMindMap
@@ -576,7 +491,16 @@ export default function WorldPage({ worldState, setWorldState, onNavigate }) {
           </div>
         )}
         {tab === 'audit' && (
-          <AuditPane onNavigate={onNavigate} />
+          <div style={{ display: 'grid', gap: 14 }}>
+            <AuditHeader onNavigate={onNavigate} />
+            <ConsistencyChecker
+              actors={actors}
+              books={worldState?.books || {}}
+              itemBank={items}
+              skillBank={skills}
+              onClose={() => {}}
+            />
+          </div>
         )}
       </PageBody>
     </Page>

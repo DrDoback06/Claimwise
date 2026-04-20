@@ -284,5 +284,25 @@ const weaverBus = (() => {
 export function dispatchWeaver(payload) { weaverBus.dispatch(payload); }
 export function subscribeWeaver(fn) { return weaverBus.subscribe(fn); }
 
+/**
+ * runSweep - one canonical way for any surface (World audit, Plot header,
+ * future Atlas audits) to queue a Canon Weaver continuity sweep with a
+ * scope hint. Keeps the toast + navigation behaviour in a single place so
+ * the UX stays consistent.
+ *
+ * scope: 'world' | 'plot' | 'atlas' | 'all' (default 'all')
+ */
+export function runSweep({ scope = 'all', onNavigate, toast } = {}) {
+  dispatchWeaver({
+    mode: 'sweep',
+    autoRun: true,
+    entity: { scope },
+  });
+  if (toast) {
+    toast.info?.(`Canon Weaver ${scope === 'all' ? 'continuity' : scope} sweep queued.`);
+  }
+  onNavigate?.('write');
+}
+
 // eslint-disable-next-line import/no-anonymous-default-export
-export default { proposeWeave, SYSTEM_COLORS, SYSTEM_ICON, dispatchWeaver, subscribeWeaver };
+export default { proposeWeave, SYSTEM_COLORS, SYSTEM_ICON, dispatchWeaver, subscribeWeaver, runSweep };

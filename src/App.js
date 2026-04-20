@@ -188,10 +188,12 @@ function AppInner() {
           const [
             actors, itemBank, skillBank, booksArr, plotThreads,
             places, floorplans, locations, factions, loreEntries, regions,
+            relationships, timelineEvents,
           ] = await Promise.all([
             safe('actors'), safe('itemBank'), safe('skillBank'), safe('books'),
             safe('plotThreads'), safe('places'), safe('floorplans'),
             safe('locations'), safe('factions'), safe('loreEntries'), safe('regions'),
+            safe('relationships'), safe('timelineEvents'),
           ]);
           const booksObj = {};
           booksArr.forEach((b) => { booksObj[b.id] = b; });
@@ -200,6 +202,7 @@ function AppInner() {
               ...(prev || {}),
               actors, itemBank, skillBank, books: booksObj, plotThreads,
               places, floorplans, locations, factions, loreEntries, regions,
+              relationships, timelineEvents,
             };
             undoRedoManager.saveState?.(next, 'Legacy db write');
             setUndoRedoInfo(undoRedoManager.getHistoryInfo?.() || { canUndo: false, canRedo: false });
@@ -244,6 +247,9 @@ function AppInner() {
         factions: await safeGetAll('factions'),
         loreEntries: await safeGetAll('loreEntries'),
         regions: await safeGetAll('regions'),
+        relationships: await safeGetAll('relationships'),
+        locations: await safeGetAll('locations'),
+        timelineEvents: await safeGetAll('timelineEvents'),
       };
       // Convert books array to object (legacy shape used by many widgets).
       const booksObj = {};

@@ -49,8 +49,15 @@ export default function GenerateView({ worldState, onNavigate, onReturnToRegion 
   const [text, setText] = useState('');
   const [kind, setKind] = useState('place');
   const [sending, setSending] = useState(false);
+  // Extra constraints the user can feed to the generator. Optional; empty
+  // fields are just omitted from the final prompt.
+  const [nearPlaceId, setNearPlaceId] = useState('');
+  const [distance, setDistance] = useState('');
+  const [tone, setTone] = useState('');
+  const [tags, setTags] = useState('');
 
   const constraints = useMemo(() => buildConstraintPreview(worldState), [worldState]);
+  const allPlaces = worldState?.places || [];
 
   const send = async () => {
     if (!text.trim()) {
@@ -58,6 +65,13 @@ export default function GenerateView({ worldState, onNavigate, onReturnToRegion 
       return;
     }
     setSending(true);
+    const nearPlace = allPlaces.find((p) => p.id === nearPlaceId);
+    const extraConstraints = [];
+    if (nearPlace) extraConstraints.push(`- Near: ${nearPlace.name}${nearPlace.kind ? ` (${nearPlace.kind})` : ''}.`);
+    if (distance) extraConstraints.push(`- Distance from anchor: approximately ${distance}.`);
+    if (tone) extraConstraints.push(`- Tone / atmosphere: ${tone}.`);
+    if (tags.trim()) extraConstraints.push(`- Tags: ${tags.trim()}.`);
+
     const prompt = [
       `Propose a new atlas entry.`,
       `Requested kind: ${kind}.`,
@@ -65,6 +79,7 @@ export default function GenerateView({ worldState, onNavigate, onReturnToRegion 
       ``,
       `Constraints from the current atlas:`,
       ...constraints.map((c) => `- ${c}`),
+      ...(extraConstraints.length ? ['', 'User-supplied constraints:', ...extraConstraints] : []),
       ``,
       `Return it as an atlas proposal: { name, kind, note, suggestedChapterIds, geometry?, roads? }. For floorplan/battlefield add a rooms array of { name, w, h, note }.`,
     ].join('\n');
@@ -165,6 +180,75 @@ export default function GenerateView({ worldState, onNavigate, onReturnToRegion 
             outline: 'none',
           }}
         />
+
+        {/* Extra constraints. Each field is optional; populated fields get
+            appended to the generator prompt as bullets. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+              Anchor near
+            </span>
+            <select
+              value={nearPlaceId}
+              onChange={(e) => setNearPlaceId(e.target.value)}
+              style={{
+                background: t.bg, color: t.ink,
+                border: `1px solid ${t.rule}`, borderRadius: t.radius,
+                padding: '6px 8px', fontFamily: t.mono, fontSize: 11,
+              }}
+            >
+              <option value="">&mdash; no anchor &mdash;</option>
+              {allPlaces.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.kind || 'place'})</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+              Distance (optional)
+            </span>
+            <input
+              value={distance}
+              onChange={(e) => setDistance(e.target.value)}
+              placeholder="e.g. 3 miles north"
+              style={{
+                background: t.bg, color: t.ink,
+                border: `1px solid ${t.rule}`, borderRadius: t.radius,
+                padding: '6px 8px', fontFamily: t.mono, fontSize: 11,
+              }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+              Tone
+            </span>
+            <input
+              value={tone}
+              onChange={(e) => setTone(e.target.value)}
+              placeholder="e.g. oppressive, ancient, prosperous"
+              style={{
+                background: t.bg, color: t.ink,
+                border: `1px solid ${t.rule}`, borderRadius: t.radius,
+                padding: '6px 8px', fontFamily: t.mono, fontSize: 11,
+              }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+              Tags
+            </span>
+            <input
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="coastal, ruins, cursed"
+              style={{
+                background: t.bg, color: t.ink,
+                border: `1px solid ${t.rule}`, borderRadius: t.radius,
+                padding: '6px 8px', fontFamily: t.mono, fontSize: 11,
+              }}
+            />
+          </label>
+        </div>
 
         <div
           style={{

@@ -31,7 +31,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Eye, Feather, MessageSquare, Focus, FileText, Gauge,
-  Sparkles, Mic2, AlignLeft, BookOpen,
+  Sparkles, Mic2, AlignLeft, BookOpen, MoreHorizontal,
 } from 'lucide-react';
 import { useTheme } from '../loomwright/theme';
 import useIsMobile from '../loomwright/useIsMobile';
@@ -85,6 +85,216 @@ function CompactButton({ icon: Icon, label, active, onClick, title, hotkey }) {
     >
       <Icon size={11} /> {label}
     </button>
+  );
+}
+
+/**
+ * WriterPaneToolbar - sticky sub-toolbar inside the Writer column.
+ *
+ * Carries chapter-level tools (Sprint timer, Book, Read, Language,
+ * Interview, Voice, Import). Uses a ResizeObserver to collapse labels to
+ * icon-only as the Writer pane narrows, and to fold the least-used
+ * actions (Voice / Import / Language) into an overflow menu below a
+ * hard-breakpoint. Prevents the header-wrap mess the global top bar used
+ * to have when the user dragged the pane split to 50/50.
+ */
+function WriterPaneToolbar({ openDrawer, setOpenDrawer }) {
+  const t = useTheme();
+  const hostRef = useRef(null);
+  const [width, setWidth] = useState(9999);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (!hostRef.current || typeof ResizeObserver === 'undefined') return;
+    const el = hostRef.current;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Close the overflow menu on any outside click.
+  useEffect(() => {
+    if (!overflowOpen) return undefined;
+    const onDoc = (ev) => {
+      if (overflowBtnRef.current && !overflowBtnRef.current.contains(ev.target)) {
+        setOverflowOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onDoc);
+    return () => window.removeEventListener('mousedown', onDoc);
+  }, [overflowOpen]);
+
+  // Breakpoints:
+  //  - >= 520px : full labels, all buttons inline
+  //  - 360-520  : icon-only for the 6 action buttons (Sprint keeps its label)
+  //  - < 360    : icon-only AND overflow Voice/Import/Language into a menu
+  const labels = width >= 520;
+  const overflow = width < 360;
+
+  const toggle = (key) => setOpenDrawer(openDrawer === key ? null : key);
+
+  // Helper that renders a CompactButton or an icon-only variant depending
+  // on breakpoint. Keeps a consistent tooltip in both modes.
+  const Btn = ({ icon: Icon, label, active, onClick, title, hotkey }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      title={hotkey ? `${title || label} (${hotkey})` : title || label}
+      aria-label={title || label}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: labels ? 5 : 0,
+        padding: labels ? '5px 9px' : '5px 7px',
+        background: active ? t.accentSoft : 'transparent',
+        color: active ? t.ink : t.ink2,
+        border: `1px solid ${active ? t.accent : t.rule}`,
+        borderRadius: t.radius,
+        cursor: 'pointer',
+        fontFamily: t.mono,
+        fontSize: 10,
+        letterSpacing: 0.12,
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <Icon size={11} />{labels ? ` ${label}` : null}
+    </button>
+  );
+
+  // Overflow menu entries (only rendered when width < 360). Keeps the
+  // primary action row short enough to fit without wrapping.
+  const overflowItems = overflow
+    ? [
+      { key: 'language-full', icon: Feather, label: 'Language', title: 'Grammar, rewrite, readability and thesaurus' },
+      { key: 'voice', icon: Mic2, label: 'Voice', title: 'Voice profile + drift monitor' },
+      { key: 'import', icon: FileText, label: 'Import', title: 'Import manuscript' },
+    ]
+    : [];
+
+  return (
+    <div
+      ref={hostRef}
+      className="lw-z-toolbar"
+      style={{
+        position: 'sticky', top: 0,
+        padding: '6px 10px',
+        display: 'flex', alignItems: 'center', gap: 6,
+        // IMPORTANT: no flex-wrap. We collapse to icons first, then to an
+        // overflow menu, rather than dropping buttons onto a second row.
+        flexWrap: 'nowrap',
+        background: t.sidebar,
+        borderBottom: `1px solid ${t.rule}`,
+        flexShrink: 0,
+        overflow: 'hidden',
+        minWidth: 0,
+      }}
+    >
+      <WriterSprintTimer />
+      <div style={{ flex: 1, minWidth: 0 }} />
+      <Btn
+        icon={BookOpen} label="Book"
+        active={openDrawer === 'book-reader'}
+        onClick={() => toggle('book-reader')}
+        title="Open a read-through of every chapter in the current book"
+      />
+      <Btn
+        icon={Eye} label="Read"
+        active={openDrawer === 'reader'}
+        onClick={() => toggle('reader')}
+        title="Speed reader takeover of the current chapter"
+        hotkey="Ctrl+Shift+R"
+      />
+      {!overflow && (
+        <Btn
+          icon={Feather} label="Language"
+          active={openDrawer === 'language-full'}
+          onClick={() => toggle('language-full')}
+          title="Grammar, rewrite, readability and thesaurus"
+          hotkey="Ctrl+Shift+L"
+        />
+      )}
+      <Btn
+        icon={MessageSquare} label="Interview"
+        active={openDrawer === 'interview'}
+        onClick={() => toggle('interview')}
+        title="Chat with a character in voice; turn any line into a scene seed"
+        hotkey="Ctrl+Shift+I"
+      />
+      {!overflow && (
+        <Btn
+          icon={Mic2} label="Voice"
+          active={openDrawer === 'voice'}
+          onClick={() => toggle('voice')}
+          title="Voice profile + drift monitor"
+        />
+      )}
+      {!overflow && (
+        <Btn
+          icon={FileText} label="Import"
+          active={openDrawer === 'import'}
+          onClick={() => toggle('import')}
+          title="Import manuscript"
+        />
+      )}
+      {overflow && (
+        <div ref={overflowBtnRef} style={{ position: 'relative' }}>
+          <Btn
+            icon={MoreHorizontal}
+            label="More"
+            active={overflowOpen}
+            onClick={() => setOverflowOpen((v) => !v)}
+            title="More writer tools"
+          />
+          {overflowOpen && (
+            <div
+              className="lw-z-popover"
+              style={{
+                position: 'absolute', top: 'calc(100% + 4px)', right: 0,
+                minWidth: 180,
+                background: t.paper,
+                border: `1px solid ${t.rule}`,
+                borderRadius: t.radius,
+                boxShadow: '0 6px 24px rgba(0,0,0,0.2)',
+                padding: 4,
+              }}
+            >
+              {overflowItems.map((it) => {
+                const Icon = it.icon;
+                const active = openDrawer === it.key;
+                return (
+                  <button
+                    key={it.key}
+                    type="button"
+                    onClick={() => { setOverflowOpen(false); toggle(it.key); }}
+                    title={it.title}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', padding: '6px 10px',
+                      background: active ? t.accentSoft : 'transparent',
+                      border: 'none',
+                      color: active ? t.ink : t.ink2,
+                      borderRadius: t.radius,
+                      cursor: 'pointer',
+                      fontFamily: t.mono, fontSize: 10,
+                      letterSpacing: 0.12, textTransform: 'uppercase',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <Icon size={11} /> {it.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -192,16 +402,20 @@ export default function WritePage({
 
   return (
     <Page>
-      {/* Slim top bar (hidden in Focus mode). */}
+      {/* Slim global identity bar (hidden in Focus mode). Only carries the
+          title, connected-doc pill, sub-label and Focus toggle. All tool
+          controls live in the Writer-pane sticky sub-toolbar below so they
+          can gracefully collapse with the pane width. */}
       {!focusMode && (
         <div
           className="lw-z-toolbar"
           style={{
-            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            display: 'flex', alignItems: 'center', gap: 8,
             padding: '8px 14px',
             borderBottom: `1px solid ${t.rule}`,
             background: t.sidebar,
             flexShrink: 0,
+            minHeight: 40,
           }}
         >
           <div
@@ -212,9 +426,6 @@ export default function WritePage({
             }}
           >
             Writer&rsquo;s Room
-            {/* Connected-document pill: docks to the heading so it no longer
-                floats over the canvas. The indicator is self-positioning so
-                we force it inline with a wrapper. */}
             {currentChapter && bookTab ? (
               <span
                 style={{
@@ -241,46 +452,6 @@ export default function WritePage({
             Writer &middot; Weaver
           </div>
           <div style={{ flex: 1 }} />
-          <WriterSprintTimer />
-          <CompactButton
-            icon={BookOpen} label="Book"
-            active={openDrawer === 'book-reader'}
-            onClick={() => setOpenDrawer(openDrawer === 'book-reader' ? null : 'book-reader')}
-            title="Open a read-through of every chapter in the current book"
-          />
-          <CompactButton
-            icon={Eye} label="Read"
-            active={openDrawer === 'reader'}
-            onClick={() => setOpenDrawer(openDrawer === 'reader' ? null : 'reader')}
-            title="Speed reader takeover of the current chapter"
-            hotkey="Ctrl+Shift+R"
-          />
-          <CompactButton
-            icon={Feather} label="Language"
-            active={openDrawer === 'language-full'}
-            onClick={() => setOpenDrawer(openDrawer === 'language-full' ? null : 'language-full')}
-            title="Grammar, rewrite, readability and thesaurus"
-            hotkey="Ctrl+Shift+L"
-          />
-          <CompactButton
-            icon={MessageSquare} label="Interview"
-            active={openDrawer === 'interview'}
-            onClick={() => setOpenDrawer(openDrawer === 'interview' ? null : 'interview')}
-            title="Chat with a character in voice; turn any line into a scene seed"
-            hotkey="Ctrl+Shift+I"
-          />
-          <CompactButton
-            icon={Mic2} label="Voice"
-            active={openDrawer === 'voice'}
-            onClick={() => setOpenDrawer(openDrawer === 'voice' ? null : 'voice')}
-            title="Voice profile + drift monitor"
-          />
-          <CompactButton
-            icon={FileText} label="Import"
-            active={openDrawer === 'import'}
-            onClick={() => setOpenDrawer(openDrawer === 'import' ? null : 'import')}
-            title="Import manuscript"
-          />
           <CompactButton
             icon={Focus}
             label="Focus"
@@ -335,6 +506,13 @@ export default function WritePage({
               borderBottom: sideBySide ? 'none' : `1px solid ${t.rule}`,
             }}
           >
+            {/* Writer pane sticky sub-toolbar. Mirrors the Weaver pane's
+                sticky header but carries the chapter-level tools (Sprint,
+                Book, Read, Language, Interview, Voice, Import). */}
+            <WriterPaneToolbar
+              openDrawer={openDrawer}
+              setOpenDrawer={setOpenDrawer}
+            />
             <VersionSlider
               bookId={bookTab}
               chapterId={currentChapter}

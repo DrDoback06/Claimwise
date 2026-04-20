@@ -29,6 +29,10 @@ const SkillTreeSystem = ({
   // Tree data
   const [skillNodes, setSkillNodes] = useState([]);
   const [skillConnections, setSkillConnections] = useState([]);
+  // True when a specific actor is selected but has no assigned skills.
+  // Drives the empty-state card so we don't fall back to rendering the full
+  // bank, which made unassigned characters look like they had every skill.
+  const [showActorEmptyState, setShowActorEmptyState] = useState(false);
   const [actorSkillPoints, setActorSkillPoints] = useState({});
   const [actorUnlockedSkills, setActorUnlockedSkills] = useState({});
   const [books, setBooks] = useState([]);
@@ -435,6 +439,10 @@ const SkillTreeSystem = ({
   }, []);
 
   const buildSkillTree = () => {
+    // Reset per-build flags so stale state from the previous actor doesn't
+    // linger (e.g. after switching from an empty actor to one with skills).
+    setShowActorEmptyState(false);
+
     if (!skills || skills.length === 0) {
       // Generate sample skill tree structure
       generateDefaultSkillTree();
@@ -468,43 +476,45 @@ const SkillTreeSystem = ({
       return;
     }
 
-    // If an actor is selected, filter to only show skills they have or can unlock
+    // If an actor is selected, show ONLY skills they have + any prerequisites
+    // those skills need. Previous implementation also pulled in any bank skill
+    // whose prereqs happened to overlap and, worse, fell back to the full bank
+    // when the actor had nothing - that's why unassigned characters appeared
+    // to have every skill in the game.
     let skillsToShow = skills;
+    let actorHasNoSkills = false;
     if (selectedActor) {
       const actorSkills = selectedActor.activeSkills || [];
-      const actorSkillIds = actorSkills.map(s => typeof s === 'string' ? s : (s.id || s));
-// Get all skills the actor has, plus prerequisites and skills that can be unlocked
+      const actorSkillIds = actorSkills.map((s) => (typeof s === 'string' ? s : (s.id || s)));
       const skillsToInclude = new Set(actorSkillIds);
-      
-      // Add prerequisites of unlocked skills
-      actorSkillIds.forEach(skillId => {
-        const skill = skills.find(s => s.id === skillId);
-        if (skill && skill.prerequisites && Array.isArray(skill.prerequisites)) {
-          skill.prerequisites.forEach(prereqId => skillsToInclude.add(prereqId));
-        }
-      });
-      
-      // Add skills that can be unlocked (have all prerequisites met)
-      skills.forEach(skill => {
-        if (!skillsToInclude.has(skill.id)) {
-          const prereqs = Array.isArray(skill.prerequisites) ? skill.prerequisites : [];
-          const hasAllPrereqs = prereqs.length === 0 || 
-            prereqs.every(prereqId => skillsToInclude.has(prereqId));
-          if (hasAllPrereqs) {
-            skillsToInclude.add(skill.id);
+
+      // Walk the prerequisite chain upward: for every skill the actor has,
+      // include its direct prereqs, and their prereqs, etc. We do NOT include
+      // bank skills that only "could be" unlocked - those belong on the
+      // global tree view, not the per-actor view.
+      const walkPrereqs = (skillId) => {
+        const skill = skills.find((s) => s.id === skillId);
+        if (!skill) return;
+        const prereqs = Array.isArray(skill.prerequisites) ? skill.prerequisites : [];
+        for (const prereqId of prereqs) {
+          if (!skillsToInclude.has(prereqId)) {
+            skillsToInclude.add(prereqId);
+            walkPrereqs(prereqId);
           }
         }
-      });
-      
-      // Filter to show skills from timelineEvents (chapter-based progression)
-      // Skills are pulled from timelineEvents table, aggregated by chapter
-      skillsToShow = skills.filter(skill => skillsToInclude.has(skill.id));
-      
-      // If actor has no skills, show all skills (they can unlock any)
+      };
+      actorSkillIds.forEach(walkPrereqs);
+
+      skillsToShow = skills.filter((skill) => skillsToInclude.has(skill.id));
+
+      // Do NOT fall back to the full bank. An empty actor tree should render
+      // an empty-state card (handled below in the component body) so the user
+      // can tell at a glance that the character has no assigned skills.
       if (skillsToShow.length === 0) {
-        skillsToShow = skills;
+        actorHasNoSkills = true;
       }
     }
+    setShowActorEmptyState(Boolean(selectedActor) && actorHasNoSkills);
 
     // Build nodes from filtered skills
     const nodes = skillsToShow.map((skill, idx) => ({
@@ -612,7 +622,9 @@ const SkillTreeSystem = ({
     const skillsByChapter = {};
     
     nodes.forEach(node => {
-      const skillData = skillChapterData[node.id];
+      // Per-actor key when an actor is selected, else any aggregated key.
+      const skillData = (selectedActor && skillChapterData[`${selectedActor.id}_${node.id}`])
+        || skillChapterData[node.id];
       if (!skillData || !skillData.firstGained) {
         // Skill not found in chapter data, place on first ring
         const firstChapterKey = Object.keys(chapterRings)[0];
@@ -1329,12 +1341,15 @@ const SkillTreeSystem = ({
   // Render timeline view showing skill progression by chapter
   const renderTimelineView = () => {
     if (!selectedActor) return null;
-    
+
+    // Chapter data is keyed per-actor (`${actorId}_${skillId}`) by
+    // `loadSkillChapterData`. Compose that key here; a bare `skillId` lookup
+    // always missed and left the timeline view empty.
     const actorSkills = actorUnlockedSkills[selectedActor.id] || [];
     const skillsWithChapters = actorSkills
       .map(skillId => {
         const skill = skills.find(s => s.id === skillId);
-        const chapterData = skillChapterData[skillId];
+        const chapterData = skillChapterData[`${selectedActor.id}_${skillId}`] || skillChapterData[skillId];
         return { skill, chapterData };
       })
       .filter(item => item.skill && item.chapterData)
@@ -1967,6 +1982,36 @@ const SkillTreeSystem = ({
         {viewMode === 'timeline' && renderTimelineView()}
         {viewMode === 'comparison' && renderComparisonView()}
 
+        {/* Empty state: actor selected but has no skills assigned. This
+            replaces the old "show the full bank as a fallback" behaviour
+            which made unassigned characters look like they had every
+            skill. */}
+        {showActorEmptyState && viewMode !== 'timeline' && viewMode !== 'comparison' && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto max-w-md text-center bg-slate-900/95 backdrop-blur-sm border border-slate-700 rounded-xl p-6 shadow-2xl">
+              <div className="text-amber-400 text-xs uppercase tracking-wide mb-2">
+                No skills yet
+              </div>
+              <div className="text-white text-base font-semibold mb-2">
+                {selectedActor?.name || 'This character'} has no assigned skills
+              </div>
+              <div className="text-slate-400 text-sm mb-4">
+                Run the Entity Extraction Wizard on a chapter where they gain a skill,
+                or add skills manually from the Skills Library.
+              </div>
+              <div className="flex gap-2 justify-center">
+                <button
+                  type="button"
+                  onClick={() => setSelectedActor(null)}
+                  className="px-3 py-1.5 text-xs rounded border border-slate-600 text-slate-300 hover:bg-slate-800"
+                >
+                  Back to full bank
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Legend */}
         <div className="absolute bottom-4 left-4 bg-slate-900/95 backdrop-blur-sm border border-slate-700 rounded-xl p-4">
           <h4 className="text-sm font-bold text-white mb-3">Branches</h4>
@@ -2108,8 +2153,9 @@ const SkillTreeSystem = ({
             </div>
 
             {/* Chapter Usage */}
-            {skillChapterData[selectedSkill.id] && (() => {
-              const chapterData = skillChapterData[selectedSkill.id];
+            {((selectedActor && skillChapterData[`${selectedActor.id}_${selectedSkill.id}`]) || skillChapterData[selectedSkill.id]) && (() => {
+              const chapterData = (selectedActor && skillChapterData[`${selectedActor.id}_${selectedSkill.id}`])
+                || skillChapterData[selectedSkill.id];
               const firstGained = chapterData.firstGained;
               return (
                 <div className="mb-4">

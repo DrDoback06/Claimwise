@@ -227,16 +227,26 @@ ${chunk.text}
 
 Extract:
 1. Characters/Actors mentioned (new or existing)
-2. Items mentioned (weapons, equipment, objects)
-3. Skills mentioned (abilities, powers, techniques)
+2. Items mentioned (weapons, equipment, objects) - include ownerName when
+   the text makes it obvious who has / picks up / carries the item.
+3. Skills mentioned (abilities, powers, techniques) - include ownerName
+   when the text attributes the skill to a specific character.
 
 For each entity, provide:
 - name: Entity name
 - type: actor, item, or skill
 - description: Brief description from context
 - isNew: true if this seems like a new entity introduction
+- ownerName: (items/skills only) the character who owns / wields / has
+  gained the entity, verbatim as they appear in the text. Omit the field
+  if no character is obviously linked.
+- confidence: 0.0-1.0 for how certain you are about the entity and its owner.
 
-Return JSON: {"actors": [{"name": "...", "description": "...", "isNew": true}], "items": [...], "skills": [...]}`;
+Return JSON: {
+  "actors": [{"name": "...", "description": "...", "isNew": true, "confidence": 0.9}],
+  "items":  [{"name": "...", "description": "...", "ownerName": "Graham", "confidence": 0.9}],
+  "skills": [{"name": "...", "description": "...", "ownerName": "Grimguff", "confidence": 0.9}]
+}`;
 
         const response = await aiService.callAI(prompt, 'structured');
         const entities = this._parseEntitiesResponse(response);
