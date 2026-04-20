@@ -19,6 +19,7 @@ import toastService from './services/toastService';
 import undoRedoManager from './services/undoRedo';
 import chapterNavigationService from './services/chapterNavigationService';
 import { resolveTab, parseDeepLink } from './services/keyboardShortcuts';
+import { runLegacyMigration } from './services/legacyMigration';
 
 // Loomwright shell
 import { ThemeProvider, useTheme } from './loomwright/theme';
@@ -51,6 +52,7 @@ import SettingsPage from './pages/Settings';
 
 // Styles
 import './styles/theme.css';
+import './styles/z-layers.css';
 
 const DEFAULT_STAT_REGISTRY = [
   { id: 'st1', key: 'STR', name: 'Strength', desc: 'Physical power & carry weight.', isCore: true, color: 'green' },
@@ -69,6 +71,7 @@ const EMPTY_STATE = {
   plotThreads: [],
   places: [],
   floorplans: [],
+  regions: [],
 };
 
 // Routes that should render with no header/sidebar chrome (e.g. onboarding)
@@ -125,6 +128,18 @@ function AppInner() {
     (async () => {
       try {
         await db.init();
+        // Promote legacy actor.inventory / actor.*Skills references into
+        // the global banks so the Items Library / Skills Library /
+        // World views stop being empty for pre-pass-3 users.
+        try {
+          const result = await runLegacyMigration();
+          if (!result.skipped && (result.promotedItems || result.promotedSkills)) {
+            console.log(`[Loomwright] Legacy migration promoted ${result.promotedItems} items + ${result.promotedSkills} skills into banks.`);
+          }
+        } catch (e) {
+          console.warn('[Loomwright] Legacy migration failed (non-fatal):', e);
+        }
+
         const isOnboardingDone = await contextEngine.isOnboardingComplete();
         setOnboardingDone(isOnboardingDone);
 
@@ -217,6 +232,7 @@ function AppInner() {
         floorplans: await safeGetAll('floorplans'),
         factions: await safeGetAll('factions'),
         loreEntries: await safeGetAll('loreEntries'),
+        regions: await safeGetAll('regions'),
       };
       // Convert books array to object (legacy shape used by many widgets).
       const booksObj = {};

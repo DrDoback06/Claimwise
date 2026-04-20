@@ -238,3 +238,67 @@ a Generate tab that dispatches to Canon Weaver.
 
 ### Removed
 - `src/components/UKMapVisualization.jsx`.
+
+
+---
+
+## Pass 3 (M29 - M38) delta
+
+Third polish pass, driven by user feedback about the Writer's Room feeling convoluted, skills/items not being globally visible, the Atlas being static, and console errors.
+
+### Unblock + global data
+- `src/services/database.js` -> DB v24 provisions `settings`, `storyMap`, `actorSkillProgress`, and `regions` stores. No more `NotFoundError` from WritingGoals / StoryMap / SkillTreeSystem.
+- `src/services/legacyMigration.js` + `App.js` boot sweep: promotes legacy `actor.inventory` + skill references into the global `itemBank` / `skillBank` so pre-pass-3 characters now show up in Items Library + Skills Library. Idempotent via `meta.legacyMigrationDone`.
+- `SkillTreeSystem.jsx`: `generateDefaultSkillTree` now publishes the seed nodes through `onUpdateSkills` into `skillBank`; `unlockSkill` persists through `actorSkillProgress` + `actors` stores. `SkillsLibrary.jsx` merges instead of replacing on `onUpdateSkills` so user-created skills survive seeding.
+
+### Manual + AI creation (M31)
+- `pages/skills/NewSkillModal.jsx` - manual + AI skill creation.
+- `pages/stats/NewStatModal.jsx` - manual + AI stat creation.
+- `pages/skills/SkillTreeFromClass.jsx` - describe a class (or pick a character) and have the Loom propose a whole branching tree; accept/reject commits every node into `skillBank` and seeds the actor's novice tier.
+- `pages/items/NewItemModal.jsx` gains an AI propose tab.
+
+### Writer's Room restructure (M32)
+- `pages/Write.jsx` rebuilt Weaver-primary: Canon Weaver occupies the top pane (~55% by default, persisted in `lw-write-split`), Story Analysis folds in as a toggle of the same pane, the chapter editor sits beneath it.
+- `pages/write/PaneResizer.jsx` - draggable horizontal divider (ArrowUp/ArrowDown keyboard support).
+- `pages/write/FocusExitChip.jsx` - portal-mounted `Exit focus` chip rendered into `document.body` with `Esc` hotkey so Focus mode is always escapable.
+- `styles/z-layers.css` - centralises z-indices (`editor` 1 -> `toast` 100). Drawers, popovers and FloatingPanel all reference the variables.
+- Compact toolbar: Sprint / Read / Language / Interview / Voice / Import (6 items, down from 10).
+
+### Inline suggestions (M33)
+- `pages/write/InlineSuggestions.jsx` replaces `InlineSquiggles` in the Writer's Room. Mirror-overlay technique with clickable highlights that open a popover with Accept / Dismiss / Explain; accepted suggestions apply in-place and are a single Ctrl+Z to undo. Weaver chapter proposals with offset/length can be rendered as purple highlights alongside language issues.
+
+### Atlas full interactivity (M34)
+- `pages/atlas/useAtlasTransform.js` - wheel-to-zoom + drag-to-pan, transform persisted per-region in `lw-atlas-transform`.
+- `pages/atlas/RegionView.jsx` rewritten with: pan/zoom, draggable pins (`locked` flag honoured), shift-click lock toggle, polygon draw mode (click vertices, double-click to close, ESC to cancel), reference-map overlay (`<image>` behind content with opacity slider), on-canvas Lock button + zoom HUD.
+- `pages/atlas/AtlasBuilder.jsx` gains a region picker + `New region` button (`regions` store), Draw-land toolbar button, Reference image upload + opacity slider + clear, and writes dragged pin positions back to the `places` store.
+- `pages/atlas/FloorplanView.jsx` - rooms are now draggable (honouring a `locked` flag), RoomCard has a Lock/Unlock button.
+
+### Skill tree layout (M35)
+- Default skill tree now lays out via `calculateTierBasedPositions` (tier rings) rather than the empty-when-no-actor chapter-ring placeholder.
+- New `Tidy layout` toolbar button clears the actor's saved node positions in localStorage and redraws.
+
+### Persistence fixes (M36)
+- `StoryMindMap.jsx`: `handleMouseUp` persists the dragged node's new x/y to `mindMapNodes` so mind map positions survive a refresh (the reported 'mind map cannot be saved' issue).
+- StoryMap + plotBeats now have their stores provisioned, so their existing save paths finally land.
+
+### Console + a11y (M37)
+- Removed the actorSkillProgress warning log (store now always exists).
+- Added aria-labels + titles to the new icon-only buttons across Atlas toolbar, SkillTree toolbar, FocusExitChip, Inline suggestion actions, and new-entity modals.
+
+### New files in pass 3
+- `src/services/legacyMigration.js`.
+- `src/styles/z-layers.css`.
+- `src/pages/skills/NewSkillModal.jsx`.
+- `src/pages/skills/SkillTreeFromClass.jsx`.
+- `src/pages/stats/NewStatModal.jsx`.
+- `src/pages/write/PaneResizer.jsx`.
+- `src/pages/write/FocusExitChip.jsx`.
+- `src/pages/write/InlineSuggestions.jsx`.
+- `src/pages/atlas/useAtlasTransform.js`.
+
+### Known residuals (for pass 4)
+- Polygon **edit-mode** (drag vertices / delete vertex / add vertex on edge double-click) is not yet wired - M34 ships draw + render but not edit.
+- Write -> Atlas `Pin as place` right-click bridge is not yet wired; auto-pin still needs a `loomwright:atlas-pin-from-text` event.
+- `StoryAnalysisDrawer` inside the Weaver pane still scrolls with the rest of the surface; ideally it gets its own internal sticky sub-tabs.
+- Build is production-clean but bundle size is ~720 kB main; code-splitting is the next perf pass.
+

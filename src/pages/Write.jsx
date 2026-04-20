@@ -1,31 +1,39 @@
 /**
- * Write — Loomwright Writer's Room, unified.
+ * Write - Loomwright Writer's Room, Weaver-primary layout.
  *
- * One surface that folds in every old Claimwise "writing-adjacent" tool:
+ * Pass 3 (M32) flips the old side-rail arrangement:
  *
- *   centre:     WritingCanvasPro (chapter editor)
- *   right rail: Canon Weaver (live, not a drawer)
- *   bottom:     Story Analysis strip (threads / consistency / beats, collapsible)
- *   top bar:    Sprint timer · Focus · Read mode · Language · Interview · Import
- *   floating:   SelectionRewriteMenu (inline rewrite on text selection)
+ *   +------------------------------------------------+
+ *   | slim top bar: Save + Focus + Analysis toggle   |
+ *   +------------------------------------------------+
+ *   | CANON WEAVER  (primary surface, ~55%)          |
+ *   |   - sticky header keeps the idea-capture in    |
+ *   |     view when the user scrolls                 |
+ *   +------------------------------------------------+
+ *   | compact toolbar (Sprint / Read / Language /    |
+ *   |   Interview / Voice / Import)                  |
+ *   +------------------------------------------------+
+ *   | CHAPTER EDITOR (WritingCanvasPro, ~45%)        |
+ *   |   - InlineSuggestions overlay lives here       |
+ *   +------------------------------------------------+
  *
- * Only the least-used tools (Interview, Import manuscript, Speed Reader)
- * still slide in as drawers because their internals haven't been restructured
- * to inline panels yet; each now uses the `scoped` LoomwrightShell so the
- * theme toggle flows through.
- *
- * Deep-link / PWA share-target support: if the parent sets `captureOnMount`,
- * CanonWeaver jumps directly into capture stage with focus.
+ * - The "Analysis" button swaps the top pane between the Weaver and the
+ *   Story Analysis surface (rather than opening a drawer).
+ * - Pane split is a draggable horizontal resizer stored in localStorage
+ *   under `lw-write-split`.
+ * - Focus mode hides everything except the editor, with a portal-mounted
+ *   Exit chip so users can always escape.
+ * - Z-layers are provided by `src/styles/z-layers.css` (M32).
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
-  AlignLeft, MessageSquare, Eye, Feather, PanelRight, PanelBottom, X,
-  FileText, Focus, Zap,
+  Eye, Feather, MessageSquare, Focus, FileText, Gauge,
+  Sparkles, Mic2, AlignLeft,
 } from 'lucide-react';
 import { useTheme } from '../loomwright/theme';
 import useIsMobile from '../loomwright/useIsMobile';
-import { Page, PageHeader } from './_shared/PageChrome';
+import { Page } from './_shared/PageChrome';
 import WritingCanvasPro from '../components/WritingCanvasPro';
 import CanonWeaver from '../loomwright/weaver/CanonWeaver';
 import LanguageWorkbench from '../loomwright/language/LanguageWorkbench';
@@ -36,22 +44,28 @@ import ManuscriptImportDrawer from './write/ManuscriptImportDrawer';
 import WriterSprintTimer from './write/WriterSprintTimer';
 import SelectionRewriteMenu from './write/SelectionRewriteMenu';
 import VersionSlider from './write/VersionSlider';
-import InlineSquiggles from './write/InlineSquiggles';
+import InlineSuggestions from './write/InlineSuggestions';
 import VoiceDriftBanner from './write/VoiceDriftBanner';
 import WriterSeekRegistrar from './write/WriterSeekRegistrar';
+import PaneResizer from './write/PaneResizer';
+import FocusExitChip from './write/FocusExitChip';
+import { X } from 'lucide-react';
 
-function ToolbarButton({ icon: Icon, label, active, onClick, title, hotkey }) {
+const SPLIT_KEY = 'lw-write-split';
+
+function CompactButton({ icon: Icon, label, active, onClick, title, hotkey }) {
   const t = useTheme();
   return (
     <button
       type="button"
       onClick={onClick}
       title={hotkey ? `${title || label} (${hotkey})` : title || label}
+      aria-label={title || label}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 6,
-        padding: '6px 10px',
+        gap: 5,
+        padding: '5px 9px',
         background: active ? t.accentSoft : 'transparent',
         color: active ? t.ink : t.ink2,
         border: `1px solid ${active ? t.accent : t.rule}`,
@@ -61,9 +75,10 @@ function ToolbarButton({ icon: Icon, label, active, onClick, title, hotkey }) {
         fontSize: 10,
         letterSpacing: 0.12,
         textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
       }}
     >
-      <Icon size={12} /> {label}
+      <Icon size={11} /> {label}
     </button>
   );
 }
@@ -75,14 +90,15 @@ function Drawer({ open, onClose, title, width = 620, children }) {
     <>
       <div
         onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 60 }}
+        className="lw-z-drawer"
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)' }}
       />
       <aside
+        className="lw-z-drawer"
         style={{
           position: 'fixed', top: 0, right: 0, bottom: 0, width,
-          background: t.bg,
+          background: 'var(--lw-bg, #fff)',
           borderLeft: `1px solid ${t.rule}`,
-          zIndex: 61,
           display: 'flex', flexDirection: 'column',
           boxShadow: '-4px 0 30px rgba(0,0,0,0.35)',
         }}
@@ -99,6 +115,7 @@ function Drawer({ open, onClose, title, width = 620, children }) {
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close drawer"
             style={{
               background: 'transparent',
               border: `1px solid ${t.rule}`,
@@ -129,18 +146,27 @@ export default function WritePage({
 }) {
   const t = useTheme();
   const { isMobile } = useIsMobile();
-  const [showWeaver, setShowWeaver] = useState(true);
-  const [showAnalysis, setShowAnalysis] = useState(true);
+
+  // Persisted pane split (top = Weaver, bottom = editor).
+  const [splitRatio, setSplitRatio] = useState(() => {
+    try {
+      const raw = typeof localStorage !== 'undefined'
+        ? localStorage.getItem(SPLIT_KEY) : null;
+      const num = raw ? parseFloat(raw) : NaN;
+      return Number.isFinite(num) && num >= 0.2 && num <= 0.85 ? num : 0.55;
+    } catch { return 0.55; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SPLIT_KEY, String(splitRatio)); } catch (_e) { /* noop */ }
+  }, [splitRatio]);
+
   const [focusMode, setFocusMode] = useState(false);
+  const [topPane, setTopPane] = useState('weaver'); // 'weaver' | 'analysis'
   const [openDrawer, setOpenDrawer] = useState(null);
-  // openDrawer: null | 'interview' | 'reader' | 'import' | 'language-full' | 'weaver'
+  // openDrawer: null | 'reader' | 'language-full' | 'interview' | 'import' | 'voice'
   const editorHostRef = useRef(null);
 
-  // On narrow screens the editor + rail stack; the Weaver rail becomes a
-  // bottom-sheet drawer triggered by a FAB so the editor gets the full width.
-  const weaverAsDrawer = isMobile;
-
-  const onPatchWorldState = (patch) => {
+  const onPatchWorldState = useCallback((patch) => {
     setWorldState?.((prev) => ({
       ...prev,
       itemBank: patch.itemBank || prev.itemBank,
@@ -148,277 +174,256 @@ export default function WritePage({
       books: patch.books || prev.books,
       plotThreads: patch.plotThreads || prev.plotThreads,
     }));
-  };
+  }, [setWorldState]);
+
+  const topHeight = useMemo(() => `${(splitRatio * 100).toFixed(2)}%`, [splitRatio]);
+  const bottomHeight = useMemo(() => `${((1 - splitRatio) * 100).toFixed(2)}%`, [splitRatio]);
+
+  // On narrow screens we collapse Weaver into a tab above the editor
+  // instead of stacking; both use 50/50.
+  const stacked = !isMobile;
 
   return (
     <Page>
+      {/* Slim top bar (hidden in Focus mode). */}
       {!focusMode && (
-        <PageHeader
-          eyebrow="Write"
-          title="Writer's Room"
-          subtitle="Draft chapters with Canon Weaver live, the Language workbench inline, and story analysis at the bottom of the page."
-          actions={
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <WriterSprintTimer />
-              <ToolbarButton
-                icon={Focus}
-                label={focusMode ? 'Exit focus' : 'Focus'}
-                active={focusMode}
-                onClick={() => setFocusMode((v) => !v)}
-                title="Fade all chrome and pin the current paragraph to eye line"
-              />
-              <ToolbarButton
-                icon={Eye}
-                label="Read"
-                active={openDrawer === 'reader'}
-                onClick={() => setOpenDrawer(openDrawer === 'reader' ? null : 'reader')}
-                title="Speed reader takeover of the current chapter"
-                hotkey="Ctrl+Shift+R"
-              />
-              <ToolbarButton
-                icon={Feather}
-                label="Language"
-                active={openDrawer === 'language-full'}
-                onClick={() => setOpenDrawer(openDrawer === 'language-full' ? null : 'language-full')}
-                title="Grammar, rewrite, readability and thesaurus"
-                hotkey="Ctrl+Shift+L"
-              />
-              <ToolbarButton
-                icon={MessageSquare}
-                label="Interview"
-                active={openDrawer === 'interview'}
-                onClick={() => setOpenDrawer(openDrawer === 'interview' ? null : 'interview')}
-                title="Chat with a character in voice; turn any line into a scene seed"
-                hotkey="Ctrl+Shift+I"
-              />
-              <ToolbarButton
-                icon={FileText}
-                label="Import"
-                active={openDrawer === 'import'}
-                onClick={() => setOpenDrawer(openDrawer === 'import' ? null : 'import')}
-                title="Import an existing manuscript and let Canon Weaver propose edits"
-              />
-              <ToolbarButton
-                icon={AlignLeft}
-                label={showAnalysis ? 'Hide analysis' : 'Story analysis'}
-                active={showAnalysis}
-                onClick={() => setShowAnalysis((v) => !v)}
-                title="Show/hide the bottom story-analysis strip"
-              />
-              <ToolbarButton
-                icon={PanelRight}
-                label={showWeaver ? 'Hide Weaver' : 'Show Weaver'}
-                active={showWeaver}
-                onClick={() => setShowWeaver((v) => !v)}
-                title="Toggle the Canon Weaver rail"
-              />
-            </div>
-          }
-        />
+        <div
+          className="lw-z-toolbar"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 14px',
+            borderBottom: `1px solid ${t.rule}`,
+            background: t.sidebar,
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: t.display, fontSize: 13, color: t.ink,
+              letterSpacing: 0.04, fontWeight: 500,
+            }}
+          >
+            Writer&rsquo;s Room
+          </div>
+          <div
+            style={{
+              fontFamily: t.mono, fontSize: 9, color: t.ink3,
+              letterSpacing: 0.18, textTransform: 'uppercase',
+            }}
+          >
+            Weaver primary
+          </div>
+          <div style={{ flex: 1 }} />
+          <CompactButton
+            icon={Sparkles}
+            label={topPane === 'weaver' ? 'Weaver' : 'Analysis'}
+            active
+            onClick={() => setTopPane((p) => (p === 'weaver' ? 'analysis' : 'weaver'))}
+            title="Swap top pane between Canon Weaver and Story Analysis"
+          />
+          <CompactButton
+            icon={Focus}
+            label="Focus"
+            active={focusMode}
+            onClick={() => setFocusMode((v) => !v)}
+            title="Fade all chrome and pin the current paragraph to eye-line"
+          />
+        </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, background: t.bg }}>
-        {/* Editor + Weaver column */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
-          {!focusMode && (
-            <>
-              <VersionSlider
-                bookId={bookTab}
-                chapterId={currentChapter}
-                worldState={worldState}
-                setWorldState={setWorldState}
-              />
-              <VoiceDriftBanner
-                worldState={worldState}
-                bookTab={bookTab}
-                currentChapter={currentChapter}
-              />
-            </>
-          )}
-          <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-            {/* Editor pane */}
-            <div
-              ref={editorHostRef}
-              className={`lw-writer-surface${focusMode ? ' lw-writer-focus' : ''}`}
-              style={{
-                flex: 1, minWidth: 0,
-                borderRight: showWeaver && !focusMode ? `1px solid ${t.rule}` : 'none',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                background: focusMode ? t.paper : 'transparent',
-                padding: focusMode ? '0 8vw' : 0,
-                transition: 'padding 180ms ease, background 180ms ease',
-              }}
-            >
-              <div style={{ flex: 1, overflow: 'auto' }}>
-                <WritingCanvasPro
-                  onNavigate={onNavigate}
-                  onSave={() => { /* WritingCanvasPro persists internally via db */ }}
-                />
-              </div>
-              <SelectionRewriteMenu scopeSelector=".lw-writer-surface" />
-              <InlineSquiggles scopeSelector=".lw-writer-surface" worldState={worldState} />
-              <WriterSeekRegistrar scopeSelector=".lw-writer-surface" />
-            </div>
-
-            {/* Canon Weaver rail (desktop/tablet only \u2014 drawer on mobile) */}
-            {showWeaver && !focusMode && !weaverAsDrawer && (
-              <aside
-                style={{
-                  width: 420,
-                  flexShrink: 0,
-                  background: t.sidebar,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    padding: '10px 16px',
-                    borderBottom: `1px solid ${t.rule}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <Zap size={13} color={t.accent} />
-                  <div
-                    style={{
-                      fontFamily: t.mono,
-                      fontSize: 10,
-                      color: t.accent,
-                      letterSpacing: 0.18,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Canon Weaver
-                  </div>
-                </div>
-                <div style={{ flex: 1, overflow: 'auto', background: t.bg }}>
-                  <CanonWeaver
-                    scoped
-                    worldState={worldState}
-                    setWorldState={setWorldState}
-                    onPatchWorldState={onPatchWorldState}
-                    captureOnMount={captureOnMount}
-                    initialIdea={initialWeaveIdea}
-                    onCaptureConsumed={onCaptureConsumed}
-                  />
-                </div>
-              </aside>
-            )}
+      {/* Main content. */}
+      {focusMode ? (
+        <div
+          ref={editorHostRef}
+          className="lw-writer-surface lw-writer-focus lw-z-editor"
+          style={{
+            flex: 1, minHeight: 0,
+            background: t.paper,
+            padding: '0 8vw',
+            display: 'flex', flexDirection: 'column',
+            transition: 'padding 180ms ease, background 180ms ease',
+          }}
+        >
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <WritingCanvasPro onNavigate={onNavigate} onSave={() => {}} />
           </div>
-
-          {/* Bottom Story Analysis strip — replaces the legacy drawer */}
-          {showAnalysis && !focusMode && (
+          <SelectionRewriteMenu scopeSelector=".lw-writer-surface" />
+          <InlineSuggestions scopeSelector=".lw-writer-surface" worldState={worldState} />
+          <WriterSeekRegistrar scopeSelector=".lw-writer-surface" />
+        </div>
+      ) : (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex', flexDirection: 'column',
+            minHeight: 0, background: t.bg,
+          }}
+        >
+          {/* Top pane: Weaver (primary) or Story Analysis. */}
+          <div
+            style={{
+              height: stacked ? topHeight : 'auto',
+              flex: stacked ? 'none' : '0 0 auto',
+              minHeight: stacked ? 0 : 260,
+              borderBottom: `1px solid ${t.rule}`,
+              background: t.paper,
+              display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Sticky pane header */}
             <div
+              className="lw-z-toolbar"
               style={{
-                flex: '0 0 auto',
-                height: 280,
-                borderTop: `1px solid ${t.rule}`,
-                background: t.paper,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
+                position: 'sticky', top: 0,
+                padding: '8px 14px',
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: t.sidebar, borderBottom: `1px solid ${t.rule}`,
+                flexShrink: 0,
               }}
             >
               <div
                 style={{
-                  padding: '8px 16px',
-                  borderBottom: `1px solid ${t.rule}`,
-                  background: t.sidebar,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
+                  fontFamily: t.mono, fontSize: 10, color: t.accent,
+                  letterSpacing: 0.18, textTransform: 'uppercase',
                 }}
               >
-                <PanelBottom size={12} color={t.accent} />
-                <div
-                  style={{
-                    fontFamily: t.mono,
-                    fontSize: 10,
-                    color: t.accent,
-                    letterSpacing: 0.18,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Story analysis
-                </div>
-                <div style={{ flex: 1 }} />
-                <button
-                  type="button"
-                  onClick={() => setShowAnalysis(false)}
-                  style={{
-                    padding: 4,
-                    background: 'transparent',
-                    color: t.ink2,
-                    border: `1px solid ${t.rule}`,
-                    borderRadius: t.radius,
-                    cursor: 'pointer',
-                  }}
-                  title="Hide"
-                >
-                  <X size={12} />
-                </button>
+                {topPane === 'weaver' ? 'Canon Weaver' : 'Story Analysis'}
               </div>
-              <div style={{ flex: 1, overflow: 'auto' }}>
+              <div style={{ flex: 1 }} />
+              <CompactButton
+                icon={topPane === 'weaver' ? AlignLeft : Sparkles}
+                label={topPane === 'weaver' ? 'Analysis' : 'Weaver'}
+                onClick={() => setTopPane((p) => (p === 'weaver' ? 'analysis' : 'weaver'))}
+                title={topPane === 'weaver' ? 'Switch to Story Analysis' : 'Switch to Canon Weaver'}
+              />
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', background: t.bg }}>
+              {topPane === 'weaver' ? (
+                <CanonWeaver
+                  scoped
+                  worldState={worldState}
+                  setWorldState={setWorldState}
+                  onPatchWorldState={onPatchWorldState}
+                  captureOnMount={captureOnMount}
+                  initialIdea={initialWeaveIdea}
+                  onCaptureConsumed={onCaptureConsumed}
+                />
+              ) : (
                 <StoryAnalysisDrawer
                   worldState={worldState}
-                  onJumpToChapter={() => { /* handled via chapterNavigationService */ }}
+                  onJumpToChapter={() => { /* via chapterNavigationService */ }}
                 />
-              </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      {/* Mobile: Capture FAB + Weaver drawer */}
-      {weaverAsDrawer && !focusMode && (
-        <>
-          <button
-            type="button"
-            onClick={() => setOpenDrawer('weaver')}
-            title="Open Canon Weaver"
+          {stacked && <PaneResizer setRatio={setSplitRatio} />}
+
+          {/* Compact editor toolbar. */}
+          <div
+            className="lw-z-toolbar"
             style={{
-              position: 'fixed',
-              right: 16,
-              bottom: 16,
-              width: 48,
-              height: 48,
-              borderRadius: 24,
-              background: t.accent,
-              color: t.onAccent,
-              border: `1px solid ${t.accent}`,
-              boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
-              display: 'grid', placeItems: 'center',
-              cursor: 'pointer',
-              zIndex: 30,
+              display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+              padding: '6px 14px',
+              borderTop: `1px solid ${t.rule}`,
+              borderBottom: `1px solid ${t.rule}`,
+              background: t.sidebar,
+              flexShrink: 0,
             }}
           >
-            <Zap size={18} />
-          </button>
-          <Drawer
-            open={openDrawer === 'weaver'}
-            onClose={() => setOpenDrawer(null)}
-            title="Canon Weaver"
-            width={Math.min(420, (typeof window !== 'undefined' ? window.innerWidth : 420) - 16)}
+            <WriterSprintTimer />
+            <CompactButton
+              icon={Eye} label="Read"
+              active={openDrawer === 'reader'}
+              onClick={() => setOpenDrawer(openDrawer === 'reader' ? null : 'reader')}
+              title="Speed reader takeover of the current chapter"
+              hotkey="Ctrl+Shift+R"
+            />
+            <CompactButton
+              icon={Feather} label="Language"
+              active={openDrawer === 'language-full'}
+              onClick={() => setOpenDrawer(openDrawer === 'language-full' ? null : 'language-full')}
+              title="Grammar, rewrite, readability and thesaurus"
+              hotkey="Ctrl+Shift+L"
+            />
+            <CompactButton
+              icon={MessageSquare} label="Interview"
+              active={openDrawer === 'interview'}
+              onClick={() => setOpenDrawer(openDrawer === 'interview' ? null : 'interview')}
+              title="Chat with a character in voice; turn any line into a scene seed"
+              hotkey="Ctrl+Shift+I"
+            />
+            <CompactButton
+              icon={Mic2} label="Voice"
+              active={openDrawer === 'voice'}
+              onClick={() => setOpenDrawer(openDrawer === 'voice' ? null : 'voice')}
+              title="Voice profile + drift monitor"
+            />
+            <CompactButton
+              icon={FileText} label="Import"
+              active={openDrawer === 'import'}
+              onClick={() => setOpenDrawer(openDrawer === 'import' ? null : 'import')}
+              title="Import manuscript"
+            />
+            <div style={{ flex: 1 }} />
+            <div
+              style={{
+                fontFamily: t.mono, fontSize: 9, color: t.ink3,
+                letterSpacing: 0.18, textTransform: 'uppercase',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}
+              title="Pane split"
+            >
+              <Gauge size={10} /> {Math.round(splitRatio * 100)} / {Math.round((1 - splitRatio) * 100)}
+            </div>
+          </div>
+
+          {/* Bottom pane: editor. */}
+          <div
+            style={{
+              flex: stacked ? 'none' : 1,
+              height: stacked ? bottomHeight : 'auto',
+              minHeight: 160,
+              display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+              background: t.bg,
+            }}
           >
-            <CanonWeaver
-              scoped
+            <VersionSlider
+              bookId={bookTab}
+              chapterId={currentChapter}
               worldState={worldState}
               setWorldState={setWorldState}
-              onPatchWorldState={onPatchWorldState}
-              captureOnMount={captureOnMount}
-              initialIdea={initialWeaveIdea}
-              onCaptureConsumed={onCaptureConsumed}
             />
-          </Drawer>
-        </>
+            <VoiceDriftBanner
+              worldState={worldState}
+              bookTab={bookTab}
+              currentChapter={currentChapter}
+            />
+            <div
+              ref={editorHostRef}
+              className="lw-writer-surface lw-z-editor"
+              style={{
+                flex: 1, minHeight: 0,
+                display: 'flex', flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                <WritingCanvasPro onNavigate={onNavigate} onSave={() => {}} />
+              </div>
+              <SelectionRewriteMenu scopeSelector=".lw-writer-surface" />
+              <InlineSuggestions scopeSelector=".lw-writer-surface" worldState={worldState} />
+              <WriterSeekRegistrar scopeSelector=".lw-writer-surface" />
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Remaining drawers \u2014 used for tools that still own their own shell */}
+      <FocusExitChip visible={focusMode} onExit={() => setFocusMode(false)} />
+
+      {/* Drawers */}
       <Drawer
         open={openDrawer === 'language-full'}
         onClose={() => setOpenDrawer(null)}
@@ -458,6 +463,68 @@ export default function WritePage({
           onClose={() => setOpenDrawer(null)}
         />
       </Drawer>
+
+      <Drawer
+        open={openDrawer === 'voice'}
+        onClose={() => setOpenDrawer(null)}
+        title="Voice profile"
+        width={540}
+      >
+        <VoicePanel worldState={worldState} />
+      </Drawer>
     </Page>
+  );
+}
+
+function VoicePanel({ worldState }) {
+  const t = useTheme();
+  const voice = worldState?.voiceProfile || null;
+  const drift = worldState?.voiceDrift || null;
+  return (
+    <div style={{ padding: 20 }}>
+      <div
+        style={{
+          fontFamily: t.mono, fontSize: 10, color: t.accent,
+          letterSpacing: 0.18, textTransform: 'uppercase', marginBottom: 8,
+        }}
+      >
+        Your voice
+      </div>
+      {!voice ? (
+        <div style={{ color: t.ink2, fontSize: 13 }}>
+          Voice profile not sampled yet. Open Settings &rarr; Voice &amp; Tone to
+          capture a baseline.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {Object.entries(voice).slice(0, 6).map(([k, v]) => (
+            <div
+              key={k}
+              style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '6px 10px',
+                background: t.paper, border: `1px solid ${t.rule}`,
+                borderRadius: t.radius, fontSize: 12, color: t.ink,
+              }}
+            >
+              <span style={{ color: t.ink2 }}>{k}</span>
+              <span>{typeof v === 'number' ? v.toFixed(2) : String(v)}</span>
+            </div>
+          ))}
+          {drift && (
+            <div
+              style={{
+                padding: 10,
+                background: t.bg, border: `1px dashed ${t.rule}`,
+                borderRadius: t.radius, color: t.ink2, fontSize: 12,
+              }}
+            >
+              Current drift: <strong style={{ color: t.ink }}>{(drift.score || 0).toFixed(2)}</strong>
+              {drift.flavour && <span> &middot; {drift.flavour}</span>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

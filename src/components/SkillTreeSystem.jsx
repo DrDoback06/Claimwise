@@ -3,7 +3,7 @@ import {
   Zap, Users, Swords, Shield, Sparkles, Brain, Heart, 
   Star, Lock, Unlock, ChevronRight, ChevronDown, X, 
   Eye, Grid, Compass, ZoomIn, ZoomOut, Home, Plus, Minus,
-  Award, TrendingUp, GitBranch, Save, RotateCcw, Clock, Check
+  Award, TrendingUp, GitBranch, Save, RotateCcw, Clock, Check, RefreshCw
 } from 'lucide-react';
 import db from '../services/database';
 import chapterNavigationService from '../services/chapterNavigationService';
@@ -12,11 +12,12 @@ import chapterNavigationService from '../services/chapterNavigationService';
  * SkillTreeSystem - Full RPG skill tree with branching paths and constellation view
  * Features: skill points, prerequisites, tiers, character-specific trees
  */
-const SkillTreeSystem = ({ 
-  skills = [], 
-  actors = [], 
+const SkillTreeSystem = ({
+  skills = [],
+  actors = [],
   onClose,
-  onUpdateSkills 
+  onUpdateSkills,
+  onUpdateActor,
 }) => {
   // View state
   const [viewMode, setViewMode] = useState('tree'); // 'tree' | 'constellation'
@@ -440,10 +441,30 @@ const SkillTreeSystem = ({
       return;
     }
 
-    // If no actor is selected, show empty tree or all skills
+    // If no actor is selected, show the whole bank in a tier-ring
+    // layout (M35) - the previous behaviour (empty canvas) made the
+    // "Skill tree" tab feel broken.
     if (!selectedActor) {
-      setSkillNodes([]);
-      setSkillConnections([]);
+      const nodes = (skills || []).map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description || skill.desc || '',
+        branch: skill.branch || 'utility',
+        tier: skill.tier || 'novice',
+        prerequisites: skill.prerequisites || [],
+        x: 0, y: 0,
+      }));
+      const positioned = calculateTierBasedPositions(nodes);
+      setSkillNodes(positioned);
+      const conns = [];
+      positioned.forEach((node) => {
+        (Array.isArray(node.prerequisites) ? node.prerequisites : []).forEach((prereqId) => {
+          if (positioned.find((n) => n.id === prereqId)) {
+            conns.push({ id: `conn_${prereqId}_${node.id}`, from: prereqId, to: node.id, type: 'prerequisite' });
+          }
+        });
+      });
+      setSkillConnections(conns);
       return;
     }
 
@@ -860,7 +881,11 @@ const SkillTreeSystem = ({
       { id: 'legend', name: 'Legendary Status', branch: 'social', tier: 'master', prerequisites: ['leadership'], description: 'Your reputation precedes you' }
     ];
 
-    const positionedNodes = calculateTreePositions(defaultNodes);
+    // Tier-ring auto-layout (M35): novice innermost, legendary outermost,
+    // branches spread evenly by angle. Uses the existing tier-based
+    // positioner rather than the chapter-ring one so the default seed
+    // tree looks tidy even without an actor selected.
+    const positionedNodes = calculateTierBasedPositions(defaultNodes);
     setSkillNodes(positionedNodes);
 
     // Build connections
@@ -875,6 +900,26 @@ const SkillTreeSystem = ({
       });
     });
     setSkillConnections(connections);
+
+    // Promote the default skills into the global skillBank so Skills
+    // Library / World > Skills stop being empty. Only fires when
+    // skillBank had no entries (pre-check above gates this fn), so it's
+    // idempotent in practice.
+    if (onUpdateSkills) {
+      const bankEntries = defaultNodes.map((n) => ({
+        id: n.id,
+        name: n.name,
+        branch: n.branch,
+        tier: n.tier,
+        prerequisites: n.prerequisites,
+        desc: n.description,
+        type: n.branch,
+        source: 'default-tree',
+        createdAt: Date.now(),
+      }));
+      // Defer one tick so the setSkillNodes state flush lands first.
+      setTimeout(() => { onUpdateSkills(bankEntries); }, 0);
+    }
   };
 
   const loadActorProgress = async () => {
@@ -889,7 +934,8 @@ const SkillTreeSystem = ({
         progress = await db.getAll('actorSkillProgress') || [];
       } catch (e) {
         // Store doesn't exist, that's okay - we'll use defaults
-        console.log('actorSkillProgress store not found, using actor data directly');
+        // Store exists in DB v24+; silence the log unless something
+        // else goes wrong.
       }
       
       actors.forEach(actor => {
@@ -1026,20 +1072,56 @@ const SkillTreeSystem = ({
 
   const unlockSkill = useCallback((skill) => {
     if (!selectedActor || !canUnlockSkill(skill)) return;
-    
+
     const actorId = selectedActor.id;
     const tier = skillTiers[skill.tier] || skillTiers.novice;
-    
+    const pointsRemaining = (actorSkillPoints[actorId] || 0) - tier.pointCost;
+    const nextUnlocked = [...(actorUnlockedSkills[actorId] || []), skill.id];
+
     setActorSkillPoints(prev => ({
       ...prev,
-      [actorId]: (prev[actorId] || 0) - tier.pointCost
+      [actorId]: pointsRemaining
     }));
-    
+
     setActorUnlockedSkills(prev => ({
       ...prev,
-      [actorId]: [...(prev[actorId] || []), skill.id]
+      [actorId]: nextUnlocked
     }));
-  }, [selectedActor, canUnlockSkill]);
+
+    // Persist per-actor progress so Skills Library / World / Cast all
+    // see the unlock on refresh. Uses the actorSkillProgress store added
+    // in DB v24. Also writes through actor.activeSkills so legacy paths
+    // that read from `actor.activeSkills` stay consistent.
+    const totalPoints = pointsRemaining + tier.pointCost; // preserve baseline before cost
+    (async () => {
+      try {
+        await db.update('actorSkillProgress', {
+          id: actorId,
+          actorId,
+          totalSkillPoints: Math.max(totalPoints, pointsRemaining + tier.pointCost),
+          skillPoints: pointsRemaining,
+          unlockedSkills: nextUnlocked,
+          updatedAt: Date.now(),
+        });
+      } catch (e) {
+        console.warn('[SkillTreeSystem] actorSkillProgress write failed:', e);
+      }
+
+      const updatedActor = {
+        ...selectedActor,
+        activeSkills: [
+          ...((selectedActor.activeSkills || []).filter(s => {
+            const sid = typeof s === 'string' ? s : (s && s.id);
+            return sid !== skill.id;
+          })),
+          { id: skill.id, val: 1 },
+        ],
+      };
+      try { await db.update('actors', updatedActor); }
+      catch (e) { console.warn('[SkillTreeSystem] actor write failed:', e); }
+      if (onUpdateActor) onUpdateActor(updatedActor);
+    })();
+  }, [selectedActor, canUnlockSkill, actorSkillPoints, actorUnlockedSkills, onUpdateActor]);
 
   const isSkillUnlocked = useCallback((skillId) => {
     if (!selectedActor) return false;
@@ -1789,8 +1871,29 @@ const SkillTreeSystem = ({
               onClick={resetView}
               className="p-2 bg-slate-800 text-slate-400 hover:text-white rounded-lg"
               title="Reset view"
+              aria-label="Reset view"
             >
               <Home className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => {
+                // Tidy layout (M35): clear saved node positions for the
+                // selected actor, then rebuild the tree to the tier-ring
+                // auto-layout.
+                try {
+                  const stored = JSON.parse(localStorage.getItem('loomwright_skill_positions') || '{}');
+                  if (selectedActor?.id) delete stored[selectedActor.id];
+                  localStorage.setItem('loomwright_skill_positions', JSON.stringify(stored));
+                } catch (_e) { /* noop */ }
+                setSkillPositions({});
+                buildSkillTree();
+              }}
+              className="p-2 bg-slate-800 text-slate-400 hover:text-white rounded-lg"
+              title="Tidy layout (clear dragged positions and redraw tier rings)"
+              aria-label="Tidy layout"
+            >
+              <RefreshCw className="w-4 h-4" />
             </button>
 
             {selectedActor && (

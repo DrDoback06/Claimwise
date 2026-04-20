@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'ClaimwiseOmniscience';
-const DB_VERSION = 23; // Loomwright: places + floorplans + loreEntries stores
+const DB_VERSION = 24; // Loomwright pass 3: settings + storyMap + actorSkillProgress + regions
 
 // Loomwright undo coverage: fire a lightweight DOM event so the App can
 // observe every write through the db without each legacy component having
@@ -669,6 +669,32 @@ class ClaimwiseDB {
             loreStore.createIndex('category', 'category', { unique: false });
             loreStore.createIndex('name', 'name', { unique: false });
             loreStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+        }
+
+        // Migration for version 24: Loomwright pass 3.
+        //   settings          - generic key/value settings (WritingGoals, prefs, layouts)
+        //   storyMap          - the manual node/edge layout behind components/StoryMap.jsx
+        //   actorSkillProgress- per-actor unlockedSkills[] + skillPoints (SkillTreeSystem)
+        //   regions           - multi-region Atlas (M34)
+        if (oldVersion < 24) {
+          if (!db.objectStoreNames.contains('settings')) {
+            db.createObjectStore('settings', { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains('storyMap')) {
+            const smStore = db.createObjectStore('storyMap', { keyPath: 'id' });
+            smStore.createIndex('bookId', 'bookId', { unique: false });
+            smStore.createIndex('type', 'type', { unique: false });
+            smStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('actorSkillProgress')) {
+            const aspStore = db.createObjectStore('actorSkillProgress', { keyPath: 'id' });
+            aspStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('regions')) {
+            const regionStore = db.createObjectStore('regions', { keyPath: 'id' });
+            regionStore.createIndex('name', 'name', { unique: false });
+            regionStore.createIndex('createdAt', 'createdAt', { unique: false });
           }
         }
       };

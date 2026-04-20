@@ -32,7 +32,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Layers, RefreshCw, Trash2, Save, X } from 'lucide-react';
+import { Plus, Layers, RefreshCw, Trash2, Save, X, Lock, Unlock } from 'lucide-react';
 import { useTheme } from '../../loomwright/theme';
 import db from '../../services/database';
 import toastService from '../../services/toastService';
@@ -123,8 +123,24 @@ function RoomCard({ room, active, onEdit, onRemove }) {
         />
         <button
           type="button"
+          onClick={() => onEdit?.({ ...room, locked: !room.locked })}
+          title={room.locked ? 'Unlock room' : 'Lock room so it can\'t be dragged'}
+          aria-label={room.locked ? 'Unlock room' : 'Lock room'}
+          style={{
+            padding: 5,
+            background: room.locked ? t.accentSoft : 'transparent',
+            color: room.locked ? t.ink : t.ink3,
+            border: `1px solid ${room.locked ? t.accent : t.rule}`,
+            borderRadius: t.radius, cursor: 'pointer',
+          }}
+        >
+          {room.locked ? <Lock size={11} /> : <Unlock size={11} />}
+        </button>
+        <button
+          type="button"
           onClick={() => onRemove?.(room.id)}
           title="Remove room"
+          aria-label="Remove room"
           style={{
             padding: 5, background: 'transparent',
             color: t.ink3, border: `1px solid ${t.rule}`,
@@ -186,6 +202,15 @@ export default function FloorplanView({ place, worldState, setWorldState, onNavi
   const [fp, setFp] = useFloorplanForPlace(place, worldState);
   const [selectedRoomId, setSelectedRoomId] = useState(null);
   const [hoveredRoomId, setHoveredRoomId] = useState(null);
+  const roomDrag = React.useRef(null);
+  const [roomDragPreview, setRoomDragPreview] = useState(null);
+
+  const toFpCoords = (clientX, clientY, svg, bounds) => {
+    const rect = svg.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * bounds.w;
+    const y = ((clientY - rect.top) / rect.height) * bounds.h;
+    return { x, y };
+  };
 
   const selectedRoom = useMemo(
     () => (fp?.rooms || []).find((r) => r.id === selectedRoomId) || null,
@@ -497,17 +522,51 @@ export default function FloorplanView({ place, worldState, setWorldState, onNavi
             {fp.rooms.map((r) => {
               const active = selectedRoomId === r.id;
               const hovered = hoveredRoomId === r.id;
+              const preview = roomDragPreview?.id === r.id ? roomDragPreview : null;
+              const rx = preview ? preview.x : r.x;
+              const ry = preview ? preview.y : r.y;
+              const locked = !!r.locked;
               return (
                 <g
                   key={r.id}
                   onClick={() => setSelectedRoomId(r.id)}
                   onMouseEnter={() => setHoveredRoomId(r.id)}
                   onMouseLeave={() => setHoveredRoomId(null)}
-                  style={{ cursor: 'pointer' }}
+                  onMouseDown={(e) => {
+                    if (locked) return;
+                    const svg = e.currentTarget.closest('svg');
+                    if (!svg) return;
+                    const coords = toFpCoords(e.clientX, e.clientY, svg, fp.bounds);
+                    roomDrag.current = {
+                      id: r.id,
+                      offsetX: coords.x - r.x,
+                      offsetY: coords.y - r.y,
+                    };
+                    e.stopPropagation();
+                  }}
+                  onMouseMove={(e) => {
+                    if (!roomDrag.current || roomDrag.current.id !== r.id) return;
+                    const svg = e.currentTarget.closest('svg');
+                    if (!svg) return;
+                    const coords = toFpCoords(e.clientX, e.clientY, svg, fp.bounds);
+                    setRoomDragPreview({
+                      id: r.id,
+                      x: Math.max(0, Math.min(fp.bounds.w - r.w, coords.x - roomDrag.current.offsetX)),
+                      y: Math.max(0, Math.min(fp.bounds.h - r.h, coords.y - roomDrag.current.offsetY)),
+                    });
+                  }}
+                  onMouseUp={() => {
+                    if (roomDrag.current && roomDrag.current.id === r.id && roomDragPreview) {
+                      editRoom({ ...r, x: Math.round(roomDragPreview.x), y: Math.round(roomDragPreview.y) });
+                    }
+                    roomDrag.current = null;
+                    setRoomDragPreview(null);
+                  }}
+                  style={{ cursor: locked ? 'not-allowed' : (roomDrag.current?.id === r.id ? 'grabbing' : 'grab') }}
                 >
                   <rect
-                    x={r.x}
-                    y={r.y}
+                    x={rx}
+                    y={ry}
                     width={r.w}
                     height={r.h}
                     fill={active || hovered ? t.accentSoft : t.mode === 'night' ? '#0a0e12' : '#faf3de'}
@@ -515,15 +574,15 @@ export default function FloorplanView({ place, worldState, setWorldState, onNavi
                     strokeWidth={active ? 2 : 1.4}
                   />
                   <text
-                    x={r.x + r.w / 2}
-                    y={r.y + r.h / 2 + 4}
+                    x={rx + r.w / 2}
+                    y={ry + r.h / 2 + 4}
                     fontSize="11"
                     fill={t.ink}
                     textAnchor="middle"
                     fontFamily="'Fraunces', serif"
                     fontStyle="italic"
                   >
-                    {r.name}
+                    {r.name}{locked ? ' \u00b7 locked' : ''}
                   </text>
                 </g>
               );

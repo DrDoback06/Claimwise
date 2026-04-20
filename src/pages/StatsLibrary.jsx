@@ -1,14 +1,15 @@
 /**
- * StatsLibrary — the stat registry + helpful aggregate widgets.
+ * StatsLibrary - stat registry + aggregate usage.
  *
- * Stats come from worldState.statRegistry. Each stat shows how many actors,
- * items and skills reference it. Individual stat detail modules live on the
- * character detail page (Stats tab).
+ * New in pass 3: manual + AI stat creation via NewStatModal.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { useTheme } from '../loomwright/theme';
 import { Page, PageHeader, PageBody } from './_shared/PageChrome';
+import WorkspaceMiniBrief from './_shared/WorkspaceMiniBrief';
+import NewStatModal from './stats/NewStatModal';
 
 function StatTile({ stat, usage }) {
   const t = useTheme();
@@ -40,7 +41,13 @@ function StatTile({ stat, usage }) {
           {stat.desc}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 14, marginTop: 10, fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.12, textTransform: 'uppercase' }}>
+      <div
+        style={{
+          display: 'flex', gap: 14, marginTop: 10,
+          fontFamily: t.mono, fontSize: 10, color: t.ink3,
+          letterSpacing: 0.12, textTransform: 'uppercase',
+        }}
+      >
         <div>Actors <span style={{ color: t.ink }}>{usage.actors}</span></div>
         <div>Items <span style={{ color: t.ink }}>{usage.items}</span></div>
         <div>Skills <span style={{ color: t.ink }}>{usage.skills}</span></div>
@@ -49,8 +56,9 @@ function StatTile({ stat, usage }) {
   );
 }
 
-export default function StatsLibraryPage({ worldState }) {
+export default function StatsLibraryPage({ worldState, setWorldState }) {
   const t = useTheme();
+  const [showCreate, setShowCreate] = useState(false);
   const stats = worldState?.statRegistry || [];
   const actors = worldState?.actors || [];
   const items = worldState?.itemBank || [];
@@ -74,6 +82,23 @@ export default function StatsLibraryPage({ worldState }) {
         eyebrow="Track"
         title="Stats Library"
         subtitle={`${stats.length} ${stats.length === 1 ? 'stat' : 'stats'} in this world`}
+        miniBrief={<WorkspaceMiniBrief surface="stats_library" worldState={worldState} />}
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px',
+              background: t.accent, color: t.onAccent,
+              border: `1px solid ${t.accent}`, borderRadius: t.radius,
+              fontFamily: t.mono, fontSize: 10,
+              letterSpacing: 0.14, textTransform: 'uppercase', cursor: 'pointer',
+            }}
+          >
+            <Plus size={11} /> New stat
+          </button>
+        }
       />
       <PageBody>
         {stats.length === 0 ? (
@@ -87,7 +112,7 @@ export default function StatsLibraryPage({ worldState }) {
               background: t.paper,
             }}
           >
-            No stats configured.
+            No stats configured. Click &ldquo;New stat&rdquo; to add one manually or with AI.
           </div>
         ) : (
           <div
@@ -103,6 +128,13 @@ export default function StatsLibraryPage({ worldState }) {
           </div>
         )}
       </PageBody>
+
+      <NewStatModal
+        isOpen={showCreate}
+        onClose={() => setShowCreate(false)}
+        worldState={worldState}
+        setWorldState={setWorldState}
+      />
     </Page>
   );
 }

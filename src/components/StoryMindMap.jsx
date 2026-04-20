@@ -1903,7 +1903,25 @@ Return format: [{"group": 1, "ids": ["id1", "id2"], "reason": "Same character, d
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = async () => {
+    // Persist the dragged node's new position so the mind map actually
+    // "saves" when you let go. Previously this was a no-op and every
+    // drag reverted on refresh - the "mind map cannot be saved" bug.
+    if (draggedNode) {
+      try {
+        const fresh = nodes.find((n) => n.id === draggedNode.id);
+        if (fresh) {
+          await db.update('mindMapNodes', {
+            ...fresh,
+            x: Math.round(fresh.x),
+            y: Math.round(fresh.y),
+            updatedAt: Date.now(),
+          });
+        }
+      } catch (e) {
+        console.warn('[StoryMindMap] persist node position failed:', e);
+      }
+    }
     setIsDragging(false);
     setDraggedNode(null);
   };
