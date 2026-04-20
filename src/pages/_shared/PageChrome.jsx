@@ -8,7 +8,7 @@
 import React from 'react';
 import { useTheme } from '../../loomwright/theme';
 
-export function PageHeader({ eyebrow, title, subtitle, actions }) {
+export function PageHeader({ eyebrow, title, subtitle, actions, miniBrief }) {
   const t = useTheme();
   return (
     <div
@@ -58,6 +58,11 @@ export function PageHeader({ eyebrow, title, subtitle, actions }) {
             }}
           >
             {subtitle}
+          </div>
+        )}
+        {miniBrief && (
+          <div style={{ marginTop: 8 }}>
+            {miniBrief}
           </div>
         )}
       </div>

@@ -18,6 +18,7 @@ import React, { useState } from 'react';
 import { Wand2, AlertTriangle } from 'lucide-react';
 import { useTheme } from '../loomwright/theme';
 import { Page, PageHeader, PageBody, TabStrip } from './_shared/PageChrome';
+import WorkspaceMiniBrief from './_shared/WorkspaceMiniBrief';
 import PlotBeatTracker from '../components/PlotBeatTracker';
 import PlotThreadTracker from '../components/PlotThreadTracker';
 import PlotQuestTab from '../components/PlotQuestTab';
@@ -61,6 +62,7 @@ export default function PlotTimelinePage({ worldState, bookTab, currentChapter, 
         eyebrow="Explore"
         title="Plot Lab"
         subtitle="Threads, beats, consistency, arcs, chronology and the narrative graph \u2014 all in one canvas."
+        miniBrief={<WorkspaceMiniBrief surface="plot_timeline" worldState={worldState} />}
         actions={
           <button
             type="button"

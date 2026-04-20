@@ -2,13 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import RPG component styles */
+/* Legacy RPG component styles (imported FIRST so the Loomwright bridge
+   below can override their selectors later in the cascade). */
 @import './styles/rpgComponents.css';
 @import './styles/rpgAnimations.css';
 
-/* Loomwright palette bridge — retheme legacy components under the
-   Loomwright Night/Day chrome (HANDOFF §5.3, §5.4). Must import AFTER the
-   legacy RPG styles so the bridge selectors win the cascade. */
+/* Loomwright palette bridge - imported LAST so its !important overrides
+   win the cascade against both the Tailwind utility layer above AND the
+   legacy RPG component classes. postcss-import inlines each @import at
+   its position, so declarations below all previous ones are processed
+   later in the final stylesheet. */
 @import './styles/loomwright-bridge.css';
 
 @layer utilities {
@@ -16,18 +19,18 @@
     width: 8px;
     height: 8px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-track {
-    background: #1e293b;
+    background: var(--lw-paper, #1e293b);
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #475569;
+    background: var(--lw-rule, #475569);
     border-radius: 4px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
+    background: var(--lw-ink-3, #64748b);
   }
 }
 
@@ -55,55 +58,48 @@
     height: calc(100vh - 64px);
     transition: left 0.3s ease;
     z-index: 50;
-    background: #0f172a;
+    background: var(--lw-sidebar, #0f172a);
   }
-  
+
   .mobile-sidebar.open {
     left: 0;
   }
-  
-  /* Adjust main content for mobile */
+
   main {
     margin-left: 0 !important;
     width: 100% !important;
   }
-  
-  /* Mobile-friendly buttons - ensure minimum 44px touch target */
+
   button {
     font-size: 0.875rem;
     padding: 0.75rem 1rem;
     min-height: 44px;
     min-width: 44px;
-    touch-action: manipulation; /* Remove 300ms delay on mobile */
+    touch-action: manipulation;
   }
-  
-  /* Icon buttons need larger touch targets */
+
   button svg {
     min-width: 20px;
     min-height: 20px;
   }
-  
-  /* Stack elements on mobile */
+
   .flex-row {
     flex-direction: column;
   }
-  
+
   .grid {
     grid-template-columns: 1fr !important;
   }
-  
-  /* Prevent text selection on buttons (better UX) */
+
   button {
     -webkit-tap-highlight-color: transparent;
     user-select: none;
   }
-  
-  /* Better scrolling on mobile */
+
   * {
     -webkit-overflow-scrolling: touch;
   }
-  
-  /* Prevent zoom on input focus (iOS) */
+
   input[type="text"],
   input[type="email"],
   input[type="number"],
@@ -121,27 +117,22 @@
   }
 }
 
-/* Touch device optimizations */
 @media (pointer: coarse) {
-  /* Ensure all interactive elements have adequate touch targets */
   a, button, input[type="button"], input[type="submit"], input[type="checkbox"], input[type="radio"] {
     min-height: 44px;
     min-width: 44px;
   }
-  
-  /* Remove hover effects that don't work on touch */
+
   *:hover {
     transition: none;
   }
-  
-  /* Better tap feedback */
+
   button:active, a:active {
     opacity: 0.7;
     transform: scale(0.98);
   }
 }
 
-/* Safe area insets for notched devices */
 @supports (padding: max(0px)) {
   body {
     padding-left: max(12px, env(safe-area-inset-left));

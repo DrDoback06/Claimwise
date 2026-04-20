@@ -35,6 +35,10 @@ import StoryAnalysisDrawer from './write/StoryAnalysisDrawer';
 import ManuscriptImportDrawer from './write/ManuscriptImportDrawer';
 import WriterSprintTimer from './write/WriterSprintTimer';
 import SelectionRewriteMenu from './write/SelectionRewriteMenu';
+import VersionSlider from './write/VersionSlider';
+import InlineSquiggles from './write/InlineSquiggles';
+import VoiceDriftBanner from './write/VoiceDriftBanner';
+import WriterSeekRegistrar from './write/WriterSeekRegistrar';
 
 function ToolbarButton({ icon: Icon, label, active, onClick, title, hotkey }) {
   const t = useTheme();
@@ -120,6 +124,8 @@ export default function WritePage({
   captureOnMount,
   initialWeaveIdea,
   onCaptureConsumed,
+  bookTab,
+  currentChapter,
 }) {
   const t = useTheme();
   const { isMobile } = useIsMobile();
@@ -214,6 +220,21 @@ export default function WritePage({
       <div style={{ flex: 1, display: 'flex', minHeight: 0, background: t.bg }}>
         {/* Editor + Weaver column */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+          {!focusMode && (
+            <>
+              <VersionSlider
+                bookId={bookTab}
+                chapterId={currentChapter}
+                worldState={worldState}
+                setWorldState={setWorldState}
+              />
+              <VoiceDriftBanner
+                worldState={worldState}
+                bookTab={bookTab}
+                currentChapter={currentChapter}
+              />
+            </>
+          )}
           <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
             {/* Editor pane */}
             <div
@@ -237,6 +258,8 @@ export default function WritePage({
                 />
               </div>
               <SelectionRewriteMenu scopeSelector=".lw-writer-surface" />
+              <InlineSquiggles scopeSelector=".lw-writer-surface" worldState={worldState} />
+              <WriterSeekRegistrar scopeSelector=".lw-writer-surface" />
             </div>
 
             {/* Canon Weaver rail (desktop/tablet only \u2014 drawer on mobile) */}

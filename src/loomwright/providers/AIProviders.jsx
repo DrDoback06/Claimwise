@@ -21,7 +21,10 @@ const DEFAULT_PROVIDERS = [
   { id: 'p_anthropic', name: 'Anthropic',   model: 'claude-3.5-sonnet', enabled: true,  notes: 'Best for long-form prose, nuance.' },
   { id: 'p_openai',    name: 'OpenAI',      model: 'gpt-4o',             enabled: true,  notes: 'Strong structured output, fast.' },
   { id: 'p_gemini',    name: 'Google',      model: 'gemini-1.5-pro',     enabled: false, notes: 'Long context window.' },
-  { id: 'p_local',     name: 'Local',       model: 'llama-3-70b',        enabled: false, notes: 'Offline. Privacy-first.' },
+  { id: 'p_mistral',   name: 'Mistral',     model: 'mistral-large-latest', enabled: false, notes: 'European data residency; crisp tone.' },
+  { id: 'p_groq',      name: 'Groq',        model: 'llama-3.1-70b-versatile', enabled: false, notes: 'Free tier; very fast.' },
+  { id: 'p_ollama',    name: 'Ollama',      model: 'llama3.1',           enabled: false, notes: 'Local model runner (macOS/Linux/Windows).' },
+  { id: 'p_local',     name: 'Local',       model: 'llama-3-70b',        enabled: false, notes: 'Offline browser model. Privacy-first.' },
 ];
 
 const TASKS = [

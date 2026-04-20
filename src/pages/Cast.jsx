@@ -10,6 +10,7 @@ import React, { useMemo, useState } from 'react';
 import { Users, Search, Plus } from 'lucide-react';
 import { useTheme } from '../loomwright/theme';
 import { Page, PageHeader, PageBody } from './_shared/PageChrome';
+import WorkspaceMiniBrief from './_shared/WorkspaceMiniBrief';
 import NewCharacterModal from './cast/NewCharacterModal';
 
 function ActorTile({ actor, onClick }) {
@@ -96,6 +97,7 @@ export default function CastPage({ worldState, setWorldState, onNavigateToCharac
         eyebrow="Track"
         title="Cast"
         subtitle={`${actors.length} ${actors.length === 1 ? 'character' : 'characters'}`}
+        miniBrief={<WorkspaceMiniBrief surface="cast" worldState={worldState} />}
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div

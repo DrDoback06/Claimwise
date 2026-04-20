@@ -14,6 +14,7 @@ import React, { useMemo, useState } from 'react';
 import { Search, ShieldAlert, Briefcase, Zap, BookOpen, Globe, Users, MapPin, Wand2 } from 'lucide-react';
 import { useTheme } from '../loomwright/theme';
 import { Page, PageHeader, PageBody, TabStrip } from './_shared/PageChrome';
+import WorkspaceMiniBrief from './_shared/WorkspaceMiniBrief';
 import WikiManager from '../components/WikiManager';
 import WorldLoreTab from '../components/WorldLoreTab';
 import StoryMindMap from '../components/StoryMindMap';
@@ -547,6 +548,7 @@ export default function WorldPage({ worldState, setWorldState, onNavigate }) {
         eyebrow="Explore"
         title="World"
         subtitle="Everything that isn't a person: wiki, factions, provenance, the mind map and continuity audits."
+        miniBrief={<WorkspaceMiniBrief surface="world" worldState={worldState} />}
       />
       <TabStrip tabs={TABS} activeId={tab} onChange={setTab} />
       <PageBody padding={tab === 'mindmap' ? 0 : 28}>

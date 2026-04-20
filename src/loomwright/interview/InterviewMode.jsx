@@ -74,6 +74,8 @@ function SoloChat({ actor, worldState, onSave }) {
   const [transcript, setTranscript] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deckOffset, setDeckOffset] = useState(0);
+  const [starred, setStarred] = useState({}); // { bubbleIndex: true }
   const bottom = useRef(null);
 
   if (!actor) return <div style={{ padding: 20, color: t.ink3 }}>Pick a character from the sidebar.</div>;
@@ -92,6 +94,44 @@ function SoloChat({ actor, worldState, onSave }) {
     setTimeout(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   };
 
+  const toggleStar = (idx) => {
+    setStarred((prev) => {
+      const next = { ...prev };
+      if (next[idx]) delete next[idx];
+      else next[idx] = true;
+      return next;
+    });
+  };
+
+  const sendStarredToWeaver = (kind) => {
+    const starredLines = transcript
+      .map((m, i) => ({ m, i }))
+      .filter(({ i, m }) => starred[i] && m.from === 'actor');
+    if (starredLines.length === 0) {
+      toastService.warn?.('Star one or more lines first.');
+      return;
+    }
+    const bundle = starredLines.map(({ m }) => `${m.speaker}: ${m.text}`).join('\n\n');
+    const heading = kind === 'scene'
+      ? `Turn the following starred interview lines into a scene in the next chapter, in the author's voice.`
+      : kind === 'thread'
+      ? `Turn the following starred interview lines into a new plot thread with 3-5 beats.`
+      : `Extract items, skills or places referenced in these starred lines and propose them into the canon.`;
+    dispatchWeaver({
+      mode: kind === 'scene' ? 'scene' : 'single',
+      text: `${heading}\n\n${bundle}`,
+      transcript: bundle,
+      autoRun: true,
+    });
+    toastService.info?.(`Sent ${starredLines.length} starred line${starredLines.length === 1 ? '' : 's'} to Canon Weaver.`);
+  };
+
+  const deck = PROMPT_DECK;
+  const visible = deck.slice(deckOffset, deckOffset + 4);
+  const rotateDeck = () => setDeckOffset((o) => (o + 4) % Math.max(1, deck.length));
+
+  const starCount = Object.keys(starred).length;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px 24px' }}>
@@ -102,7 +142,30 @@ function SoloChat({ actor, worldState, onSave }) {
           {actor.name}
         </div>
         {transcript.map((m, i) => (
-          <Bubble key={i} m={m} />
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <div style={{ flex: 1 }}>
+              <Bubble m={m} />
+            </div>
+            {m.from === 'actor' && (
+              <button
+                type="button"
+                onClick={() => toggleStar(i)}
+                title={starred[i] ? 'Unstar' : 'Star this line'}
+                style={{
+                  padding: 5,
+                  background: starred[i] ? t.accentSoft : 'transparent',
+                  color: starred[i] ? t.accent : t.ink3,
+                  border: `1px solid ${starred[i] ? t.accent : t.rule}`,
+                  borderRadius: t.radius,
+                  cursor: 'pointer',
+                  marginTop: 6,
+                  flexShrink: 0,
+                }}
+              >
+                {starred[i] ? '\u2605' : '\u2606'}
+              </button>
+            )}
+          </div>
         ))}
         {busy && (
           <div style={{ color: t.ink3, fontSize: 12, fontFamily: t.mono, fontStyle: 'italic' }}>
@@ -112,8 +175,16 @@ function SoloChat({ actor, worldState, onSave }) {
         <div ref={bottom} />
       </div>
       <div style={{ padding: '10px 20px', borderTop: `1px solid ${t.rule}` }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-          {PROMPT_DECK.slice(0, 6).map((p) => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8, alignItems: 'center' }}>
+          <div
+            style={{
+              fontFamily: t.mono, fontSize: 9, color: t.ink3,
+              letterSpacing: 0.14, textTransform: 'uppercase', marginRight: 4,
+            }}
+          >
+            Prompt deck
+          </div>
+          {visible.map((p) => (
             <button
               key={p.id}
               type="button"
@@ -130,11 +201,51 @@ function SoloChat({ actor, worldState, onSave }) {
                 textTransform: 'uppercase',
                 cursor: 'pointer',
               }}
+              title={p.label}
             >
-              {p.label}
+              {p.label.slice(0, 46)}{p.label.length > 46 ? '\u2026' : ''}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={rotateDeck}
+            title="Shuffle the deck"
+            style={{
+              padding: '3px 8px',
+              background: 'transparent', color: t.ink3,
+              border: `1px solid ${t.rule}`, borderRadius: 2,
+              fontFamily: t.mono, fontSize: 9,
+              letterSpacing: 0.12, textTransform: 'uppercase', cursor: 'pointer',
+            }}
+          >
+            More
+          </button>
         </div>
+
+        {starCount > 0 && (
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ fontFamily: t.mono, fontSize: 9, color: t.accent, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+              {starCount} starred &middot; send to Weaver as:
+            </div>
+            {['scene', 'thread', 'item'].map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => sendStarredToWeaver(kind)}
+                style={{
+                  padding: '3px 10px',
+                  background: 'transparent', color: t.accent,
+                  border: `1px solid ${t.rule}`, borderRadius: 2,
+                  fontFamily: t.mono, fontSize: 10,
+                  letterSpacing: 0.14, textTransform: 'uppercase', cursor: 'pointer',
+                }}
+              >
+                {kind}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             value={input}

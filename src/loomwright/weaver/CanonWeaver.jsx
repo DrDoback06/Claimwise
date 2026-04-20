@@ -15,6 +15,7 @@ import Icon from '../primitives/Icon';
 import Button from '../primitives/Button';
 import { proposeWeave, SYSTEM_COLORS, SYSTEM_ICON, subscribeWeaver } from './weaverAI';
 import undoRedoManager from '../../services/undoRedo';
+import ReviewBoard from './ReviewBoard';
 
 const HISTORY_KEY = 'lw-weaver-history';
 
@@ -914,6 +915,7 @@ function WeaverBody({ worldState, setWorldState, onPatchWorldState, captureOnMou
   const [stage, setStage] = useState(captureOnMount ? 'capture' : 'hub');
   const [idea, setIdea] = useState(initialIdea || '');
   const [edits, setEdits] = useState([]);
+  const [reviewView, setReviewView] = useState('list');
   const [weaveMode, setWeaveMode] = useState('single');
   const [weaveEntity, setWeaveEntity] = useState(null);
 
@@ -1037,16 +1039,72 @@ function WeaverBody({ worldState, setWorldState, onPatchWorldState, captureOnMou
       )}
       {stage === 'analyzing' && <Analyzing idea={idea} book={book} actors={actors} />}
       {stage === 'review' && (
-        <Review
-          idea={idea}
-          edits={edits}
-          decisions={decisions}
-          setDecisions={setDecisions}
-          selected={selected}
-          setSelected={setSelected}
-          onApply={applyEdits}
-          onCancel={() => setStage('hub')}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div
+            style={{
+              padding: '6px 16px',
+              borderBottom: `1px solid ${t.rule}`,
+              background: t.paper,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: t.mono, fontSize: 10, color: t.accent,
+                letterSpacing: 0.18, textTransform: 'uppercase',
+              }}
+            >
+              View
+            </div>
+            {[
+              { id: 'list',  label: 'List' },
+              { id: 'board', label: 'Board' },
+            ].map((v) => {
+              const on = reviewView === v.id;
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setReviewView(v.id)}
+                  style={{
+                    padding: '4px 10px',
+                    background: on ? t.accentSoft : 'transparent',
+                    color: on ? t.ink : t.ink2,
+                    border: `1px solid ${on ? t.accent : t.rule}`, borderRadius: t.radius,
+                    cursor: 'pointer',
+                    fontFamily: t.mono, fontSize: 10,
+                    letterSpacing: 0.12, textTransform: 'uppercase',
+                  }}
+                >
+                  {v.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {reviewView === 'list' ? (
+              <Review
+                idea={idea}
+                edits={edits}
+                decisions={decisions}
+                setDecisions={setDecisions}
+                selected={selected}
+                setSelected={setSelected}
+                onApply={applyEdits}
+                onCancel={() => setStage('hub')}
+              />
+            ) : (
+              <ReviewBoard
+                edits={edits}
+                decisions={decisions}
+                onSetDecision={(id, d) => setDecisions((old) => ({ ...old, [id]: d }))}
+                onBatchDecide={(id, d) => setDecisions((old) => ({ ...old, [id]: d }))}
+                onApply={applyEdits}
+                onCancel={() => setStage('hub')}
+              />
+            )}
+          </div>
+        </div>
       )}
       {stage === 'applied' && (
         <Applied summary={summary} onAgain={() => setStage('hub')} />

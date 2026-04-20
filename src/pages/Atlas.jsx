@@ -1,24 +1,23 @@
 /**
- * Atlas — Explore > Atlas.
+ * Atlas - Explore > Atlas.
  *
- * Primary mode is the new AtlasBuilder (globe + maker + hybrid, time scrubber).
- * AtlasAI stays as a secondary "AI proposals" surface for the structured
- * chapter-region extraction pipeline; UKMapVisualization is preserved as a
- * "Legacy UK" view for parity with old data.
+ * Primary mode is the Loomwright AtlasBuilder (Region SVG / Floorplan /
+ * Generate tabs per redesign doc 13). AtlasAI remains as a secondary
+ * "AI proposals" surface for structured chapter-region extraction. The
+ * legacy UK map is gone.
  */
 
 import React, { useState } from 'react';
 import { useTheme } from '../loomwright/theme';
 import { Page, PageHeader, PageBody, TabStrip } from './_shared/PageChrome';
+import WorkspaceMiniBrief from './_shared/WorkspaceMiniBrief';
 import AtlasBuilder from './atlas/AtlasBuilder';
 import AtlasAI from '../loomwright/atlas/AtlasAI';
-import UKMapVisualization from '../components/UKMapVisualization';
 
 const TABS = [
-  { id: 'builder', label: 'Builder' },
+  { id: 'builder', label: 'Atlas' },
   { id: 'ai',      label: 'AI proposals' },
   { id: 'places',  label: 'Places' },
-  { id: 'legacy',  label: 'UK legacy' },
 ];
 
 function PlacesList({ worldState }) {
@@ -37,7 +36,7 @@ function PlacesList({ worldState }) {
           background: t.paper,
         }}
       >
-        No places defined yet. Pin some in the Builder or run Canon Weaver to extract them from your manuscript.
+        No places defined yet. Pin some in the Atlas or run Canon Weaver to extract them from your manuscript.
       </div>
     );
   }
@@ -93,21 +92,24 @@ function PlacesList({ worldState }) {
 
 export default function AtlasPage({ worldState, setWorldState, onNavigate }) {
   const [tab, setTab] = useState('builder');
-  const actors = worldState?.actors || [];
-  const books = Object.values(worldState?.books || {});
 
   return (
     <Page>
       <PageHeader
         eyebrow="Explore"
         title="Atlas"
-        subtitle="Globe, custom fantasy maps, and the places tied to your chapters."
+        subtitle="Region maps, floorplans, AI proposals and the places tied to your chapters."
+        miniBrief={<WorkspaceMiniBrief surface="atlas" worldState={worldState} />}
       />
       <TabStrip tabs={TABS} activeId={tab} onChange={setTab} />
-      <PageBody padding={tab === 'builder' || tab === 'ai' ? 16 : 28}>
+      <PageBody padding={tab === 'places' ? 28 : 16}>
         {tab === 'builder' && (
           <div style={{ height: '100%', minHeight: 560 }}>
-            <AtlasBuilder worldState={worldState} setWorldState={setWorldState} onNavigate={onNavigate} />
+            <AtlasBuilder
+              worldState={worldState}
+              setWorldState={setWorldState}
+              onNavigate={onNavigate}
+            />
           </div>
         )}
         {tab === 'ai' && (
@@ -116,7 +118,6 @@ export default function AtlasPage({ worldState, setWorldState, onNavigate }) {
           </div>
         )}
         {tab === 'places' && <PlacesList worldState={worldState} />}
-        {tab === 'legacy' && <UKMapVisualization actors={actors} books={books} onClose={() => {}} />}
       </PageBody>
     </Page>
   );

@@ -14,6 +14,7 @@ import { useTheme } from '../loomwright/theme';
 import MorningBrief from '../loomwright/daily/MorningBrief';
 import DailySpark from '../loomwright/daily/DailySpark';
 import { Page, PageHeader, PageBody } from './_shared/PageChrome';
+import WorkspaceMiniBrief from './_shared/WorkspaceMiniBrief';
 import ResumeCard from './today/ResumeCard';
 import AINoticingsBrief from './today/AINoticingsBrief';
 import { dispatchWeaver } from '../loomwright/weaver/weaverAI';
@@ -118,6 +119,7 @@ export default function TodayPage({ worldState, onNavigate, onNavigateToCharacte
         eyebrow="Today"
         title={`${greeting()}.`}
         subtitle={`Here's what's new in ${title}.`}
+        miniBrief={<WorkspaceMiniBrief surface="today" worldState={worldState} />}
       />
       <PageBody>
         <div style={{ display: 'grid', gap: 14 }}>

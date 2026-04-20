@@ -31,6 +31,10 @@ import StatHistoryTimeline from '../../components/StatHistoryTimeline';
 // Loomwright surfaces
 import CharacterWardrobe from '../../loomwright/wardrobe/CharacterWardrobe';
 import InventoryOverChapters from './InventoryOverChapters';
+import InventoryMatrix from './InventoryMatrix';
+import DialogueExtract from './DialogueExtract';
+import RelationshipTimeline from './RelationshipTimeline';
+import PullFromVaultModal from './PullFromVaultModal';
 
 const TABS = [
   { id: 'profile',       label: 'Profile' },
@@ -183,6 +187,7 @@ export default function CharacterDetailPage({
   const t = useTheme();
   const [tab, setTab] = useState('profile');
   const [relView, setRelView] = useState('hub');
+  const [showPull, setShowPull] = useState(false);
 
   const actors = worldState?.actors || [];
   const books = worldState?.books || {};
@@ -217,11 +222,27 @@ export default function CharacterDetailPage({
         );
       case 'journey':
         return (
-          <InventoryOverChapters
-            character={character}
-            worldState={worldState}
-            bookId={bookTab}
-          />
+          <div style={{ display: 'grid', gap: 14 }}>
+            <InventoryOverChapters
+              character={character}
+              worldState={worldState}
+              bookId={bookTab}
+            />
+            <div
+              style={{
+                fontFamily: t.mono, fontSize: 10, color: t.accent,
+                letterSpacing: 0.16, textTransform: 'uppercase',
+                marginTop: 6,
+              }}
+            >
+              Item matrix {character.name ? `\u00b7 ${character.name}` : ''}
+            </div>
+            <InventoryMatrix
+              worldState={worldState}
+              setWorldState={setWorldState}
+              filterOwnerId={character.id}
+            />
+          </div>
         );
       case 'arc':
         return <CharacterArcMapper actors={[character]} books={books} onClose={() => {}} />;
@@ -303,6 +324,12 @@ export default function CharacterDetailPage({
                 />
               </div>
             )}
+            <RelationshipTimeline
+              character={character}
+              worldState={worldState}
+              onNavigateToCharacter={onNavigateToCharacter}
+              onNavigate={onNavigate}
+            />
           </div>
         );
       case 'voice':
@@ -310,6 +337,11 @@ export default function CharacterDetailPage({
       case 'dialogue':
         return (
           <div style={{ display: 'grid', gap: 12 }}>
+            <DialogueExtract
+              character={character}
+              worldState={worldState}
+              setWorldState={setWorldState}
+            />
             <CharacterDialogueHub character={character} books={books} />
             <CharacterDialogueAnalysis actor={character} books={books} />
           </div>
@@ -340,6 +372,37 @@ export default function CharacterDetailPage({
       case 'stats':
         return (
           <div style={{ display: 'grid', gap: 12 }}>
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: 10,
+                background: t.paper,
+                border: `1px solid ${t.rule}`,
+                borderRadius: t.radius,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: t.mono, fontSize: 10, color: t.ink3,
+                  letterSpacing: 0.14, textTransform: 'uppercase', flex: 1,
+                }}
+              >
+                {(character.inventory || []).length} item{(character.inventory || []).length === 1 ? '' : 's'} in inventory
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPull(true)}
+                style={{
+                  padding: '5px 10px',
+                  background: t.accent, color: t.onAccent,
+                  border: `1px solid ${t.accent}`, borderRadius: t.radius,
+                  fontFamily: t.mono, fontSize: 10,
+                  letterSpacing: 0.14, textTransform: 'uppercase', cursor: 'pointer',
+                }}
+              >
+                + Pull from vault
+              </button>
+            </div>
             <div
               style={{
                 padding: 16,
@@ -391,6 +454,13 @@ export default function CharacterDetailPage({
       />
       <TabStrip tabs={TABS} activeId={tab} onChange={setTab} />
       <PageBody>{renderTab()}</PageBody>
+      <PullFromVaultModal
+        isOpen={showPull}
+        character={character}
+        worldState={worldState}
+        setWorldState={setWorldState}
+        onClose={() => setShowPull(false)}
+      />
     </Page>
   );
 }

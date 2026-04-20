@@ -213,41 +213,43 @@ const SkillTreeSystem = ({
     };
   }, [isDraggingSkill, draggedSkillId, skillNodes, skillPositions, saveSkillPositions, transform]);
 
-  // Skill branches/categories
+  // Skill branches/categories - Loomwright-harmonised palette
+  // (pulls Loomwright night tones so the tree reads as one with the rest
+  // of the app instead of the old red/purple RPG look).
   const skillBranches = {
-    combat: { 
-      name: 'Combat', 
-      icon: Swords, 
-      color: '#ef4444', 
-      glow: '#fca5a5',
+    combat: {
+      name: 'Combat',
+      icon: Swords,
+      color: '#c76b5a', // lw-bad (terracotta)
+      glow: 'rgba(199, 107, 90, 0.45)',
       description: 'Physical attacks and weapon mastery'
     },
-    magic: { 
-      name: 'Magic', 
-      icon: Sparkles, 
-      color: '#8b5cf6', 
-      glow: '#c4b5fd',
+    magic: {
+      name: 'Magic',
+      icon: Sparkles,
+      color: '#e2b552', // lw-accent (amber)
+      glow: 'rgba(226, 181, 82, 0.45)',
       description: 'Arcane arts and spell casting'
     },
-    utility: { 
-      name: 'Utility', 
-      icon: Brain, 
-      color: '#06b6d4', 
-      glow: '#67e8f9',
+    utility: {
+      name: 'Utility',
+      icon: Brain,
+      color: '#7fb8c7', // lw-accent-2 (teal)
+      glow: 'rgba(127, 184, 199, 0.45)',
       description: 'Survival, crafting, and support'
     },
-    social: { 
-      name: 'Social', 
-      icon: Heart, 
-      color: '#ec4899', 
-      glow: '#f9a8d4',
+    social: {
+      name: 'Social',
+      icon: Heart,
+      color: '#d09c8e', // warm peach (paired with bad/terracotta)
+      glow: 'rgba(208, 156, 142, 0.45)',
       description: 'Charisma, persuasion, and influence'
     },
     defense: {
       name: 'Defense',
       icon: Shield,
-      color: '#22c55e',
-      glow: '#86efac',
+      color: '#6fbf7c', // lw-good (moss)
+      glow: 'rgba(111, 191, 124, 0.45)',
       description: 'Protection and resilience'
     }
   };
@@ -1151,7 +1153,7 @@ const SkillTreeSystem = ({
               y1={fromNode.y}
               x2={toNode.x}
               y2={toNode.y}
-              stroke={bothUnlocked ? '#fbbf24' : 'rgba(255,255,255,0.2)'}
+              stroke={bothUnlocked ? '#e2b552' : 'rgba(168, 161, 143, 0.28)'}
               strokeWidth={bothUnlocked ? 2 : 1}
               strokeDasharray={bothUnlocked ? 'none' : '4 4'}
             />
@@ -1206,22 +1208,22 @@ const SkillTreeSystem = ({
               {/* Star shape */}
               <path
                 d={starPath.join(' ')}
-                fill={state === 'unlocked' ? branch.color : 
-                      state === 'available' ? branch.color + '80' : 
-                      '#374151'}
-                stroke={state === 'unlocked' ? branch.glow : 'rgba(255,255,255,0.3)'}
+                fill={state === 'unlocked' ? branch.color :
+                      state === 'available' ? branch.color + '80' :
+                      '#262d36'}
+                stroke={state === 'unlocked' ? branch.glow : 'rgba(168, 161, 143, 0.4)'}
                 strokeWidth="2"
                 filter={state === 'unlocked' ? 'url(#starGlow)' : undefined}
                 style={{ transition: 'all 0.3s ease' }}
               />
-              
+
               {/* Lock icon for locked skills */}
               {state === 'locked' && (
-                <Lock 
-                  className="w-4 h-4" 
-                  x={-8} 
-                  y={-8} 
-                  style={{ color: '#6b7280' }}
+                <Lock
+                  className="w-4 h-4"
+                  x={-8}
+                  y={-8}
+                  style={{ color: '#6a655a' }}
                 />
               )}
               
@@ -1229,7 +1231,7 @@ const SkillTreeSystem = ({
               <text
                 y={outerRadius + 18}
                 textAnchor="middle"
-                fill={state === 'unlocked' ? 'white' : state === 'available' ? '#d1d5db' : '#6b7280'}
+                fill={state === 'unlocked' ? '#e8e1d0' : state === 'available' ? '#a8a18f' : '#6a655a'}
                 fontSize="11"
                 fontWeight={state === 'unlocked' ? 'bold' : 'normal'}
               >
@@ -1366,15 +1368,15 @@ const SkillTreeSystem = ({
       }
     });
     
-    // Book colors for ring coloring
-    const bookColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'];
+    // Book colors for ring coloring - Loomwright-harmonised ramp
+    const bookColors = ['#7fb8c7', '#e2b552', '#d09c8e', '#6fbf7c', '#a8a18f'];
           
           return (
       <g>
         {/* Chapter rings */}
         {allChapters.map((chapter, idx) => {
           const radius = baseRadius + (idx * ringSpacing);
-          const bookColor = bookColors[chapter.bookId % bookColors.length] || '#64748b';
+          const bookColor = bookColors[chapter.bookId % bookColors.length] || '#a8a18f';
           const hasContent = !!(chapter.content || chapter.script);
           
           return (
@@ -1384,7 +1386,7 @@ const SkillTreeSystem = ({
                 cy={centerY}
                 r={radius}
                 fill="none"
-                stroke={hasContent ? bookColor : 'rgba(255,255,255,0.1)'}
+                stroke={hasContent ? bookColor : 'rgba(168, 161, 143, 0.18)'}
                 strokeWidth={hasContent ? 2 : 1}
                 strokeDasharray={hasContent ? 'none' : '8 8'}
                 opacity={hasContent ? 0.6 : 0.3}
@@ -1394,7 +1396,7 @@ const SkillTreeSystem = ({
                 x={centerX}
                 y={centerY - radius - 5}
                 textAnchor="middle"
-                fill={hasContent ? bookColor : 'rgba(255,255,255,0.4)'}
+                fill={hasContent ? bookColor : 'rgba(168, 161, 143, 0.5)'}
                 fontSize="10"
                 fontWeight={hasContent ? 'bold' : 'normal'}
                 opacity={0.8}
@@ -1439,7 +1441,7 @@ const SkillTreeSystem = ({
                 <path
                   d={`M ${fromNode.x} ${fromNode.y} Q ${ctrlX} ${ctrlY} ${upgradeX} ${upgradeY}`}
             fill="none"
-                  stroke="#fbbf24"
+                  stroke="#e2b552"
                   strokeWidth="2"
                   strokeDasharray="4 4"
                   opacity="0.6"
@@ -1449,15 +1451,15 @@ const SkillTreeSystem = ({
                   cx={upgradeX}
                   cy={upgradeY}
                   r="12"
-                  fill="#fbbf24"
-                  stroke="#f59e0b"
+                  fill="#e2b552"
+                  stroke="#c79a3e"
                   strokeWidth="2"
                 />
                 <text
                   x={upgradeX}
                   y={upgradeY + 4}
                   textAnchor="middle"
-                  fill="white"
+                  fill="#0a0e12"
                   fontSize="10"
                   fontWeight="bold"
                 >
@@ -1553,59 +1555,59 @@ const SkillTreeSystem = ({
               {/* Main node */}
               <circle
                 r={radius}
-                fill={state === 'unlocked' ? branch.color : 
-                      state === 'available' ? `${branch.color}40` : 
-                      '#1f2937'}
-                stroke={state === 'unlocked' ? branch.glow : 
-                        state === 'available' ? branch.color : 
-                        '#374151'}
+                fill={state === 'unlocked' ? branch.color :
+                      state === 'available' ? `${branch.color}40` :
+                      '#171d24'}
+                stroke={state === 'unlocked' ? branch.glow :
+                        state === 'available' ? branch.color :
+                        '#262d36'}
                 strokeWidth="3"
                 style={{ transition: 'all 0.3s ease' }}
               />
-              
+
               {/* Inner decoration based on tier */}
               {tier.level >= 3 && (
                 <circle
                   r={radius * 0.6}
                   fill="none"
-                  stroke={state === 'unlocked' ? branch.glow : 'rgba(255,255,255,0.1)'}
+                  stroke={state === 'unlocked' ? branch.glow : 'rgba(168, 161, 143, 0.15)'}
                   strokeWidth="1"
                 />
               )}
               {tier.level >= 4 && (
                 <circle
                   r={radius * 0.3}
-                  fill={state === 'unlocked' ? branch.glow : 'rgba(255,255,255,0.05)'}
+                  fill={state === 'unlocked' ? branch.glow : 'rgba(168, 161, 143, 0.08)'}
                 />
               )}
-              
+
               {/* Icon */}
               {state === 'locked' ? (
-                <Lock className="w-5 h-5" x={-10} y={-10} style={{ color: '#6b7280' }} />
+                <Lock className="w-5 h-5" x={-10} y={-10} style={{ color: '#6a655a' }} />
               ) : (
-                <branch.icon 
-                  className="w-5 h-5" 
-                  x={-10} 
-                  y={-10} 
-                  style={{ color: state === 'unlocked' ? 'white' : branch.color }}
+                <branch.icon
+                  className="w-5 h-5"
+                  x={-10}
+                  y={-10}
+                  style={{ color: state === 'unlocked' ? '#0a0e12' : branch.color }}
                 />
               )}
-              
+
               {/* Label */}
               <text
                 y={radius + 18}
                 textAnchor="middle"
-                fill={state === 'unlocked' ? 'white' : state === 'available' ? '#d1d5db' : '#6b7280'}
+                fill={state === 'unlocked' ? '#e8e1d0' : state === 'available' ? '#a8a18f' : '#6a655a'}
                 fontSize="11"
                 fontWeight={state === 'unlocked' ? 'bold' : 'normal'}
                 style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}
               >
                 {skill.name}
               </text>
-              
+
               {/* Tier badge */}
               <g transform={`translate(${radius - 5}, ${-radius + 5})`}>
-                <circle r="8" fill="#0f172a" stroke={branch.color} strokeWidth="1" />
+                <circle r="8" fill="#0f1419" stroke={branch.color} strokeWidth="1" />
                 <text
                   textAnchor="middle"
                   y="4"

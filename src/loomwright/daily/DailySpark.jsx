@@ -10,6 +10,27 @@ import { useTheme, ThemeToggle } from '../theme';
 import Icon from '../primitives/Icon';
 import Button from '../primitives/Button';
 import { generateSparks, KIND_META, SEVERITY_META } from './dailyAI';
+import { dispatchWeaver } from '../weaver/weaverAI';
+import toastService from '../../services/toastService';
+
+const REMIND_KEY = 'lw-spark-reminders';
+const IDEAS_KEY  = 'lw-spark-ideas';
+
+function addReminder(spark) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(REMIND_KEY) || '[]');
+    const next = [{ spark, remindAt: Date.now() + 7 * 86_400_000 }, ...raw].slice(0, 50);
+    localStorage.setItem(REMIND_KEY, JSON.stringify(next));
+  } catch { /* noop */ }
+}
+
+function fileIdea(spark) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(IDEAS_KEY) || '[]');
+    const next = [{ spark, at: Date.now() }, ...raw].slice(0, 100);
+    localStorage.setItem(IDEAS_KEY, JSON.stringify(next));
+  } catch { /* noop */ }
+}
 
 const DISMISS_KEY = 'lw-spark-dismissed';
 const CACHE_KEY = (bookId) => `lw-spark-cache-${bookId}`;
@@ -74,12 +95,63 @@ function SparkCard({ spark, onDismiss, onFocus }) {
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
         <Button size="sm" variant="ghost" onClick={() => onDismiss(spark.id)}>
           Dismiss
         </Button>
         <Button size="sm" variant="default" onClick={() => onFocus?.(spark)}>
           Focus
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            dispatchWeaver({
+              mode: 'scene',
+              text: `Draft a cold open inspired by this spark:\n\nTitle: ${spark.title}\n${spark.body}`,
+              transcript: spark.body,
+              autoRun: true,
+            });
+            toastService.info?.('Canon Weaver is drafting a cold open.');
+          }}
+        >
+          Draft cold open
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            dispatchWeaver({
+              mode: 'single',
+              text: `Show two contrasting approaches to this idea so the writer can pick one:\n\n${spark.title}\n${spark.body}`,
+              autoRun: true,
+            });
+            toastService.info?.('Weaver will propose two versions.');
+          }}
+        >
+          Both versions
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            addReminder(spark);
+            onDismiss(spark.id);
+            toastService.success?.('Reminder set for a week.');
+          }}
+        >
+          Remind in a week
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            fileIdea(spark);
+            onDismiss(spark.id);
+            toastService.success?.('Filed under ideas.');
+          }}
+        >
+          File under ideas
         </Button>
       </div>
     </div>

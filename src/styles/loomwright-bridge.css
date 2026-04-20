@@ -1,37 +1,30 @@
 /**
  * Loomwright palette bridge.
  *
- * Retheming without rebuilding every component.
- * ---------------------------------------------
- * Legacy components use Tailwind slate/emerald utility classes
- * (bg-slate-900, text-emerald-400, etc.) and the legacy --bg-*
- * CSS variables from styles/theme.css. They were written for the Claimwise
- * dark palette and look wrong inside the Loomwright cream/ochre chrome.
+ * Retheme legacy components without rebuilding each one.
+ * ------------------------------------------------------
+ * The legacy tree uses three distinct style systems:
  *
- * This file defines two cascades triggered by the ThemeProvider (which sets
- * document.body.dataset.lwTheme = "night" or "day"):
+ *   1. Tailwind utility classes (bg-slate-900, text-emerald-400, and
+ *      alpha-suffix variants like bg-slate-900/40 compiled by Tailwind to
+ *      selectors like .bg-slate-900\/40).
+ *   2. Legacy CSS vars from styles/theme.css (--bg-primary, --text-primary,
+ *      etc.) consumed via `.card`, `.btn`, `.input`.
+ *   3. Custom RPG utility classes defined in styles/rpgComponents.css
+ *      (.glass-light / .glass-medium / .glass-heavy / .quest-tooltip /
+ *      .ornate-border / .card-depth) and rarity chain classes from
+ *      utils/rpgTheme.js (glow-common / glow-rare / etc.).
  *
- *   1. Legacy --bg-*, --text-*, --accent-*, --border-* CSS vars are
- *      re-pointed at Loomwright tokens so card, btn, .input, etc. inherit
- *      the Loomwright palette automatically.
- *   2. Hard-coded Tailwind utility classes (bg/text/border slate, emerald,
- *      blue, gray) are overridden with !important to match Loomwright
- *      tones. This covers most legacy component surfaces cheaply.
+ * This file triggers when ThemeProvider sets
+ * `document.body.dataset.lwTheme = "night" | "day"` and rewires all three
+ * systems so legacy components adopt the Loomwright palette automatically.
  *
- * Only applies under body[data-lw-theme=...], so the standalone redesign
- * preview HTMLs (which don't set this attribute) are unaffected.
- *
- * Note: values here are plain hex / rgba rather than oklch / color-mix,
- * because CRA 5.0.1's cssnano preset doesn't recognise the modern color
- * functions during build minification. The theme.js JS tokens still use
- * oklch for JS-applied inline styles; those aren't minified.
+ * Values are plain hex / rgba (CRA 5.0.1 cssnano preset doesn't recognise
+ * oklch() or color-mix()). The JS theme.js tokens still use oklch for
+ * runtime inline styles which aren't minified.
  */
 
-/* -----------------------------------------------------------------------------
- * Loomwright tokens as native CSS vars under the body — mirror theme.js so
- * plain CSS can reference them without JS. Hex values approximate the
- * oklch() tones in theme.js closely enough for re-skinning legacy surfaces.
- * -------------------------------------------------------------------------- */
+/* --- 1. Loomwright tokens as CSS vars --- */
 
 body[data-lw-theme="night"] {
   --lw-bg: #0f1419;
@@ -42,10 +35,11 @@ body[data-lw-theme="night"] {
   --lw-ink-2: #a8a18f;
   --lw-ink-3: #6a655a;
   --lw-rule: #262d36;
+  --lw-rule-soft: rgba(38, 45, 54, 0.5);
   --lw-accent: #e2b552;
-  --lw-accent-soft: rgba(226, 181, 82, 0.25);
+  --lw-accent-soft: rgba(226, 181, 82, 0.22);
   --lw-accent-2: #7fb8c7;
-  --lw-accent-2-soft: rgba(127, 184, 199, 0.25);
+  --lw-accent-2-soft: rgba(127, 184, 199, 0.22);
   --lw-good: #6fbf7c;
   --lw-warn: #e2b552;
   --lw-bad: #c76b5a;
@@ -61,21 +55,18 @@ body[data-lw-theme="day"] {
   --lw-ink-2: #5a544a;
   --lw-ink-3: #8a8478;
   --lw-rule: #d9d2bf;
+  --lw-rule-soft: rgba(217, 210, 191, 0.6);
   --lw-accent: #a85a32;
-  --lw-accent-soft: rgba(168, 90, 50, 0.18);
+  --lw-accent-soft: rgba(168, 90, 50, 0.16);
   --lw-accent-2: #3b7a8f;
-  --lw-accent-2-soft: rgba(59, 122, 143, 0.18);
+  --lw-accent-2-soft: rgba(59, 122, 143, 0.16);
   --lw-good: #3f7d4a;
   --lw-warn: #a85a32;
   --lw-bad: #a84034;
   --lw-on-accent: #fbf7ed;
 }
 
-/* -----------------------------------------------------------------------------
- * Legacy --bg-* / --text-* / --accent-* / --border-* redirect to
- * Loomwright tokens. Every legacy component that uses the RPG theme (card,
- * btn, input, etc.) now picks up Loomwright colors automatically.
- * -------------------------------------------------------------------------- */
+/* --- 2. Legacy theme.css vars redirect to Loomwright tokens --- */
 
 body[data-lw-theme] {
   --bg-primary: var(--lw-bg);
@@ -106,154 +97,251 @@ body[data-lw-theme] {
   --status-info: var(--lw-accent-2);
 }
 
-/* -----------------------------------------------------------------------------
- * Tailwind utility class overrides.
- *
- * Tailwind emits hard hex values for bg-slate-900, text-emerald-500 etc. They
- * cannot be reshaped via CSS variables, so we override the compiled class
- * itself. Scoping by body[data-lw-theme] ensures the standalone redesign
- * HTML previews are unaffected.
- *
- * Strategy:
- *   - Dark scales  (bg-slate-900/800/700 + bg-gray-900/800) -> Loomwright surface ramp
- *   - Emerald scales (bg-emerald-*, text-emerald-*) -> Loomwright accent
- *   - Border slate/emerald scales -> rule / accent
- *   - Text slate/white/gray scales -> ink ramp
- *
- * These rules are intentionally broad + !important. If a specific legacy
- * component needs a bespoke tone, it should use inline style with
- * useTheme tokens rather than Tailwind utilities.
- * -------------------------------------------------------------------------- */
+/* --- 3. RPG glass + ornate classes -> Loomwright paper ramp --- */
 
-body[data-lw-theme] .bg-slate-900,
-body[data-lw-theme] .bg-gray-900,
-body[data-lw-theme] .bg-zinc-900,
-body[data-lw-theme] .bg-neutral-900,
-body[data-lw-theme] .bg-black { background-color: var(--lw-bg) !important; }
+body[data-lw-theme] .glass-light {
+  backdrop-filter: none;
+  background: var(--lw-paper) !important;
+  border-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] .glass-medium {
+  backdrop-filter: none;
+  background: var(--lw-paper) !important;
+  border-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] .glass-heavy {
+  backdrop-filter: none;
+  background: var(--lw-paper2) !important;
+  border-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] .quest-tooltip {
+  backdrop-filter: none;
+  background: var(--lw-paper) !important;
+  border-color: var(--lw-rule) !important;
+  color: var(--lw-ink) !important;
+}
+body[data-lw-theme] .ornate-border,
+body[data-lw-theme] .ornate-border-corner {
+  border-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] .card-depth,
+body[data-lw-theme] .card-depth-hover:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+}
 
-body[data-lw-theme] .bg-slate-800,
-body[data-lw-theme] .bg-gray-800,
-body[data-lw-theme] .bg-zinc-800,
-body[data-lw-theme] .bg-neutral-800 { background-color: var(--lw-paper) !important; }
+/* --- 4. Tailwind utility overrides (attribute selectors catch alpha variants) --- */
 
-body[data-lw-theme] .bg-slate-700,
-body[data-lw-theme] .bg-gray-700,
-body[data-lw-theme] .bg-zinc-700,
-body[data-lw-theme] .bg-neutral-700 { background-color: var(--lw-paper2) !important; }
+/* Dark surface ramp: bg-slate-9*, bg-gray-9*, bg-zinc-9*, bg-neutral-9*, bg-black */
+body[data-lw-theme] [class*="bg-slate-9"],
+body[data-lw-theme] [class*="bg-gray-9"],
+body[data-lw-theme] [class*="bg-zinc-9"],
+body[data-lw-theme] [class*="bg-neutral-9"],
+body[data-lw-theme] .bg-black {
+  background-color: var(--lw-bg) !important;
+}
+body[data-lw-theme] [class*="bg-slate-8"],
+body[data-lw-theme] [class*="bg-gray-8"],
+body[data-lw-theme] [class*="bg-zinc-8"],
+body[data-lw-theme] [class*="bg-neutral-8"] {
+  background-color: var(--lw-paper) !important;
+}
+body[data-lw-theme] [class*="bg-slate-7"],
+body[data-lw-theme] [class*="bg-gray-7"],
+body[data-lw-theme] [class*="bg-zinc-7"],
+body[data-lw-theme] [class*="bg-neutral-7"] {
+  background-color: var(--lw-paper2) !important;
+}
+body[data-lw-theme] [class*="bg-slate-6"],
+body[data-lw-theme] [class*="bg-gray-6"] {
+  background-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] [class*="bg-slate-50"],
+body[data-lw-theme] [class*="bg-gray-50"],
+body[data-lw-theme] [class*="bg-slate-100"],
+body[data-lw-theme] [class*="bg-gray-100"] {
+  background-color: var(--lw-paper2) !important;
+  color: var(--lw-ink) !important;
+}
+body[data-lw-theme] .bg-white {
+  background-color: var(--lw-paper) !important;
+  color: var(--lw-ink) !important;
+}
 
-body[data-lw-theme] .bg-slate-600,
-body[data-lw-theme] .bg-gray-600 { background-color: var(--lw-rule) !important; }
+/* Accent ramps: emerald / green (primary) + blue / cyan / sky (secondary) */
+body[data-lw-theme] [class*="bg-emerald-"],
+body[data-lw-theme] [class*="bg-green-"] {
+  background-color: var(--lw-accent-soft) !important;
+}
+body[data-lw-theme] [class*="bg-emerald-5"],
+body[data-lw-theme] [class*="bg-emerald-6"],
+body[data-lw-theme] [class*="bg-emerald-7"],
+body[data-lw-theme] [class*="bg-green-5"],
+body[data-lw-theme] [class*="bg-green-6"],
+body[data-lw-theme] [class*="bg-green-7"] {
+  background-color: var(--lw-accent) !important;
+  color: var(--lw-on-accent) !important;
+}
+body[data-lw-theme] [class*="bg-blue-"],
+body[data-lw-theme] [class*="bg-cyan-"],
+body[data-lw-theme] [class*="bg-sky-"] {
+  background-color: var(--lw-accent-2-soft) !important;
+}
+body[data-lw-theme] [class*="bg-purple-"],
+body[data-lw-theme] [class*="bg-violet-"],
+body[data-lw-theme] [class*="bg-pink-"],
+body[data-lw-theme] [class*="bg-rose-"] {
+  background-color: var(--lw-accent-soft) !important;
+}
+body[data-lw-theme] [class*="bg-amber-"],
+body[data-lw-theme] [class*="bg-yellow-"],
+body[data-lw-theme] [class*="bg-orange-"] {
+  background-color: var(--lw-accent-soft) !important;
+}
+body[data-lw-theme] [class*="bg-red-"] {
+  background-color: rgba(199, 107, 90, 0.2) !important;
+}
 
-body[data-lw-theme] .bg-slate-950,
-body[data-lw-theme] .bg-gray-950 { background-color: var(--lw-sidebar) !important; }
-
-body[data-lw-theme] .bg-white { background-color: var(--lw-paper) !important; }
-body[data-lw-theme] .bg-slate-50,
-body[data-lw-theme] .bg-gray-50,
-body[data-lw-theme] .bg-slate-100,
-body[data-lw-theme] .bg-gray-100 { background-color: var(--lw-paper2) !important; }
-
-/* Accent — emerald scales get redirected to Loomwright accent */
-body[data-lw-theme] .bg-emerald-500,
-body[data-lw-theme] .bg-emerald-600,
-body[data-lw-theme] .bg-green-500,
-body[data-lw-theme] .bg-green-600 { background-color: var(--lw-accent) !important; color: var(--lw-on-accent) !important; }
-
-body[data-lw-theme] .bg-emerald-400,
-body[data-lw-theme] .bg-green-400 { background-color: var(--lw-accent) !important; opacity: 0.9; }
-
-/* Text */
+/* Text ramps */
 body[data-lw-theme] .text-white,
-body[data-lw-theme] .text-slate-100,
-body[data-lw-theme] .text-slate-50,
-body[data-lw-theme] .text-gray-100,
-body[data-lw-theme] .text-gray-50 { color: var(--lw-ink) !important; }
-
-body[data-lw-theme] .text-slate-200,
-body[data-lw-theme] .text-slate-300,
-body[data-lw-theme] .text-gray-200,
-body[data-lw-theme] .text-gray-300 { color: var(--lw-ink) !important; }
-
-body[data-lw-theme] .text-slate-400,
-body[data-lw-theme] .text-slate-500,
-body[data-lw-theme] .text-gray-400,
-body[data-lw-theme] .text-gray-500 { color: var(--lw-ink-2) !important; }
-
-body[data-lw-theme] .text-slate-600,
-body[data-lw-theme] .text-slate-700,
-body[data-lw-theme] .text-gray-600,
-body[data-lw-theme] .text-gray-700 { color: var(--lw-ink-3) !important; }
-
-body[data-lw-theme] .text-emerald-300,
-body[data-lw-theme] .text-emerald-400,
-body[data-lw-theme] .text-emerald-500,
-body[data-lw-theme] .text-emerald-600,
-body[data-lw-theme] .text-green-300,
-body[data-lw-theme] .text-green-400,
-body[data-lw-theme] .text-green-500,
-body[data-lw-theme] .text-green-600 { color: var(--lw-accent) !important; }
-
-body[data-lw-theme] .text-cyan-400,
-body[data-lw-theme] .text-cyan-500,
-body[data-lw-theme] .text-blue-400,
-body[data-lw-theme] .text-blue-500,
-body[data-lw-theme] .text-sky-400,
-body[data-lw-theme] .text-sky-500 { color: var(--lw-accent-2) !important; }
-
-body[data-lw-theme] .text-red-400,
-body[data-lw-theme] .text-red-500,
-body[data-lw-theme] .text-rose-400,
-body[data-lw-theme] .text-rose-500 { color: var(--lw-bad) !important; }
-
-body[data-lw-theme] .text-yellow-400,
-body[data-lw-theme] .text-yellow-500,
-body[data-lw-theme] .text-amber-400,
-body[data-lw-theme] .text-amber-500 { color: var(--lw-warn) !important; }
+body[data-lw-theme] [class*="text-slate-1"],
+body[data-lw-theme] [class*="text-gray-1"],
+body[data-lw-theme] [class*="text-slate-2"],
+body[data-lw-theme] [class*="text-gray-2"],
+body[data-lw-theme] [class*="text-slate-3"],
+body[data-lw-theme] [class*="text-gray-3"] {
+  color: var(--lw-ink) !important;
+}
+body[data-lw-theme] [class*="text-slate-4"],
+body[data-lw-theme] [class*="text-gray-4"],
+body[data-lw-theme] [class*="text-slate-5"],
+body[data-lw-theme] [class*="text-gray-5"] {
+  color: var(--lw-ink-2) !important;
+}
+body[data-lw-theme] [class*="text-slate-6"],
+body[data-lw-theme] [class*="text-slate-7"],
+body[data-lw-theme] [class*="text-gray-6"],
+body[data-lw-theme] [class*="text-gray-7"] {
+  color: var(--lw-ink-3) !important;
+}
+body[data-lw-theme] [class*="text-emerald-"],
+body[data-lw-theme] [class*="text-green-"] {
+  color: var(--lw-accent) !important;
+}
+body[data-lw-theme] [class*="text-blue-"],
+body[data-lw-theme] [class*="text-cyan-"],
+body[data-lw-theme] [class*="text-sky-"] {
+  color: var(--lw-accent-2) !important;
+}
+body[data-lw-theme] [class*="text-purple-"],
+body[data-lw-theme] [class*="text-violet-"] {
+  color: var(--lw-accent) !important;
+}
+body[data-lw-theme] [class*="text-red-"],
+body[data-lw-theme] [class*="text-rose-"] {
+  color: var(--lw-bad) !important;
+}
+body[data-lw-theme] [class*="text-yellow-"],
+body[data-lw-theme] [class*="text-amber-"],
+body[data-lw-theme] [class*="text-orange-"] {
+  color: var(--lw-warn) !important;
+}
 
 /* Borders */
 body[data-lw-theme] [class*="border-slate-"],
 body[data-lw-theme] [class*="border-gray-"],
 body[data-lw-theme] [class*="border-zinc-"],
-body[data-lw-theme] [class*="border-neutral-"] { border-color: var(--lw-rule) !important; }
-
+body[data-lw-theme] [class*="border-neutral-"] {
+  border-color: var(--lw-rule) !important;
+}
 body[data-lw-theme] [class*="border-emerald-"],
-body[data-lw-theme] [class*="border-green-"] { border-color: var(--lw-accent) !important; }
-
-body[data-lw-theme] [class*="border-cyan-"],
+body[data-lw-theme] [class*="border-green-"] {
+  border-color: var(--lw-accent) !important;
+}
 body[data-lw-theme] [class*="border-blue-"],
-body[data-lw-theme] [class*="border-sky-"] { border-color: var(--lw-accent-2) !important; }
-
-/* Hover states for slate/gray and emerald/green */
-body[data-lw-theme] [class*="hover:bg-slate-"]:hover,
-body[data-lw-theme] [class*="hover:bg-gray-"]:hover { background-color: var(--lw-paper2) !important; }
-
-body[data-lw-theme] [class*="hover:bg-emerald-"]:hover,
-body[data-lw-theme] [class*="hover:bg-green-"]:hover { background-color: var(--lw-accent-soft) !important; }
-
-body[data-lw-theme] [class*="hover:text-emerald-"]:hover,
-body[data-lw-theme] [class*="hover:text-green-"]:hover { color: var(--lw-accent) !important; }
-
-/* Gradients — neutralize dark slate gradients so they don't fight the body bg */
-body[data-lw-theme] .bg-gradient-to-br.from-slate-900,
-body[data-lw-theme] .bg-gradient-to-br.from-slate-800,
-body[data-lw-theme] .bg-gradient-to-r.from-slate-900,
-body[data-lw-theme] .bg-gradient-to-b.from-slate-900 {
-  background-image: linear-gradient(135deg, var(--lw-bg), var(--lw-paper)) !important;
+body[data-lw-theme] [class*="border-cyan-"],
+body[data-lw-theme] [class*="border-sky-"] {
+  border-color: var(--lw-accent-2) !important;
+}
+body[data-lw-theme] [class*="border-purple-"],
+body[data-lw-theme] [class*="border-violet-"],
+body[data-lw-theme] [class*="border-amber-"],
+body[data-lw-theme] [class*="border-orange-"],
+body[data-lw-theme] [class*="border-yellow-"],
+body[data-lw-theme] [class*="border-red-"],
+body[data-lw-theme] [class*="border-rose-"] {
+  border-color: var(--lw-accent) !important;
 }
 
-/* -----------------------------------------------------------------------------
- * Scrollbars — match Loomwright palette.
- * -------------------------------------------------------------------------- */
+/* Hover states */
+body[data-lw-theme] [class*="hover:bg-slate-"]:hover,
+body[data-lw-theme] [class*="hover:bg-gray-"]:hover {
+  background-color: var(--lw-paper2) !important;
+}
+body[data-lw-theme] [class*="hover:bg-emerald-"]:hover,
+body[data-lw-theme] [class*="hover:bg-green-"]:hover {
+  background-color: var(--lw-accent-soft) !important;
+}
+body[data-lw-theme] [class*="hover:text-emerald-"]:hover,
+body[data-lw-theme] [class*="hover:text-green-"]:hover {
+  color: var(--lw-accent) !important;
+}
+body[data-lw-theme] [class*="hover:text-white"]:hover {
+  color: var(--lw-ink) !important;
+}
+body[data-lw-theme] [class*="hover:border-"]:hover {
+  border-color: var(--lw-accent) !important;
+}
 
+/* Gradients - neutralise dark slate gradients against Loomwright bg */
+body[data-lw-theme] [class*="bg-gradient"][class*="from-slate-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-gray-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-zinc-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-black"] {
+  background-image: linear-gradient(135deg, var(--lw-paper), var(--lw-paper2)) !important;
+}
+body[data-lw-theme] [class*="bg-gradient"][class*="from-emerald-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-green-"] {
+  background-image: linear-gradient(135deg, var(--lw-accent-soft), transparent) !important;
+}
+body[data-lw-theme] [class*="bg-gradient"][class*="from-blue-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-purple-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-violet-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-amber-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-orange-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-red-"] {
+  background-image: linear-gradient(135deg, var(--lw-paper), var(--lw-paper2)) !important;
+}
+
+/* Shadow neutralisation: old RPG shadow classes spew coloured glows */
+body[data-lw-theme] [class*="shadow-emerald-"],
+body[data-lw-theme] [class*="shadow-green-"],
+body[data-lw-theme] [class*="shadow-blue-"],
+body[data-lw-theme] [class*="shadow-purple-"],
+body[data-lw-theme] [class*="shadow-orange-"],
+body[data-lw-theme] [class*="shadow-amber-"],
+body[data-lw-theme] [class*="shadow-red-"],
+body[data-lw-theme] [class*="shadow-slate-"] {
+  --tw-shadow-color: rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Ring (focus ring) neutralisation */
+body[data-lw-theme] [class*="ring-emerald-"],
+body[data-lw-theme] [class*="ring-green-"] {
+  --tw-ring-color: var(--lw-accent) !important;
+}
+body[data-lw-theme] [class*="ring-blue-"],
+body[data-lw-theme] [class*="ring-cyan-"],
+body[data-lw-theme] [class*="ring-sky-"] {
+  --tw-ring-color: var(--lw-accent-2) !important;
+}
+
+/* --- 5. Scrollbars --- */
 body[data-lw-theme] ::-webkit-scrollbar-track { background: var(--lw-paper) !important; }
 body[data-lw-theme] ::-webkit-scrollbar-thumb { background: var(--lw-rule) !important; border: 2px solid var(--lw-paper) !important; }
 body[data-lw-theme] ::-webkit-scrollbar-thumb:hover { background: var(--lw-ink-3) !important; }
 
-/* -----------------------------------------------------------------------------
- * Body baseline — ensures the page background matches even before the shell
- * mounts, and smooths font rendering.
- * -------------------------------------------------------------------------- */
-
+/* --- 6. Body baseline + RPG app container --- */
 body[data-lw-theme] {
   background: var(--lw-bg);
   color: var(--lw-ink);
@@ -261,25 +349,45 @@ body[data-lw-theme] {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+body[data-lw-theme] .grimguff-app { background: var(--lw-bg) !important; }
 
-body[data-lw-theme] .grimguff-app {
-  background: var(--lw-bg) !important;
+/* --- 7. Onboarding wizard denser overrides --- */
+body[data-lw-theme] .loomwright-onboarding [class*="bg-amber-"],
+body[data-lw-theme] .loomwright-onboarding [class*="bg-orange-"],
+body[data-lw-theme] .loomwright-onboarding [class*="bg-yellow-"] {
+  background-color: var(--lw-accent) !important;
+  color: var(--lw-on-accent) !important;
 }
-
-/* -----------------------------------------------------------------------------
- * OnboardingWizard — apply a denser accent override so its amber CTAs
- * also read as Loomwright's accent. (HANDOFF §5.4 cheap retheme.)
- * -------------------------------------------------------------------------- */
-
-body[data-lw-theme] .loomwright-onboarding .bg-amber-500,
-body[data-lw-theme] .loomwright-onboarding .bg-orange-500,
-body[data-lw-theme] .loomwright-onboarding .bg-yellow-500 { background-color: var(--lw-accent) !important; color: var(--lw-on-accent) !important; }
-body[data-lw-theme] .loomwright-onboarding .text-amber-400,
-body[data-lw-theme] .loomwright-onboarding .text-amber-500,
-body[data-lw-theme] .loomwright-onboarding .text-orange-400,
-body[data-lw-theme] .loomwright-onboarding .text-orange-500 { color: var(--lw-accent) !important; }
-body[data-lw-theme] .loomwright-onboarding .border-amber-500,
-body[data-lw-theme] .loomwright-onboarding .border-orange-500 { border-color: var(--lw-accent) !important; }
+body[data-lw-theme] .loomwright-onboarding [class*="text-amber-"],
+body[data-lw-theme] .loomwright-onboarding [class*="text-orange-"],
+body[data-lw-theme] .loomwright-onboarding [class*="text-yellow-"] {
+  color: var(--lw-accent) !important;
+}
 body[data-lw-theme] .loomwright-onboarding h1,
 body[data-lw-theme] .loomwright-onboarding h2,
-body[data-lw-theme] .loomwright-onboarding h3 { font-family: 'Fraunces', Georgia, serif !important; letter-spacing: -0.01em; }
+body[data-lw-theme] .loomwright-onboarding h3 {
+  font-family: 'Fraunces', Georgia, serif !important;
+  letter-spacing: -0.01em;
+}
+
+/* --- 8. Rarity palette neutralisation (utils/rpgTheme.js emits these) --- */
+body[data-lw-theme] .rarity-common { color: var(--lw-ink-2) !important; }
+body[data-lw-theme] .rarity-magic,
+body[data-lw-theme] .rarity-rare { color: var(--lw-accent-2) !important; }
+body[data-lw-theme] .rarity-legendary { color: var(--lw-accent) !important; }
+body[data-lw-theme] .rarity-unique,
+body[data-lw-theme] .rarity-mythic { color: var(--lw-bad) !important; }
+
+body[data-lw-theme] .rarity-border-common,
+body[data-lw-theme] .rarity-border-magic,
+body[data-lw-theme] .rarity-border-rare,
+body[data-lw-theme] .rarity-border-legendary,
+body[data-lw-theme] .rarity-border-unique,
+body[data-lw-theme] .rarity-border-mythic { border-color: var(--lw-rule) !important; }
+
+body[data-lw-theme] .text-gradient {
+  background: var(--lw-accent) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}

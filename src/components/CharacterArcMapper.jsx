@@ -529,11 +529,11 @@ const CharacterArcMapper = ({ actors, books, onClose }) => {
 
   const getStageColor = (stage) => {
     switch (stage) {
-      case 'introduction': return '#3b82f6';
-      case 'development': return '#22c55e';
-      case 'conflict': return '#ef4444';
-      case 'resolution': return '#a855f7';
-      default: return '#64748b';
+      case 'introduction': return '#7fb8c7';
+      case 'development': return '#6fbf7c';
+      case 'conflict':    return '#c76b5a';
+      case 'resolution':  return '#e2b552';
+      default:            return '#a8a18f';
     }
   };
 
@@ -721,9 +721,9 @@ const CharacterArcMapper = ({ actors, books, onClose }) => {
                               key={idx}
                               className="bg-slate-800 rounded p-3 border-l-4"
                               style={{
-                                borderColor: event.type === 'appearance' ? '#3b82f6' :
-                                           event.type === 'stat' ? '#22c55e' :
-                                           event.type === 'skill' ? '#8b5cf6' : '#ec4899'
+                                borderColor: event.type === 'appearance' ? '#7fb8c7' :
+                                           event.type === 'stat' ? '#6fbf7c' :
+                                           event.type === 'skill' ? '#e2b552' : '#d09c8e'
                               }}
                             >
                               <div className="flex items-center justify-between">

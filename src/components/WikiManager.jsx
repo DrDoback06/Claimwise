@@ -305,9 +305,12 @@ const WikiManager = ({ entities, entityType = 'item', onClose }) => {
   /**
    * Filter entities by search
    */
-  const filteredEntities = entities.filter(e =>
-    e.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEntities = entities.filter((e) => {
+    if (!e) return false;
+    const label = (e.name || e.title || e.id || '').toString().toLowerCase();
+    const needle = (searchTerm || '').toLowerCase();
+    return !needle || label.includes(needle);
+  });
 
   return (
     <div className="h-full w-full flex flex-col bg-slate-950">

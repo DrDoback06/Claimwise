@@ -68,25 +68,25 @@ const StoryMindMap = ({ actors, items, skills, books, onClose }) => {
 
   // Node type configurations
   const nodeConfig = {
-    actor: { icon: Users, color: '#22c55e', shape: 'circle' },
-    item: { icon: Briefcase, color: '#eab308', shape: 'rect' },
-    skill: { icon: Zap, color: '#3b82f6', shape: 'diamond' },
-    location: { icon: MapPin, color: '#06b6d4', shape: 'hexagon' },
-    event: { icon: Target, color: '#f97316', shape: 'diamond' },
-    relationship: { icon: Heart, color: '#ec4899', shape: 'circle' }
+    actor: { icon: Users, color: '#6fbf7c', shape: 'circle' },
+    item: { icon: Briefcase, color: '#e2b552', shape: 'rect' },
+    skill: { icon: Zap, color: '#7fb8c7', shape: 'diamond' },
+    location: { icon: MapPin, color: '#7fb8c7', shape: 'hexagon' },
+    event: { icon: Target, color: '#c76b5a', shape: 'diamond' },
+    relationship: { icon: Heart, color: '#d09c8e', shape: 'circle' }
   };
 
   // Group colors
   const groupColors = {
-    protagonists: '#22c55e',
-    antagonists: '#ef4444',
-    npcs: '#8b5cf6',
-    characters: '#22c55e',
-    items: '#eab308',
-    skills: '#3b82f6',
-    locations: '#06b6d4',
-    events: '#f97316',
-    other: '#64748b'
+    protagonists: '#6fbf7c',
+    antagonists: '#c76b5a',
+    npcs:        '#d09c8e',
+    characters:  '#6fbf7c',
+    items:       '#e2b552',
+    skills:      '#7fb8c7',
+    locations:   '#7fb8c7',
+    events:      '#c76b5a',
+    other:       '#a8a18f'
   };
 
   // Generate chapter rings for a planet (actor) - defined first as it's used by generatePlanetarySystem
@@ -1022,7 +1022,7 @@ Return format: [{"group": 1, "ids": ["id1", "id2"], "reason": "Same character, d
       );
     }
     
-    const bookColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'];
+    const bookColors = ['#7fb8c7', '#e2b552', '#d09c8e', '#6fbf7c', '#a8a18f'];
     
     return (
       <svg
@@ -1093,16 +1093,16 @@ Return format: [{"group": 1, "ids": ["id1", "id2"], "reason": "Same character, d
             // Get color from relationship type
             const getRelationshipColor = (type) => {
               const typeMap = {
-                'allied': '#22c55e',      // green
-                'hostile': '#ef4444',     // red
-                'romantic': '#ec4899',    // pink
-                'familial': '#a855f7',    // purple
-                'mentor': '#3b82f6',      // blue
-                'neutral': '#64748b',     // grey
-                'business': '#f59e0b',    // orange
-                'rival': '#dc2626'        // dark red
+                'allied':   '#6fbf7c', // good
+                'hostile':  '#c76b5a', // bad
+                'romantic': '#d09c8e', // peach
+                'familial': '#e2b552', // accent (amber)
+                'mentor':   '#7fb8c7', // accent-2 (teal)
+                'neutral':  '#a8a18f', // ink-2
+                'business': '#e2b552',
+                'rival':    '#c76b5a',
               };
-              return typeMap[type?.toLowerCase()] || '#64748b';
+              return typeMap[type?.toLowerCase()] || '#a8a18f';
             };
             
             const strength = combinedStrength / 100;

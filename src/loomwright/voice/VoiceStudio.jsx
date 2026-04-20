@@ -20,6 +20,8 @@ import {
   rewriteInVoice,
   deriveSlidersFromSample,
 } from './voiceAI';
+import VoiceABCompare from './VoiceABCompare';
+import VoiceChapterMatrix from './VoiceChapterMatrix';
 
 const MODES = [
   { id: 'tune',    label: 'Tune'   },
@@ -788,14 +790,37 @@ function StudioBody({ worldState, setWorldState }) {
               />
             )}
             {mode === 'compare' && (
-              <CompareMode profile={profile} profiles={profiles} sample={sample} />
+              <div style={{ display: 'grid', gap: 14 }}>
+                <VoiceABCompare
+                  worldState={{
+                    ...(worldState || {}),
+                    voiceProfiles: profiles.map((p) => ({
+                      ...p,
+                      baselineText: p.sample || p.baselineText || '',
+                    })),
+                  }}
+                />
+                <CompareMode profile={profile} profiles={profiles} sample={sample} />
+              </div>
             )}
             {mode === 'assign' && (
-              <AssignMode
-                profiles={profiles}
-                book={book}
-                onAssign={persistChapter}
-              />
+              <div style={{ display: 'grid', gap: 14 }}>
+                <VoiceChapterMatrix
+                  worldState={{
+                    ...(worldState || {}),
+                    voiceProfiles: profiles.map((p) => ({
+                      ...p,
+                      baselineText: p.sample || p.baselineText || '',
+                    })),
+                  }}
+                  setWorldState={setWorldState}
+                />
+                <AssignMode
+                  profiles={profiles}
+                  book={book}
+                  onAssign={persistChapter}
+                />
+              </div>
             )}
             {mode === 'teach' && (
               <TeachMode

@@ -17,6 +17,21 @@ const KIND_META = {
 };
 
 const CACHE_KEY = (bookId) => `lw-brief-cache-${bookId}`;
+const ARCHIVE_KEY = (bookId) => `lw-brief-archive-${bookId}`;
+
+function loadArchive(bookId) {
+  try { return JSON.parse(localStorage.getItem(ARCHIVE_KEY(bookId)) || '[]'); }
+  catch { return []; }
+}
+
+function pushToArchive(bookId, brief) {
+  try {
+    const existing = loadArchive(bookId);
+    const entry = { brief, at: Date.now() };
+    const next = [entry, ...existing].slice(0, 30);
+    localStorage.setItem(ARCHIVE_KEY(bookId), JSON.stringify(next));
+  } catch { /* noop */ }
+}
 
 function BriefBody({ worldState }) {
   const t = useTheme();
@@ -25,6 +40,8 @@ function BriefBody({ worldState }) {
   const [brief, setBrief] = useState(null);
   const [busy, setBusy] = useState(false);
   const [handled, setHandled] = useState(new Set());
+  const [showArchive, setShowArchive] = useState(false);
+  const [archive, setArchive] = useState(() => loadArchive(bookIds[bookIds.length - 1] || 1));
 
   useEffect(() => {
     try {
@@ -33,6 +50,7 @@ function BriefBody({ worldState }) {
     } catch {
       setBrief(null);
     }
+    setArchive(loadArchive(bookId));
   }, [bookId]);
 
   const generate = async () => {
@@ -44,6 +62,8 @@ function BriefBody({ worldState }) {
     } catch {
       /* ignore */
     }
+    pushToArchive(bookId, b);
+    setArchive(loadArchive(bookId));
     setBusy(false);
   };
 
@@ -214,6 +234,63 @@ function BriefBody({ worldState }) {
           }}
         >
           No brief yet today. Click <strong>Generate</strong> to produce one from your current book.
+        </div>
+      )}
+
+      {archive.length > 0 && (
+        <div style={{ marginTop: 22, paddingTop: 14, borderTop: `1px solid ${t.rule}` }}>
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              marginBottom: 8,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: t.mono, fontSize: 10, color: t.accent,
+                letterSpacing: 0.14, textTransform: 'uppercase',
+              }}
+            >
+              Past briefs
+            </div>
+            <div style={{ flex: 1 }} />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowArchive((v) => !v)}
+            >
+              {showArchive ? 'Hide' : `Show ${archive.length}`}
+            </Button>
+          </div>
+          {showArchive && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {archive.map((entry, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setBrief(entry.brief)}
+                  style={{
+                    textAlign: 'left',
+                    padding: 10,
+                    background: t.paper,
+                    border: `1px solid ${t.rule}`,
+                    borderRadius: t.radius,
+                    cursor: 'pointer', color: t.ink,
+                  }}
+                >
+                  <div style={{ fontFamily: t.mono, fontSize: 9, color: t.accent, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+                    {new Date(entry.at).toLocaleDateString()} &middot; {new Date(entry.at).toLocaleTimeString()}
+                  </div>
+                  <div style={{ fontFamily: t.display, fontSize: 13, marginTop: 2 }}>
+                    {entry.brief?.greeting || 'Morning brief'}
+                  </div>
+                  <div style={{ fontSize: 11, color: t.ink3, marginTop: 4 }}>
+                    {(entry.brief?.items || []).length} item{(entry.brief?.items || []).length === 1 ? '' : 's'} noted
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

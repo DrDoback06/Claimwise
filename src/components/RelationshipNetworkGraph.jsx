@@ -44,17 +44,18 @@ const RelationshipNetworkGraph = ({ relationships = [], characters = [], onNodeC
   }, [filteredRelationships, characters]);
 
   const getRelationshipColor = (type) => {
+    // Loomwright-harmonised palette
     const colorMap = {
-      allied: '#22c55e',
-      hostile: '#ef4444',
-      romantic: '#ec4899',
-      familial: '#a855f7',
-      mentor: '#3b82f6',
-      neutral: '#64748b',
-      friend: '#22c55e',
-      enemy: '#ef4444'
+      allied:   '#6fbf7c', // good (moss)
+      hostile:  '#c76b5a', // bad (terracotta)
+      romantic: '#d09c8e', // warm peach
+      familial: '#e2b552', // accent (amber)
+      mentor:   '#7fb8c7', // accent-2 (teal)
+      neutral:  '#a8a18f', // ink-2
+      friend:   '#6fbf7c',
+      enemy:    '#c76b5a',
     };
-    return colorMap[type] || '#64748b';
+    return colorMap[type] || '#a8a18f';
   };
 
   const getCharacterName = (actorId) => {
