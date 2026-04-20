@@ -3,29 +3,34 @@
  *
  * Retheming without rebuilding every component.
  * ---------------------------------------------
- * Legacy components use Tailwind slate/emerald utility classes (`bg-slate-900`,
- * `text-emerald-400`, etc.) and the legacy `--bg-*` CSS variables from
- * styles/theme.css. They were written for the Claimwise dark palette and look
- * wrong inside the Loomwright cream/ochre chrome.
+ * Legacy components use Tailwind slate/emerald utility classes
+ * (bg-slate-900, text-emerald-400, etc.) and the legacy --bg-*
+ * CSS variables from styles/theme.css. They were written for the Claimwise
+ * dark palette and look wrong inside the Loomwright cream/ochre chrome.
  *
  * This file defines two cascades triggered by the ThemeProvider (which sets
- * `document.body.dataset.lwTheme = 'night' | 'day'`):
+ * document.body.dataset.lwTheme = "night" or "day"):
  *
- *   1. Legacy `--bg-*`, `--text-*`, `--accent-*`, `--border-*` CSS vars are
- *      re-pointed at Loomwright tokens so `card`, `btn`, `.input`, etc. inherit
+ *   1. Legacy --bg-*, --text-*, --accent-*, --border-* CSS vars are
+ *      re-pointed at Loomwright tokens so card, btn, .input, etc. inherit
  *      the Loomwright palette automatically.
- *   2. Hard-coded Tailwind utility classes (bg/text/border slate-*, emerald-*,
- *      blue-*, gray-*) are overridden with `!important` CSS to match Loomwright
- *      tones. This covers ~90% of legacy component surfaces cheaply and
- *      reversibly. Wrongly-themed spots can be addressed surgically later.
+ *   2. Hard-coded Tailwind utility classes (bg/text/border slate, emerald,
+ *      blue, gray) are overridden with !important to match Loomwright
+ *      tones. This covers most legacy component surfaces cheaply.
  *
- * Only applies under `body[data-lw-theme="..."]`, so the standalone redesign
+ * Only applies under body[data-lw-theme=...], so the standalone redesign
  * preview HTMLs (which don't set this attribute) are unaffected.
+ *
+ * Note: values here are plain hex / rgba rather than oklch / color-mix,
+ * because CRA 5.0.1's cssnano preset doesn't recognise the modern color
+ * functions during build minification. The theme.js JS tokens still use
+ * oklch for JS-applied inline styles; those aren't minified.
  */
 
 /* -----------------------------------------------------------------------------
  * Loomwright tokens as native CSS vars under the body — mirror theme.js so
- * plain CSS can reference them without JS.
+ * plain CSS can reference them without JS. Hex values approximate the
+ * oklch() tones in theme.js closely enough for re-skinning legacy surfaces.
  * -------------------------------------------------------------------------- */
 
 body[data-lw-theme="night"] {
@@ -37,12 +42,13 @@ body[data-lw-theme="night"] {
   --lw-ink-2: #a8a18f;
   --lw-ink-3: #6a655a;
   --lw-rule: #262d36;
-  --lw-accent: oklch(78% 0.13 78);
-  --lw-accent-soft: oklch(78% 0.13 78 / 0.25);
-  --lw-accent-2: oklch(72% 0.10 200);
-  --lw-good: oklch(72% 0.13 145);
-  --lw-warn: oklch(78% 0.13 78);
-  --lw-bad: oklch(65% 0.18 25);
+  --lw-accent: #e2b552;
+  --lw-accent-soft: rgba(226, 181, 82, 0.25);
+  --lw-accent-2: #7fb8c7;
+  --lw-accent-2-soft: rgba(127, 184, 199, 0.25);
+  --lw-good: #6fbf7c;
+  --lw-warn: #e2b552;
+  --lw-bad: #c76b5a;
   --lw-on-accent: #0a0e12;
 }
 
@@ -55,17 +61,18 @@ body[data-lw-theme="day"] {
   --lw-ink-2: #5a544a;
   --lw-ink-3: #8a8478;
   --lw-rule: #d9d2bf;
-  --lw-accent: oklch(55% 0.15 45);
-  --lw-accent-soft: oklch(55% 0.15 45 / 0.18);
-  --lw-accent-2: oklch(48% 0.09 200);
-  --lw-good: oklch(50% 0.13 145);
-  --lw-warn: oklch(55% 0.15 45);
-  --lw-bad: oklch(55% 0.18 25);
+  --lw-accent: #a85a32;
+  --lw-accent-soft: rgba(168, 90, 50, 0.18);
+  --lw-accent-2: #3b7a8f;
+  --lw-accent-2-soft: rgba(59, 122, 143, 0.18);
+  --lw-good: #3f7d4a;
+  --lw-warn: #a85a32;
+  --lw-bad: #a84034;
   --lw-on-accent: #fbf7ed;
 }
 
 /* -----------------------------------------------------------------------------
- * Legacy `--bg-*` / `--text-*` / `--accent-*` / `--border-*` redirect to
+ * Legacy --bg-* / --text-* / --accent-* / --border-* redirect to
  * Loomwright tokens. Every legacy component that uses the RPG theme (card,
  * btn, input, etc.) now picks up Loomwright colors automatically.
  * -------------------------------------------------------------------------- */
@@ -81,7 +88,7 @@ body[data-lw-theme] {
   --accent-primary-muted: var(--lw-accent-soft);
   --accent-secondary: var(--lw-accent-2);
   --accent-secondary-hover: var(--lw-accent-2);
-  --accent-secondary-muted: color-mix(in oklch, var(--lw-accent-2) 25%, transparent);
+  --accent-secondary-muted: var(--lw-accent-2-soft);
 
   --text-primary: var(--lw-ink);
   --text-secondary: var(--lw-ink-2);
@@ -104,18 +111,18 @@ body[data-lw-theme] {
  *
  * Tailwind emits hard hex values for bg-slate-900, text-emerald-500 etc. They
  * cannot be reshaped via CSS variables, so we override the compiled class
- * itself. Scoping by `body[data-lw-theme]` ensures the standalone redesign
+ * itself. Scoping by body[data-lw-theme] ensures the standalone redesign
  * HTML previews are unaffected.
  *
  * Strategy:
- *   - Dark scales (bg-slate-900/800/700 + bg-gray-900/800) → Loomwright surface ramp
- *   - Emerald scales (bg-emerald-*/text-emerald-*) → Loomwright accent
- *   - Border slate/emerald scales → rule / accent
- *   - Text slate/white/gray scales → ink ramp
+ *   - Dark scales  (bg-slate-900/800/700 + bg-gray-900/800) -> Loomwright surface ramp
+ *   - Emerald scales (bg-emerald-*, text-emerald-*) -> Loomwright accent
+ *   - Border slate/emerald scales -> rule / accent
+ *   - Text slate/white/gray scales -> ink ramp
  *
- * These rules are intentionally broad + `!important`. If a specific legacy
- * component needs a bespoke tone, it should use `style={...}` + `useTheme()`
- * rather than Tailwind utilities.
+ * These rules are intentionally broad + !important. If a specific legacy
+ * component needs a bespoke tone, it should use inline style with
+ * useTheme tokens rather than Tailwind utilities.
  * -------------------------------------------------------------------------- */
 
 body[data-lw-theme] .bg-slate-900,
@@ -153,14 +160,7 @@ body[data-lw-theme] .bg-green-500,
 body[data-lw-theme] .bg-green-600 { background-color: var(--lw-accent) !important; color: var(--lw-on-accent) !important; }
 
 body[data-lw-theme] .bg-emerald-400,
-body[data-lw-theme] .bg-green-400 { background-color: color-mix(in oklch, var(--lw-accent) 80%, transparent) !important; }
-
-body[data-lw-theme] .bg-emerald-900\/20,
-body[data-lw-theme] .bg-emerald-900\/30,
-body[data-lw-theme] .bg-emerald-500\/20,
-body[data-lw-theme] .bg-emerald-500\/10,
-body[data-lw-theme] .bg-green-900\/20,
-body[data-lw-theme] .bg-green-500\/20 { background-color: var(--lw-accent-soft) !important; }
+body[data-lw-theme] .bg-green-400 { background-color: var(--lw-accent) !important; opacity: 0.9; }
 
 /* Text */
 body[data-lw-theme] .text-white,
@@ -223,7 +223,7 @@ body[data-lw-theme] [class*="border-cyan-"],
 body[data-lw-theme] [class*="border-blue-"],
 body[data-lw-theme] [class*="border-sky-"] { border-color: var(--lw-accent-2) !important; }
 
-/* Hover/focus accent states */
+/* Hover states for slate/gray and emerald/green */
 body[data-lw-theme] [class*="hover:bg-slate-"]:hover,
 body[data-lw-theme] [class*="hover:bg-gray-"]:hover { background-color: var(--lw-paper2) !important; }
 
@@ -267,8 +267,8 @@ body[data-lw-theme] .grimguff-app {
 }
 
 /* -----------------------------------------------------------------------------
- * OnboardingWizard — apply a denser accent override so its orange/amber CTAs
- * also read as Loomwright's accent. (HANDOFF §5.4 cheap-mode retheme.)
+ * OnboardingWizard — apply a denser accent override so its amber CTAs
+ * also read as Loomwright's accent. (HANDOFF §5.4 cheap retheme.)
  * -------------------------------------------------------------------------- */
 
 body[data-lw-theme] .loomwright-onboarding .bg-amber-500,
