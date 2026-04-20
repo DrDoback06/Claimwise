@@ -9,7 +9,7 @@
  * }
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import LoomwrightShell from '../LoomwrightShell';
 import { useTheme, ThemeToggle } from '../theme';
 import Icon from '../primitives/Icon';
@@ -51,15 +51,53 @@ function formatUSD(n) {
   return `$${(n || 0).toFixed(2)}`;
 }
 
+function readRealUsage() {
+  try {
+    const raw = localStorage.getItem('lw-ai-usage');
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
 function ProvidersBody({ worldState, setWorldState, scoped = false }) {
   const t = useTheme();
   const settings = worldState?.aiSettings || defaultSettings();
-  const { providers, taskRouting, budgetUSD, usage } = settings;
+  const { providers, taskRouting, budgetUSD } = settings;
   const [tab, setTab] = useState('routing');
+  // Real usage from aiService's localStorage store. Refreshes every few seconds.
+  const [realUsage, setRealUsage] = useState(() => readRealUsage());
+  useEffect(() => {
+    const h = setInterval(() => setRealUsage(readRealUsage()), 3000);
+    return () => clearInterval(h);
+  }, []);
+  const usage = realUsage;
 
   const patch = (next) => {
     setWorldState?.((prev) => ({ ...prev, aiSettings: next }));
+    // Mirror into localStorage so aiService can read routing + providers without
+    // access to worldState.
+    try {
+      localStorage.setItem('lw-ai-routing', JSON.stringify(next.taskRouting || {}));
+      localStorage.setItem('lw-ai-providers', JSON.stringify(next.providers || []));
+    } catch {
+      /* ignore */
+    }
   };
+
+  // Ensure localStorage is in sync on first mount (in case worldState was loaded
+  // from IndexedDB without triggering patch()).
+  useEffect(() => {
+    try {
+      localStorage.setItem('lw-ai-routing', JSON.stringify(taskRouting || {}));
+      localStorage.setItem('lw-ai-providers', JSON.stringify(providers || []));
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const usedUSD = useMemo(
     () => (usage || []).reduce((a, b) => a + (b.costUSD || 0), 0),

@@ -77,6 +77,7 @@ import InterviewMode from './loomwright/interview/InterviewMode';
 import DailySpark from './loomwright/daily/DailySpark';
 import MorningBrief from './loomwright/daily/MorningBrief';
 import AIProviders from './loomwright/providers/AIProviders';
+import WeaverSuggestionsBar from './loomwright/weaver/WeaverSuggestionsBar';
 import MobileLoomwright from './loomwright/mobile/MobileLoomwright';
 import LoomwrightDocs from './loomwright/docs/LoomwrightDocs';
 import StatHistoryTimeline from './components/StatHistoryTimeline';
@@ -625,6 +626,11 @@ const OmniscienceV22 = () => {
   const [bookTab, setBookTab] = useState(1);
   const [currentChapter, setCurrentChapter] = useState(1);
   const [expandedBooks, setExpandedBooks] = useState({1: true});
+
+  // Loomwright Voice Studio: let aiService resolve the active chapter voice.
+  useEffect(() => {
+    aiService.setLoomwrightContext(() => ({ worldState, bookId: bookTab, chapterId: currentChapter }));
+  }, [worldState, bookTab, currentChapter]);
   const [expandedChapters, setExpandedChapters] = useState({});
   const [editingId, setEditingId] = useState(null); 
   const [editingItem, setEditingItem] = useState(null);
@@ -6651,6 +6657,22 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
                       <span>📝 {sessionStats.wordsWrittenToday.toLocaleString()} words today</span>
                       <span>⏱️ {Math.floor((Date.now() - sessionStats.sessionStartTime) / 60000)}m session</span>
                       {sessionStats.aiAssists > 0 && <span>✨ {sessionStats.aiAssists} AI assists</span>}
+                      {(() => {
+                        const book = worldState?.books?.[bookTab];
+                        const ch = book?.chapters?.find(c => c.id === currentChapter);
+                        const pid = ch?.voiceProfileId;
+                        const prof = (book?.voiceProfiles || []).find(p => p.id === pid);
+                        if (!prof) return null;
+                        return (
+                          <button
+                            onClick={() => setActiveTab('lw_voice')}
+                            title="Active voice for this chapter. Click to open Voice Studio."
+                            className="px-2 py-0.5 rounded text-[10px] font-mono tracking-wider uppercase bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20"
+                          >
+                            🎙 Voice · {prof.name}
+                          </button>
+                        );
+                      })()}
                     </div>
                     
                     <button
@@ -6665,7 +6687,21 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
                     </button>
                   </div>
                 )}
-                
+
+                {/* Canon Weaver suggestions banner for this chapter */}
+                {(() => {
+                  const book = worldState?.books?.[bookTab];
+                  const ch = book?.chapters?.find(c => c.id === currentChapter);
+                  if (!ch || !(ch.weaverSuggestions || []).length) return null;
+                  return (
+                    <WeaverSuggestionsBar
+                      chapter={ch}
+                      bookId={bookTab}
+                      setWorldState={setWorldState}
+                    />
+                  );
+                })()}
+
                 {/* Render appropriate canvas based on mode */}
                 <div className="flex-1 overflow-hidden">
                   {writingMode === 'pro' ? (

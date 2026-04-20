@@ -623,13 +623,20 @@ function WardrobeBody({
         }
         worldState={worldState}
         onSave={(draft) => {
-          writeItem(draft);
-          if (!draft.id && editorSlotId) {
-            // Newly created — also track into the slot that opened the editor
-            // (save above gave it an id; re-compute via timestamp is fine because
-            // writeItem regenerates if id is falsy).
-            // Simplest: after save, we don't persist the slot here — user can drop
-            // it from the picker. Leave as bank-only.
+          // writeItem assigns an id when draft.id is falsy. Capture that id so
+          // a brand-new item can be auto-dropped into the slot that opened the
+          // picker (editorSlotId).
+          const wasNew = !draft.id;
+          const id = draft.id || `item_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const withId = { ...draft, id };
+          writeItem(withId);
+          if (wasNew && editorSlotId) {
+            writeTrack(id, effectiveChapter, {
+              actorId: actor.id,
+              slotId: editorSlotId,
+              stateId: 'pristine',
+              note: 'Created via item editor.',
+            });
           }
           setEditorItemId(null);
           setEditorSlotId(null);

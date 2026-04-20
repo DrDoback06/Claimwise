@@ -90,6 +90,107 @@ class AIService {
     return this.preferredProvider;
   }
 
+  // ─── Loomwright AI Providers routing ────────────────────────────────────────
+  // The Loomwright AIProviders panel writes both into worldState.aiSettings and
+  // into these two localStorage keys so the service stays a pure singleton:
+  //   lw-ai-routing  -> { taskId: providerNameOrId }
+  //   lw-ai-providers-> [{ id, name, model, enabled }]
+  // Provider ids from Loomwright (p_anthropic, p_openai, p_gemini, p_local)
+  // map to aiService provider names below.
+  _loadLoomwrightRouting() {
+    try {
+      const raw = localStorage.getItem('lw-ai-routing');
+      if (!raw) return {};
+      const obj = JSON.parse(raw);
+      return obj && typeof obj === 'object' ? obj : {};
+    } catch {
+      return {};
+    }
+  }
+
+  _resolveLoomwrightProvider(task) {
+    const routing = this._loadLoomwrightRouting();
+    const providerId = routing?.[task];
+    if (!providerId) return null;
+    // Loomwright provider ids -> aiService provider names
+    const map = {
+      p_anthropic: 'anthropic',
+      p_openai: 'openai',
+      p_gemini: 'gemini',
+      p_groq: 'groq',
+      p_huggingface: 'huggingface',
+      p_local: 'offline',
+    };
+    // Allow direct provider names too
+    if (this.apis[providerId]) return providerId;
+    return map[providerId] || null;
+  }
+
+  /** Record a usage event (cheap; stored in localStorage for the UI to show). */
+  _recordUsage(task, providerName, tokensApprox, ok) {
+    try {
+      const key = 'lw-ai-usage';
+      const raw = localStorage.getItem(key);
+      const arr = raw ? JSON.parse(raw) : [];
+      const entry = {
+        at: Date.now(),
+        taskId: task,
+        providerId: providerName,
+        tokens: tokensApprox,
+        // Rough per-1K-token cost (defaults — AIProviders panel lets you override).
+        costUSD: this._approxCost(providerName, tokensApprox),
+        ok,
+      };
+      const next = [entry, ...arr].slice(0, 500);
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  _approxCost(providerName, tokens) {
+    const per1k = {
+      anthropic: 0.003,
+      openai: 0.0025,
+      gemini: 0.0015,
+      groq: 0,
+      huggingface: 0,
+      offline: 0,
+    };
+    return ((per1k[providerName] ?? 0) * (tokens || 0)) / 1000;
+  }
+
+  _approxTokens(prompt, systemContext, response) {
+    const s = [prompt, systemContext, response].filter(Boolean).join(' ');
+    return Math.ceil(s.length / 4);
+  }
+
+  /**
+   * Loomwright Voice Studio plug-in: the app calls setLoomwrightContext() with
+   * a live reference to worldState + current book/chapter. When present, any
+   * "creative" callAI will prepend the active voice profile's guidance to the
+   * systemContext. See src/loomwright/voice/voiceContext.js for resolution.
+   */
+  setLoomwrightContext(ctxOrGetter) {
+    this._lwCtx = typeof ctxOrGetter === 'function' ? ctxOrGetter : () => ctxOrGetter;
+  }
+  _getLoomwrightVoiceSnippet(task) {
+    try {
+      if (!this._lwCtx) return '';
+      const ctx = this._lwCtx();
+      if (!ctx) return '';
+      // Only inject for creative/rewrite-style tasks by default.
+      const creativeTasks = new Set(['creative', 'general', 'voice', 'dialogue', 'scene', 'draft']);
+      if (!creativeTasks.has(task)) return '';
+      // Lazy require to avoid a circular import.
+      // eslint-disable-next-line global-require
+      const { voiceSystemSnippet } = require('../loomwright/voice/voiceContext');
+      return voiceSystemSnippet(ctx.worldState, ctx.bookId, ctx.chapterId) || '';
+    } catch {
+      return '';
+    }
+  }
+
   /**
    * Get offline AI status
    */
@@ -792,6 +893,25 @@ class AIService {
       skipQueue = false 
     } = options;
 
+    // Loomwright AI Providers task routing: consult the task -> provider map.
+    // We temporarily override the preferredProvider for this single call and
+    // record a usage event after it resolves (success or failure).
+    const routedProvider = this._resolveLoomwrightProvider(task);
+    const prevPreferred = this.preferredProvider;
+    if (routedProvider && this.apis[routedProvider]) {
+      this.preferredProvider = routedProvider;
+    }
+    const restorePreferred = () => {
+      if (routedProvider) this.preferredProvider = prevPreferred;
+    };
+
+    // Loomwright Voice Studio plug-in: fold the active chapter's voice profile
+    // into the systemContext for creative tasks. No-op when no profile active.
+    const voiceSnippet = this._getLoomwrightVoiceSnippet(task);
+    if (voiceSnippet) {
+      systemContext = systemContext ? `${voiceSnippet}\n\n${systemContext}` : voiceSnippet;
+    }
+
     // Generate cache key
     const cacheKey = useCache ? this._generateCacheKey(prompt, systemContext, task) : null;
     
@@ -817,8 +937,12 @@ class AIService {
         if (useCache && cacheKey) {
           this._cacheResponse(cacheKey, result);
         }
+        this._recordUsage(task, this.preferredProvider, this._approxTokens(prompt, systemContext, result), true);
+        restorePreferred();
         return result;
       } catch (error) {
+        this._recordUsage(task, this.preferredProvider, this._approxTokens(prompt, systemContext, ''), false);
+        restorePreferred();
         if (controller && !abortController) {
           this.activeRequestControllers.delete(controller);
         }
@@ -826,11 +950,21 @@ class AIService {
       }
     }
 
-    // Otherwise, queue the request
+    // Otherwise, queue the request (still record usage through a wrapping promise)
     return new Promise((resolve, reject) => {
+      const wrappedResolve = (result) => {
+        this._recordUsage(task, this.preferredProvider, this._approxTokens(prompt, systemContext, result), true);
+        restorePreferred();
+        resolve(result);
+      };
+      const wrappedReject = (err) => {
+        this._recordUsage(task, this.preferredProvider, this._approxTokens(prompt, systemContext, ''), false);
+        restorePreferred();
+        reject(err);
+      };
       this.requestQueue.push({
-        resolve,
-        reject,
+        resolve: wrappedResolve,
+        reject: wrappedReject,
         prompt,
         task,
         systemContext,
