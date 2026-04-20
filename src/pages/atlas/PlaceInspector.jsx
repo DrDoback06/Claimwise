@@ -155,7 +155,8 @@ export default function PlaceInspector({
   const chapters = place.chapterIds || place.ch || [];
   const first = chapters.length ? Math.min(...chapters.map(Number).filter(Number.isFinite)) : null;
   const last = chapters.length ? Math.max(...chapters.map(Number).filter(Number.isFinite)) : null;
-  const mentions = place.mentions || chapters.length;
+  /** Stored mention count on the place, or fall back to linked chapter count (distinct from loaded mention hits). */
+  const mentionStatValue = place.mentions || chapters.length;
 
   const describe = () => {
     dispatchWeaver({
@@ -328,7 +329,7 @@ export default function PlaceInspector({
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 14 }}>
         <StatCard k="Chapters" v={chapters.length ? chapters.join(', ') : '-'} />
-        <StatCard k="Mentions" v={mentions || '-'} />
+        <StatCard k="Mentions" v={mentionStatValue || '-'} />
         <StatCard k="First appears" v={first ? `ch.${first}` : '-'} />
         <StatCard k="Most recent" v={last ? `ch.${last}` : '-'} />
       </div>
