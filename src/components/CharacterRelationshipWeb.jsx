@@ -90,16 +90,8 @@ const CharacterRelationshipWeb = ({ actor, actors, onActorSelect }) => {
       });
 
       setRelationships(processed);
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CharacterRelationshipWeb.jsx:60',message:'Relationships processed',data:{processedCount:processed.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
-    } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CharacterRelationshipWeb.jsx:63',message:'Error loading relationships',data:{error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
-      
-      console.error('Error loading relationships:', error);
+} catch (error) {
+console.error('Error loading relationships:', error);
     }
   };
 

@@ -30,10 +30,7 @@ class ImageGenerationService {
    */
   getApiKey() {
     this.refreshApiKey();
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getApiKey',message:'Getting API key',data:{apiKeyPresent:!!this.apiKey,apiKeyLength:this.apiKey?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion
-    if (!this.apiKey) {
+if (!this.apiKey) {
       throw new Error('OpenAI API key not set. Please configure in Settings (OpenAI API Key for DALL-E).');
     }
     return this.apiKey;
@@ -146,11 +143,7 @@ class ImageGenerationService {
       let response = null;
       
       while (attempt <= maxAttempts) {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:generateSkillSymbol',message:`Starting skill symbol generation attempt ${attempt}`,data:{baseUrl:this.baseUrl,apiKeyPresent:!!apiKey,promptLength:prompt?.length || 0,skillName:skillData.name,skillDesc:skillData.desc},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        
-        response = await fetch(this.baseUrl, {
+response = await fetch(this.baseUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -165,28 +158,15 @@ class ImageGenerationService {
             style: 'vivid'
           })
         }).catch((fetchError) => {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:generateSkillSymbol',message:'Fetch error caught',data:{errorName:fetchError?.name,errorMessage:fetchError?.message,errorStack:fetchError?.stack?.substring(0,200),baseUrl:this.baseUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
-          throw fetchError;
+throw fetchError;
         });
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:generateSkillSymbol',message:'Fetch response received',data:{status:response?.status,statusText:response?.statusText,ok:response?.ok,attempt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-
-        if (!response.ok) {
+if (!response.ok) {
           let errorMessage = 'Symbol generation failed';
           let errorData = null;
           try {
             errorData = await response.json();
             errorMessage = errorData.error?.message || errorData.message || errorMessage;
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:generateSkillSymbol',message:'Response not OK - safety system rejection',data:{status:response.status,statusText:response.statusText,errorMessage,errorData,actualPrompt:prompt,attempt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
-            
-            // If it's a safety system rejection and we haven't tried the fallback yet
+// If it's a safety system rejection and we haven't tried the fallback yet
             if ((errorMessage.includes('safety system') || errorMessage.includes('content policy') || errorMessage.includes('rejected')) && attempt < maxAttempts) {
               // Use an even more generic prompt
               prompt = 'Minimalist UI symbol icon, simple geometric design, single color, dark fantasy game interface style, clean abstract symbol';
@@ -195,10 +175,7 @@ class ImageGenerationService {
             }
           } catch (e) {
             errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:generateSkillSymbol',message:'Failed to parse error response',data:{status:response.status,statusText:response.statusText,parseError:e.message,actualPrompt:prompt,attempt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion
-          }
+}
           
           // If it's a safety system rejection after all attempts, provide a more helpful message
           if (errorMessage.includes('safety system') || errorMessage.includes('content policy')) {
@@ -659,11 +636,7 @@ class ImageGenerationService {
    */
   async saveImageToLocal(imageUrl, relativePath) {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:'Starting image save',data:{imageUrl:imageUrl?.substring(0,100),relativePath},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      
-      // OpenAI blob URLs have CORS restrictions, so we need to use a proxy
+// OpenAI blob URLs have CORS restrictions, so we need to use a proxy
       // Try CORS proxy first since direct fetch will fail
       let base64Data;
       let blob;
@@ -679,11 +652,7 @@ class ImageGenerationService {
       
       for (let i = 0; i < proxyServices.length; i++) {
         try {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:`Trying CORS proxy ${i+1}`,data:{imageUrl:imageUrl?.substring(0,100),proxyUrl:proxyServices[i]?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'V'})}).catch(()=>{});
-          // #endregion
-          
-          const proxyResponse = await fetch(proxyServices[i], {
+const proxyResponse = await fetch(proxyServices[i], {
             method: 'GET',
             headers: {
               'Accept': 'image/*'
@@ -698,11 +667,7 @@ class ImageGenerationService {
               reader.onerror = reject;
               reader.readAsDataURL(blob);
             });
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:'Proxy fetch successful',data:{base64Length:base64Data?.length || 0,proxyIndex:i},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'W'})}).catch(()=>{});
-            // #endregion
-            break; // Success, exit loop
+break; // Success, exit loop
           } else {
             lastError = new Error(`Proxy ${i+1} failed: ${proxyResponse.status}`);
           }
@@ -715,11 +680,7 @@ class ImageGenerationService {
       // If all proxies failed, try direct fetch (might work if server allows CORS)
       if (!base64Data) {
         try {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:'Trying direct fetch',data:{imageUrl:imageUrl?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'X'})}).catch(()=>{});
-          // #endregion
-          
-          const directResponse = await fetch(imageUrl, {
+const directResponse = await fetch(imageUrl, {
             mode: 'cors',
             credentials: 'omit'
           });
@@ -736,27 +697,14 @@ class ImageGenerationService {
             throw new Error(`Direct fetch failed: ${directResponse.status}`);
           }
         } catch (directError) {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:'All methods failed',data:{error:directError?.message || lastError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'Y'})}).catch(()=>{});
-          // #endregion
-          throw new Error(`Failed to convert image to base64 due to CORS restrictions. Tried ${proxyServices.length} proxy services and direct fetch. Error: ${directError?.message || lastError?.message}`);
+throw new Error(`Failed to convert image to base64 due to CORS restrictions. Tried ${proxyServices.length} proxy services and direct fetch. Error: ${directError?.message || lastError?.message}`);
         }
       }
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:'Image converted to base64',data:{base64Length:base64Data?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-      // #endregion
-      
-      // Store in IndexedDB
+// Store in IndexedDB
       const dbModule = await import('./database');
       const db = dbModule.default;
       await db.init();
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:'Database initialized, checking images store',data:{hasImagesStore:db.db?.objectStoreNames?.contains('images')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-      // #endregion
-      
-      const imageData = {
+const imageData = {
         id: relativePath.replace(/\//g, '_'),
         path: relativePath,
         data: base64Data,
@@ -765,25 +713,16 @@ class ImageGenerationService {
 
       try {
         await db.add('images', imageData);
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:'Image added to database',data:{imageId:imageData.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-        // #endregion
-      } catch (e) {
+} catch (e) {
         // Update if exists
         await db.update('images', imageData);
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:'Image updated in database',data:{imageId:imageData.id,error:e.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'K'})}).catch(()=>{});
-        // #endregion
-      }
+}
 
       // Return path for use in img src
       return `${this.imageBasePath}/${relativePath}`;
     } catch (error) {
       console.error('Error saving image:', error);
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:saveImageToLocal',message:'Error saving image',data:{errorMessage:error?.message,errorStack:error?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'L'})}).catch(()=>{});
-      // #endregion
-      throw error;
+throw error;
     }
   }
 
@@ -832,11 +771,7 @@ class ImageGenerationService {
    */
   async getImageData(imagePath) {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getImageData',message:'Getting image data',data:{imagePath},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'O'})}).catch(()=>{});
-      // #endregion
-      
-      const dbModule = await import('./database');
+const dbModule = await import('./database');
       const db = dbModule.default;
       await db.init();
       
@@ -848,24 +783,11 @@ class ImageGenerationService {
       imageId = imageId.replace(/^\//, '');
       // Replace all / with _ to match storage format
       imageId = imageId.replace(/\//g, '_');
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getImageData',message:'Extracted image ID',data:{originalPath:imagePath,extractedId:imageId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'P'})}).catch(()=>{});
-      // #endregion
-      
-      const imageData = await db.get('images', imageId);
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getImageData',message:'Image data retrieved',data:{found:!!imageData,hasData:!!imageData?.data,dataLength:imageData?.data?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'Q'})}).catch(()=>{});
-      // #endregion
-      
-      return imageData?.data || null;
+const imageData = await db.get('images', imageId);
+return imageData?.data || null;
     } catch (error) {
       console.error('Error getting image:', error);
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getImageData',message:'Error getting image',data:{errorMessage:error?.message,errorStack:error?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'R'})}).catch(()=>{});
-      // #endregion
-      return null;
+return null;
     }
   }
 
@@ -874,28 +796,15 @@ class ImageGenerationService {
    */
   async getImageUrl(imagePath) {
     if (!imagePath) return null;
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getImageUrl',message:'Getting image URL',data:{imagePath},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'S'})}).catch(()=>{});
-    // #endregion
-    
-    // If it's already a full URL, return it
+// If it's already a full URL, return it
     if (imagePath.startsWith('http')) return imagePath;
     
     // Try to get from IndexedDB
     const imageData = await this.getImageData(imagePath);
     if (imageData) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getImageUrl',message:'Returning base64 data URL',data:{dataUrlLength:imageData?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T'})}).catch(()=>{});
-      // #endregion
-      return imageData; // base64 data URL
+return imageData; // base64 data URL
     }
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getImageUrl',message:'Image not found in DB, using fallback path',data:{fallbackPath:imagePath.startsWith('/') ? imagePath : `/${imagePath}`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'U'})}).catch(()=>{});
-    // #endregion
-    
-    // Fallback to public path
+// Fallback to public path
     return imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
   }
 }

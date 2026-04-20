@@ -75,20 +75,13 @@ const MoodEditorPanel = ({
 
   // Generate preview
   const generatePreview = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MoodEditorPanel.jsx:71',message:'generatePreview called',data:{hasSelectedText:!!selectedText,hasOriginalText:!!originalText,isOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
-    if (!selectedText && !originalText) return;
+if (!selectedText && !originalText) return;
     
     const textToRewrite = selectedText || originalText;
     setIsGenerating(true);
     
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MoodEditorPanel.jsx:78',message:'Calling AI service',data:{textLength:textToRewrite.length,moodSettings},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      const moodDescriptions = [];
+const moodDescriptions = [];
       if (moodSettings.comedy_horror > 70) moodDescriptions.push('HORROR - dark, unsettling, ominous');
       else if (moodSettings.comedy_horror < 30) moodDescriptions.push('COMEDY - witty, absurd, humorous');
       if (moodSettings.tension > 70) moodDescriptions.push('HIGH TENSION - urgent, suspenseful');
@@ -158,28 +151,14 @@ Only return the rewritten text (no explanations):`;
       }
 
       const result = await aiService.callAI(prompt, 'creative', systemContext);
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MoodEditorPanel.jsx:114',message:'AI result received',data:{resultLength:result?.length||0,hasResult:!!result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
-      if (!result || result.trim().length === 0) {
+if (!result || result.trim().length === 0) {
         throw new Error('AI returned empty result');
       }
       
       const cleanResult = result.replace(/^["']|["']$/g, '').trim();
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MoodEditorPanel.jsx:121',message:'Preview cleaned',data:{cleanResultLength:cleanResult.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
-      setPreviewText(cleanResult);
+setPreviewText(cleanResult);
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MoodEditorPanel.jsx:125',message:'Preview generation error',data:{error:error.message,errorName:error.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
-      console.error('Preview generation failed:', error);
+console.error('Preview generation failed:', error);
       const errorMessage = error.message?.includes('API key') 
         ? 'AI service not configured. Please check your API keys in Settings.'
         : error.message?.includes('quota') || error.message?.includes('rate limit')

@@ -162,24 +162,14 @@ const RelationshipTrackerEnhanced = ({ actors, books, onClose }) => {
 
   // Aggregate relationships from actor profile snapshots
   const loadRelationshipsFromSnapshots = (actors) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RelationshipTrackerEnhanced.jsx:64',message:'loadRelationshipsFromSnapshots started',data:{actorsCount:actors.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion
-    
-    const relationships = [];
+const relationships = [];
     
     for (const actor of actors) {
       if (!actor.snapshots) continue;
       
       // Iterate through all snapshots
       for (const [snapKey, snapshot] of Object.entries(actor.snapshots)) {
-        // #region agent log
-        if (snapshot.relationships) {
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RelationshipTrackerEnhanced.jsx:72',message:'Snapshot with relationships found',data:{actorId:actor.id,snapKey,relationshipsCount:Object.keys(snapshot.relationships).length,relationshipKeys:Object.keys(snapshot.relationships)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-        }
-        // #endregion
-        
-        if (!snapshot.relationships) continue;
+if (!snapshot.relationships) continue;
         
         const [bookId, chapterId] = snapKey.split('_').map(Number);
         

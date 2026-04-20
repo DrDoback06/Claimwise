@@ -724,11 +724,7 @@ const WritersRoomEnhanced = ({ books, actors, items, skills, onClose, onChapterU
 
   // Handle context menu actions
   const handleContextMenuAction = async (actionId, text, customPrompt = '', data = {}) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:647',message:'Context menu action',data:{actionId,hasText:!!text,hasCustomPrompt:!!customPrompt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
-    
-    const { cursorContext } = data;
+const { cursorContext } = data;
     
     switch (actionId) {
       case 'rewrite':
@@ -872,12 +868,7 @@ Tighten:`;
       });
 
       const result = await aiService.callAI(user, 'creative', system);
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:750',message:'AI result received',data:{actionId,resultLength:result?.length||0,hasResult:!!result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      
-      if (result) {
+if (result) {
         const cleanResult = result.replace(/^["']|["']$/g, '').trim();
         if (actionId === 'continue' || actionId === 'scene' || actionId === 'dialogue') {
           setChapterText(prev => prev + '\n\n' + cleanResult);
@@ -888,11 +879,7 @@ Tighten:`;
         }
       }
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:760',message:'AI action error',data:{actionId,error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      
-      console.error('AI action failed:', error);
+console.error('AI action failed:', error);
       const errorMessage = error.message?.includes('API key') 
         ? 'AI service not configured. Please check your API keys in Settings.'
         : error.message?.includes('quota') || error.message?.includes('rate limit')
@@ -906,11 +893,7 @@ Tighten:`;
 
   // Handle mood editor apply
   const handleMoodEditorApply = (rewrittenText, moodSettings) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:770',message:'Mood editor apply',data:{hasRewrittenText:!!rewrittenText,rewrittenTextLength:rewrittenText?.length||0,hasSelectionRange:!!selectionRange,hasSelectedText:!!selectedText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion
-    
-    if (!rewrittenText) {
+if (!rewrittenText) {
       toastService.warning('No rewritten text to apply');
       return;
     }
@@ -922,11 +905,7 @@ Tighten:`;
       setShowMoodEditor(false);
       setSelectedText('');
       toastService.success('Mood rewrite applied!');
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:780',message:'Mood rewrite applied via selectionRange',data:{beforeLength:before.length,afterLength:after.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-      // #endregion
-    } else if (selectedText) {
+} else if (selectedText) {
       // Fallback: replace first occurrence if no selection range
       const index = chapterText.indexOf(selectedText);
       if (index !== -1) {
@@ -936,11 +915,7 @@ Tighten:`;
         setShowMoodEditor(false);
         setSelectedText('');
         toastService.success('Mood rewrite applied!');
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:791',message:'Mood rewrite applied via fallback',data:{index},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-        // #endregion
-      } else {
+} else {
         toastService.warning('Could not find selected text in chapter');
       }
     } else {
@@ -952,11 +927,7 @@ Tighten:`;
    * Re-write selected text using AI
    */
   const rewriteSelectedText = async (customPrompt = '') => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:835',message:'rewriteSelectedText called',data:{selectedTextLength:selectedText?.length||0,hasSelectionRange:!!selectionRange,hasCustomPrompt:!!customPrompt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-    // #endregion
-    
-    if (!selectedText || selectedText.length < 10) {
+if (!selectedText || selectedText.length < 10) {
       toastService.warning('Select more text to rewrite (minimum 10 characters)');
       return;
     }
@@ -989,12 +960,7 @@ Return ONLY the rewritten text, nothing else.`;
       });
 
       const response = await aiService.callAI(rewriteUser, 'creative', rewriteSystem);
-
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:860',message:'Rewrite AI result',data:{responseLength:response?.length||0,hasResponse:!!response},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-      // #endregion
-      
-      if (!response || response.trim().length === 0) {
+if (!response || response.trim().length === 0) {
         throw new Error('AI returned empty result');
       }
       
@@ -1014,11 +980,7 @@ Return ONLY the rewritten text, nothing else.`;
       setShowSelectionToolbar(false);
       toastService.success('Text rewritten successfully!');
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:880',message:'Rewrite error',data:{error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-      // #endregion
-      
-      const errorMessage = error.message?.includes('API key') 
+const errorMessage = error.message?.includes('API key') 
         ? 'AI service not configured. Please check your API keys in Settings.'
         : error.message?.includes('quota') || error.message?.includes('rate limit')
         ? 'AI service quota exceeded. Please try again later.'
@@ -1033,11 +995,7 @@ Return ONLY the rewritten text, nothing else.`;
    * Expand/continue from selected text using AI
    */
   const expandSelectedText = async (customPrompt = '') => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:890',message:'expandSelectedText called',data:{selectedTextLength:selectedText?.length||0,hasSelectionRange:!!selectionRange,hasCustomPrompt:!!customPrompt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'K'})}).catch(()=>{});
-    // #endregion
-    
-    if (!selectedText) {
+if (!selectedText) {
       toastService.warning('Select text to expand from');
       return;
     }
@@ -1071,12 +1029,7 @@ Continue the story naturally. Return ONLY the continuation text.`;
       });
 
       const response = await aiService.callAI(expandUser, 'creative', expandSystem);
-
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:920',message:'Expand AI result',data:{responseLength:response?.length||0,hasResponse:!!response},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'K'})}).catch(()=>{});
-      // #endregion
-      
-      if (!response || response.trim().length === 0) {
+if (!response || response.trim().length === 0) {
         throw new Error('AI returned empty result');
       }
       
@@ -1096,11 +1049,7 @@ Continue the story naturally. Return ONLY the continuation text.`;
       setShowSelectionToolbar(false);
       toastService.success('Text expanded successfully!');
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritersRoomEnhanced.jsx:940',message:'Expand error',data:{error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'K'})}).catch(()=>{});
-      // #endregion
-      
-      const errorMessage = error.message?.includes('API key') 
+const errorMessage = error.message?.includes('API key') 
         ? 'AI service not configured. Please check your API keys in Settings.'
         : error.message?.includes('quota') || error.message?.includes('rate limit')
         ? 'AI service quota exceeded. Please try again later.'

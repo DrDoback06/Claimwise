@@ -4,7 +4,8 @@ import {
   BookMarked, Network, Activity, Clock, TrendingUp, AlertTriangle, 
   History, Search, Archive, RefreshCw, Settings, FileText,
   ChevronRight, ChevronDown, Layers, Map, Brain, Link, Shield,
-  Home, Sparkles, Package, Eye
+  Home, Sparkles, Package, Eye, Mic, Compass, Feather, Sun, Coffee,
+  Smartphone, BookOpenCheck
 } from 'lucide-react';
 import Tooltip from './Tooltip';
 
@@ -63,6 +64,24 @@ const NAVIGATION_CONFIG = [
       { id: 'consistency', label: 'Story Analysis', icon: Shield, tooltip: 'Consistency checking and plot thread tracking' },
       { id: 'wiki', label: 'Wiki Manager', icon: BookMarked, tooltip: 'Comprehensive encyclopedia of your story world' },
       { id: 'storymap', label: 'Story Map', icon: Network, tooltip: 'Narrative structure and scene connections' },
+    ]
+  },
+  {
+    id: 'loomwright',
+    label: 'Loomwright',
+    icon: Feather,
+    tooltip: 'Loomwright redesign surface — Canon Weaver, Voice Studio, Atlas AI, Language Workbench, Interview Mode, and more',
+    items: [
+      { id: 'lw_weaver',    label: 'Canon Weaver',      icon: Sparkles,    tooltip: 'Capture an idea and let AI propose changes across world, cast, plot, timeline, atlas, and chapters' },
+      { id: 'lw_voice',     label: 'Voice Studio',      icon: Mic,         tooltip: 'Tune, A/B compare, teach, and assign writing voice profiles to chapters' },
+      { id: 'lw_atlas',     label: 'Atlas AI',          icon: Compass,     tooltip: 'Regional map and floorplan view with chapter-linked places' },
+      { id: 'lw_language',  label: 'Language Workbench',icon: FileText,    tooltip: 'Inline check, thesaurus, rewrite, and readability metrics for your manuscript' },
+      { id: 'lw_interview', label: 'Interview Mode',    icon: Users,       tooltip: 'Solo and group chat with your characters, with prompt deck and saved quotes' },
+      { id: 'lw_spark',     label: 'Daily Spark',       icon: Zap,         tooltip: 'Typed editorial sparks: contradictions, voice drift, discoveries, what-ifs' },
+      { id: 'lw_brief',     label: 'Morning Brief',     icon: Coffee,      tooltip: 'Start-of-day summary of noticed/worry/delight items' },
+      { id: 'lw_providers', label: 'AI Providers',      icon: Settings,    tooltip: 'Provider list, per-task routing, usage and budget' },
+      { id: 'lw_mobile',    label: 'Mobile Preview',    icon: Smartphone,  tooltip: 'Mobile shells: Today, Writing, Capture (Capacitor-ready)' },
+      { id: 'lw_docs',      label: 'Design & Docs',     icon: BookOpenCheck, tooltip: 'IA spec, diagrams, aesthetic directions, enhancement roadmap' },
     ]
   },
   {

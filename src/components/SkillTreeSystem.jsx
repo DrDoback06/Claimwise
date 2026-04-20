@@ -450,12 +450,7 @@ const SkillTreeSystem = ({
     if (selectedActor) {
       const actorSkills = selectedActor.activeSkills || [];
       const actorSkillIds = actorSkills.map(s => typeof s === 'string' ? s : (s.id || s));
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SkillTreeSystem.jsx:411',message:'buildSkillTree using current state',data:{selectedActorId:selectedActor.id,currentSkillsCount:actorSkills.length,currentSkills:actorSkillIds,hasSnapshots:!!selectedActor.snapshots,snapshotKeys:Object.keys(selectedActor.snapshots||{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-      
-      // Get all skills the actor has, plus prerequisites and skills that can be unlocked
+// Get all skills the actor has, plus prerequisites and skills that can be unlocked
       const skillsToInclude = new Set(actorSkillIds);
       
       // Add prerequisites of unlocked skills

@@ -95,11 +95,7 @@ const TextSelectionContextMenu = ({
   }, [isOpen, onClose]);
 
   const handleAction = (itemId) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TextSelectionContextMenu.jsx:97',message:'Text context menu action',data:{itemId,selectedTextLength:selectedText.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-    // #endregion
-    
-    if (onAction) {
+if (onAction) {
       onAction(itemId, { selectedText });
     }
     onClose();

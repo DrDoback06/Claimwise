@@ -196,11 +196,7 @@ const WritingCanvas = ({
   };
 
   const handleSave = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:191',message:'handleSave called',data:{hasChapter:!!currentChapter,hasBook:!!currentBook,contentLength:content?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
-    if (!currentChapter || !currentBook) return;
+if (!currentChapter || !currentBook) return;
     
     setIsSaving(true);
     try {
@@ -221,12 +217,7 @@ const WritingCanvas = ({
       }));
 
       if (onSave) onSave();
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:215',message:'Chapter saved, extracting events',data:{bookId:currentBook.id,chapterId:currentChapter.id,contentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      
-      // Generate chapter memory for story continuity (runs in background)
+// Generate chapter memory for story continuity (runs in background)
       if (content && content.trim().length >= 200) {
         chapterMemoryService.generateMemory(
           currentChapter.id,
@@ -255,22 +246,10 @@ const WritingCanvas = ({
             counts: ingestSession.stages?.extracted || {},
             errors: ingestSession.errors || []
           });
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:240',message:'Ingestion session completed',data:{sessionId:ingestSession.id,status:ingestSession.status,errors:ingestSession.errors?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-
-          // Show Entity Extraction Wizard (mandatory)
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:254',message:'Setting showEntityWizard to true',data:{currentChapter:currentChapter?.id,currentBook:currentBook?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-          setShowEntityWizard(true);
+// Show Entity Extraction Wizard (mandatory)
+setShowEntityWizard(true);
         } catch (error) {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:247',message:'Event extraction failed',data:{error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-          // #endregion
-          
-          console.error('[WritingCanvas] Event extraction failed:', error);
+console.error('[WritingCanvas] Event extraction failed:', error);
           setIngestionHealth({
             status: 'failed',
             sessionId: null,
@@ -282,11 +261,7 @@ const WritingCanvas = ({
         }
       }
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:256',message:'Save failed',data:{error:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-      // #endregion
-      
-      console.error('Save failed:', error);
+console.error('Save failed:', error);
     } finally {
       setIsSaving(false);
     }
@@ -929,11 +904,7 @@ Write a tighter version (aim for 50-70% of original length). Only return the con
   
   // Handle Entity Extraction Wizard completion
   const handleEntityWizardComplete = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:980',message:'Entity wizard completed',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-    // #endregion
-    
-    setShowEntityWizard(false);
+setShowEntityWizard(false);
     
     // Reload actors, items, skills in case they were created/updated
     const loadedActors = await db.getAll('actors');
@@ -1039,10 +1010,7 @@ Write a tighter version (aim for 50-70% of original length). Only return the con
           {/* Save & Extract button */}
           <button
             onClick={() => {
-              // #region agent log
-              fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WritingCanvas.jsx:1067',message:'SAVE & EXTRACT button clicked',data:{isSaving,hasContent:!!content,contentLength:content?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-              // #endregion
-              handleSave();
+handleSave();
             }}
             disabled={isSaving}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 rounded-lg text-white font-medium transition-colors"

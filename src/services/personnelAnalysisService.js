@@ -32,15 +32,8 @@ class PersonnelAnalysisService {
    * @returns {Promise<Object>} Analysis results
    */
   async analyzeChapter(bookId, chapterId, actors, chapterText, chapter = {}) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:24',message:'analyzeChapter called',data:{bookId,chapterId,chapterTextLength:chapterText?.length,actorsCount:actors?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-    // #endregion
-
-    if (!chapterText || chapterText.trim().length < 50) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:27',message:'Chapter text too short',data:{chapterTextLength:chapterText?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-      // #endregion
-      return {
+if (!chapterText || chapterText.trim().length < 50) {
+return {
         success: false,
         error: 'Chapter text too short for analysis',
         updatedActors: []
@@ -56,19 +49,9 @@ class PersonnelAnalysisService {
         bookId,
         actors
       );
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:40',message:'Timeline events extracted',data:{eventsCount:timelineEvents.length,events:timelineEvents.map(e=>({type:e.type,title:e.title,actors:e.actors}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,E'})}).catch(()=>{});
-      // #endregion
-
-      // Convert timeline events to character data format for snapshot building
+// Convert timeline events to character data format for snapshot building
       const extractedData = this.convertEventsToCharacterData(timelineEvents, actors);
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:48',message:'Events converted to character data',data:{appearances:extractedData?.appearances?.length,statChanges:extractedData?.statChanges?.length,skillChanges:extractedData?.skillChanges?.length,relationshipChanges:extractedData?.relationshipChanges?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,E'})}).catch(()=>{});
-      // #endregion
-
-      const updatedActors = [];
+const updatedActors = [];
       const snapKey = `${bookId}_${chapterId}`;
 
       // Get all unique actors from events
@@ -88,12 +71,7 @@ class PersonnelAnalysisService {
           });
         }
       });
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:62',message:'Actors found in events',data:{actorsInChapter:Array.from(actorsInChapter),eventsCount:timelineEvents.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-
-      // Process each actor mentioned in the chapter
+// Process each actor mentioned in the chapter
       for (const actorName of actorsInChapter) {
         const actor = actors.find(a => 
           a.name.toLowerCase() === actorName.toLowerCase() ||
@@ -117,12 +95,7 @@ class PersonnelAnalysisService {
 
         // Update actor snapshot
         await this.updateActorSnapshot(currentActor.id, bookId, chapterId, snapshotData);
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:68',message:'Snapshot updated',data:{actorId:currentActor.id,actorName:currentActor.name,snapshotSkills:snapshotData?.activeSkills?.length,snapshotRelationships:Object.keys(snapshotData?.relationships||{}).length,skills:snapshotData?.activeSkills,relationships:Object.keys(snapshotData?.relationships||{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B,F,J'})}).catch(()=>{});
-        // #endregion
-
-        updatedActors.push({
+updatedActors.push({
           actorId: currentActor.id,
           actorName: currentActor.name,
           snapshot: snapshotData
@@ -198,30 +171,17 @@ class PersonnelAnalysisService {
     );
     
     for (const skillChange of actorSkillChanges) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:144',message:'Processing skill change',data:{action:skillChange.action,skillName:skillChange.skill,level:skillChange.level,character:skillChange.character},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      
-      if (skillChange.action === 'gained' || skillChange.action === 'learned') {
+if (skillChange.action === 'gained' || skillChange.action === 'learned') {
         // Add new skill
         const skillId = await this.findSkillId(skillChange.skill);
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:148',message:'Skill ID resolved',data:{skillName:skillChange.skill,skillId,found:!!skillId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        
-        if (skillId && !baseSnapshot.activeSkills.find(s => 
+if (skillId && !baseSnapshot.activeSkills.find(s => 
           (typeof s === 'string' ? s : s.id) === skillId
         )) {
           baseSnapshot.activeSkills.push({
             id: skillId,
             val: skillChange.level || 1
           });
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:155',message:'Skill added to snapshot',data:{skillId,level:skillChange.level||1,totalSkills:baseSnapshot.activeSkills.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
-        }
+}
       } else if (skillChange.action === 'improved' || skillChange.action === 'mastered') {
         // Upgrade existing skill
         const skillId = await this.findSkillId(skillChange.skill);
@@ -271,11 +231,7 @@ class PersonnelAnalysisService {
             direction: isActor1 ? 'outgoing' : 'incoming',
             updatedAt: Date.now()
           };
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:198',message:'Relationship added to snapshot',data:{actorId:actor.id,otherActorId:otherActor.id,strength,type,change:relChange.change,totalRelationships:Object.keys(baseSnapshot.relationships).length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-          // #endregion
-        }
+}
       }
     }
 
@@ -320,12 +276,7 @@ class PersonnelAnalysisService {
     actor.equipment = JSON.parse(JSON.stringify(snapshotData.equipment));
 
     await db.update('actors', actor);
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:250',message:'Actor updated in database',data:{actorId,snapKey,snapshotSkills:snapshotData.activeSkills.length,snapshotRelationships:Object.keys(snapshotData.relationships||{}).length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-    // #endregion
-
-    // Also save to snapshot store (for querying)
+// Also save to snapshot store (for querying)
     await db.saveSnapshot(actorId, bookId, chapterId, snapshotData);
   }
 
@@ -642,11 +593,7 @@ class PersonnelAnalysisService {
               level,
               context: event.description || event.title
             });
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:594',message:'Skill extracted from event',data:{actorName,skillName,action,level,eventTitle:event.title},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
-          }
+}
         });
       }
 
@@ -661,20 +608,11 @@ class PersonnelAnalysisService {
               character2: char2,
               change: event.description || event.title
             });
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:640',message:'Relationship extracted from event',data:{character1:char1,character2:char2,change:event.description||event.title},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion
-          }
+}
         }
       }
     }
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'personnelAnalysisService.js:648',message:'Conversion complete',data:{appearances:appearances.length,statChanges:statChanges.length,skillChanges:skillChanges.length,relationshipChanges:relationshipChanges.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,E'})}).catch(()=>{});
-    // #endregion
-
-    return {
+return {
       appearances,
       statChanges,
       skillChanges,

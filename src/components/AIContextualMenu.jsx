@@ -145,11 +145,7 @@ const AIContextualMenu = ({
 
   // Handle menu item click
   const handleAction = async (item) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AIContextualMenu.jsx:144',message:'handleAction called',data:{actionId:item.id,requiresText:item.requiresText,hasSelectedText:!!selectedText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    
-    if (item.requiresText && !selectedText) {
+if (item.requiresText && !selectedText) {
       // Note: toastService would need to be imported, but we'll let parent handle this
       return;
     }
@@ -158,22 +154,14 @@ const AIContextualMenu = ({
     
     try {
       if (onAction) {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AIContextualMenu.jsx:153',message:'Calling onAction',data:{actionId:item.id,selectedTextLength:selectedText.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        
-        await onAction(item.id, selectedText, customPrompt, {
+await onAction(item.id, selectedText, customPrompt, {
           cursorContext,
           item
         });
       }
       onClose();
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AIContextualMenu.jsx:162',message:'AI action error',data:{error:error.message,actionId:item.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      
-      console.error('AI action failed:', error);
+console.error('AI action failed:', error);
     } finally {
       setIsProcessing(false);
     }

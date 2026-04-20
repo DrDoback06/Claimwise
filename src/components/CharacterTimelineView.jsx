@@ -10,11 +10,7 @@ const CharacterTimelineView = ({ actor, books, items, skills }) => {
 
   // Collect all timeline events from chapters
   const timelineEvents = useMemo(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CharacterTimelineView.jsx:12',message:'Timeline events calculation',data:{hasActor:!!actor,hasActorName:!!actor?.name,hasBooks:!!books},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-    // #endregion
-    
-    if (!actor || !actor.name || !books) return [];
+if (!actor || !actor.name || !books) return [];
 
     const events = [];
 
@@ -153,12 +149,7 @@ const CharacterTimelineView = ({ actor, books, items, skills }) => {
       if (bookA !== bookB) return bookA - bookB;
       return chA - chB;
     });
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CharacterTimelineView.jsx:155',message:'Timeline events calculated',data:{eventCount:sorted.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-    // #endregion
-    
-    return sorted;
+return sorted;
   }, [actor, books, items, skills]);
 
   // Filter events

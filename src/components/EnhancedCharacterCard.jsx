@@ -186,14 +186,6 @@ const EnhancedCharacterCard = ({
             borderRadius: '8px'
           }}
         >
-          {/* #region agent log */}
-          {(() => {
-            try {
-              fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EnhancedCharacterCard.jsx:179',message:'Rendering character card',data:{characterName:character?.name,cardStyles,powerLevel:badgeData.powerLevel},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-            } catch(e) {}
-            return null;
-          })()}
-          {/* #endregion */}
           {/* Gradient overlay */}
           <div className={`absolute inset-0 ${powerStyles.bgGradient} opacity-60 pointer-events-none`} />
           

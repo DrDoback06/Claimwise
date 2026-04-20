@@ -68,6 +68,17 @@ import CallbacksAndMemoriesDisplay from './components/CallbacksAndMemoriesDispla
 import CharacterRelationshipHub from './components/CharacterRelationshipHub';
 import CharacterAISuggestionsPanel from './components/CharacterAISuggestionsPanel';
 import EnhancedInventoryDisplay from './components/EnhancedInventoryDisplay';
+// Loomwright redesign surfaces
+import CanonWeaver from './loomwright/weaver/CanonWeaver';
+import VoiceStudio from './loomwright/voice/VoiceStudio';
+import AtlasAI from './loomwright/atlas/AtlasAI';
+import LanguageWorkbench from './loomwright/language/LanguageWorkbench';
+import InterviewMode from './loomwright/interview/InterviewMode';
+import DailySpark from './loomwright/daily/DailySpark';
+import MorningBrief from './loomwright/daily/MorningBrief';
+import AIProviders from './loomwright/providers/AIProviders';
+import MobileLoomwright from './loomwright/mobile/MobileLoomwright';
+import LoomwrightDocs from './loomwright/docs/LoomwrightDocs';
 import StatHistoryTimeline from './components/StatHistoryTimeline';
 import InventoryHistoryTimeline from './components/InventoryHistoryTimeline';
 import CharacterStorylineCards from './components/CharacterStorylineCards';
@@ -75,7 +86,7 @@ import CharacterDialogueHub from './components/CharacterDialogueHub';
 import CharacterPlotInvolvement from './components/CharacterPlotInvolvement';
 import CharacterGamification from './components/CharacterGamification';
 import EnhancedItemVault from './components/EnhancedItemVault';
-import PaperDollView from './components/PaperDollView';
+import CharacterWardrobe from './loomwright/wardrobe/CharacterWardrobe';
 import EquipmentChangeViews from './components/EquipmentChangeViews';
 import TotalStatsDisplay from './components/TotalStatsDisplay';
 import InventoryAISuggestionsPanel from './components/InventoryAISuggestionsPanel';
@@ -3520,30 +3531,50 @@ const OmniscienceV22 = () => {
 
                         {actorDetailTab === 'inventory' && (
                           <div className="space-y-4">
-                            {/* Paper Doll View */}
-                            <div className="p-3 bg-slate-950 border border-blue-700 rounded">
-                              <div className="text-xs font-bold text-blue-400 mb-2">PAPER DOLL</div>
-                              {(() => {
-                                // #region agent log
-                                try {
-                                  fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.js:3523',message:'Rendering PaperDollView',data:{actorId:rawActor?.id,itemsCount:worldState?.itemBank?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-                                } catch(e) {}
-                                // #endregion
-                                try {
-                                  return <PaperDollView 
-                                    actor={rawActor} 
-                                    items={worldState?.itemBank || []}
-                                    onSlotClick={(slot) => console.log('Slot clicked:', slot)}
-                                    onItemHover={(item) => console.log('Item hovered:', item)}
-                                  />;
-                                } catch(error) {
-                                  // #region agent log
-                                  fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.js:3523',message:'PaperDollView render error',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-                                  // #endregion
-                                  return <div className="text-red-400">Error rendering PaperDollView: {error.message}</div>;
-                                }
-                              })()}
+                            {/* Loomwright Character Wardrobe */}
+                            <div className="bg-slate-950 border border-slate-700 rounded overflow-hidden">
+                              <CharacterWardrobe
+                                actor={rawActor}
+                                worldState={worldState}
+                                bookId={bookTab}
+                                currentChapter={currentChapter}
+                                onSelectChapter={setCurrentChapter}
+                                onPatchWorldState={(patch) => {
+                                  setWorldState(prev => {
+                                    const next = { ...prev };
+                                    if (patch.itemBank) next.itemBank = patch.itemBank;
+                                    if (patch.actors) next.actors = patch.actors;
+                                    return next;
+                                  });
+                                  // Persist patches to IndexedDB
+                                  if (patch.itemBank) {
+                                    (async () => {
+                                      try {
+                                        await db.clear('itemBank');
+                                        for (const it of patch.itemBank) {
+                                          await db.add('itemBank', it);
+                                        }
+                                      } catch (_e) { /* ignore */ }
+                                    })();
+                                  }
+                                  if (patch.actors) {
+                                    (async () => {
+                                      try {
+                                        await db.clear('actors');
+                                        for (const a of patch.actors) {
+                                          await db.add('actors', a);
+                                        }
+                                      } catch (_e) { /* ignore */ }
+                                    })();
+                                  }
+                                }}
+                              />
                             </div>
+
+                            {/* Legacy inventory panels kept as supplemental details */}
+                            <details className="bg-slate-950 border border-slate-700 rounded">
+                              <summary className="p-3 text-xs font-bold text-slate-300 cursor-pointer select-none">Legacy / supplemental inventory panels</summary>
+                              <div className="p-3 space-y-4">
 
                             {/* Equipment Change Views */}
                             <div className="p-3 bg-slate-950 border border-purple-700 rounded">
@@ -3609,6 +3640,8 @@ const OmniscienceV22 = () => {
                                 books={worldState?.books || {}}
                               />
                             </div>
+                              </div>
+                            </details>
                           </div>
                         )}
                         {actorDetailTab === 'inventory-old' && (
@@ -6867,6 +6900,38 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
             )}
             {activeTab === 'speedreader' && (
               <SpeedReader worldState={worldState} />
+            )}
+
+            {/* Loomwright redesign surfaces */}
+            {activeTab === 'lw_weaver' && (
+              <CanonWeaver worldState={worldState} setWorldState={setWorldState} />
+            )}
+            {activeTab === 'lw_voice' && (
+              <VoiceStudio worldState={worldState} setWorldState={setWorldState} />
+            )}
+            {activeTab === 'lw_atlas' && (
+              <AtlasAI worldState={worldState} setWorldState={setWorldState} />
+            )}
+            {activeTab === 'lw_language' && (
+              <LanguageWorkbench worldState={worldState} setWorldState={setWorldState} />
+            )}
+            {activeTab === 'lw_interview' && (
+              <InterviewMode worldState={worldState} setWorldState={setWorldState} />
+            )}
+            {activeTab === 'lw_spark' && (
+              <DailySpark worldState={worldState} setWorldState={setWorldState} />
+            )}
+            {activeTab === 'lw_brief' && (
+              <MorningBrief worldState={worldState} setWorldState={setWorldState} />
+            )}
+            {activeTab === 'lw_providers' && (
+              <AIProviders worldState={worldState} setWorldState={setWorldState} />
+            )}
+            {activeTab === 'lw_mobile' && (
+              <MobileLoomwright worldState={worldState} />
+            )}
+            {activeTab === 'lw_docs' && (
+              <LoomwrightDocs />
             )}
 
           </div>
