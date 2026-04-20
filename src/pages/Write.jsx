@@ -622,6 +622,8 @@ export default function WritePage({
                   captureOnMount={captureOnMount}
                   initialIdea={initialWeaveIdea}
                   onCaptureConsumed={onCaptureConsumed}
+                  writerBookId={bookTab}
+                  writerChapterId={currentChapter}
                 />
               ) : rightPane === 'analysis' ? (
                 <StoryAnalysisDrawer

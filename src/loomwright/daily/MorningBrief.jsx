@@ -18,6 +18,8 @@ const KIND_META = {
 
 const CACHE_KEY = (bookId) => `lw-brief-cache-${bookId}`;
 const ARCHIVE_KEY = (bookId) => `lw-brief-archive-${bookId}`;
+/** Refresh cached brief when older than this (ms). */
+const BRIEF_TTL_MS = 24 * 60 * 60 * 1000;
 
 function loadArchive(bookId) {
   try { return JSON.parse(localStorage.getItem(ARCHIVE_KEY(bookId)) || '[]'); }
@@ -43,6 +45,8 @@ function BriefBody({ worldState }) {
   const [showArchive, setShowArchive] = useState(false);
   const [archive, setArchive] = useState(() => loadArchive(bookIds[bookIds.length - 1] || 1));
 
+  const booksLoaded = worldState?.books && Object.keys(worldState.books).length > 0;
+
   useEffect(() => {
     try {
       const cached = JSON.parse(localStorage.getItem(CACHE_KEY(bookId)) || 'null');
@@ -52,6 +56,33 @@ function BriefBody({ worldState }) {
     }
     setArchive(loadArchive(bookId));
   }, [bookId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!booksLoaded) return;
+      try {
+        const raw = localStorage.getItem(CACHE_KEY(bookId));
+        const cached = raw ? JSON.parse(raw) : null;
+        const fresh = cached?.brief?.summary && cached?.at && (Date.now() - cached.at < BRIEF_TTL_MS);
+        if (fresh) return;
+        if (!bookIds.length) return;
+        setBusy(true);
+        const b = await generateMorningBrief(worldState, bookId);
+        if (cancelled) return;
+        setBrief(b);
+        localStorage.setItem(CACHE_KEY(bookId), JSON.stringify({ brief: b, at: Date.now() }));
+        pushToArchive(bookId, b);
+        setArchive(loadArchive(bookId));
+      } catch (e) {
+        console.warn('[MorningBrief] autoload', e);
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid regen on every worldState edit; book switch + initial load only
+  }, [bookId, booksLoaded, bookIds.length]);
 
   const generate = async () => {
     setBusy(true);

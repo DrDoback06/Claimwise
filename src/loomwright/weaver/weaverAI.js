@@ -100,6 +100,57 @@ function summariseFactions(factions) {
   return factions.slice(0, 15).map((f) => `- ${f.name}${f.desc ? `: ${f.desc.slice(0, 120)}` : ''}`).join('\n');
 }
 
+/** Match a chapter row from the book by id or number (Write may pass either). */
+function findChapterById(chapters, chapterId) {
+  if (!chapters?.length || chapterId == null) return null;
+  const id = chapterId;
+  return chapters.find(
+    (c) => c.id === id || c.number === id || String(c.id) === String(id)
+  ) || null;
+}
+
+/** Last N characters of chapter body (canonical on-page text). */
+function excerptFromChapter(ch, maxLen = 2800) {
+  if (!ch) return '';
+  const text = String(ch.content || ch.script || '').trim();
+  if (!text) return '';
+  return text.length <= maxLen ? text : text.slice(-maxLen);
+}
+
+/** Optional tail of previous chapter for continuity. */
+function priorChapterTail(chapters, chapterId, tailLen = 450) {
+  const idx = chapters.findIndex(
+    (c) => c.id === chapterId || c.number === chapterId || String(c.id) === String(chapterId)
+  );
+  if (idx <= 0) return '';
+  const prev = chapters[idx - 1];
+  const text = String(prev?.content || prev?.script || '').trim();
+  if (!text) return '';
+  return text.length <= tailLen ? text : text.slice(-tailLen);
+}
+
+function buildManuscriptGroundingBlock(chapters, chapterId) {
+  const ch = findChapterById(chapters, chapterId);
+  const main = excerptFromChapter(ch);
+  const prior = priorChapterTail(chapters, chapterId);
+  const lines = [];
+  if (prior) {
+    lines.push(
+      `PRIOR CHAPTER TAIL (context only, ch before current):\n"""\n${prior}\n"""\n`
+    );
+  }
+  if (main) {
+    lines.push(
+      `CURRENT CHAPTER MANUSCRIPT (authoritative voice & on-page facts; last portion of ch.${chapterId}):\n"""\n${main}\n"""\n`
+    );
+  } else {
+    lines.push(
+      '(No full chapter text stored for this chapter — rely on CHAPTERS summaries and CAST above.)'
+    );
+  }
+  return lines.join('\n');
+}
+
 function modeInstructions(mode, { idea, entity, transcript }) {
   switch (mode) {
     case 'sweep':
@@ -135,8 +186,14 @@ export async function proposeWeave(idea, worldState, bookId, options = {}) {
   const items = worldState?.itemBank || [];
   const places = worldState?.places || [];
   const factions = worldState?.factions || [];
-  const currentChapter = options.currentChapter || chapters[chapters.length - 1]?.id || 1;
+  const currentChapter = options.currentChapter ?? options.chapterId
+    ?? chapters[chapters.length - 1]?.id ?? 1;
   const book = worldState?.books?.[bookId];
+  const activeChapterRow = findChapterById(chapters, currentChapter);
+  const manuscriptBlock = buildManuscriptGroundingBlock(chapters, currentChapter);
+  const excerptForBrain = excerptFromChapter(activeChapterRow);
+  const chapterNumberForBrain = activeChapterRow?.chapterNumber ?? activeChapterRow?.number
+    ?? activeChapterRow?.id ?? currentChapter;
 
   const prompt = [
     'You are the Canon Weaver, an editor that proposes coordinated changes',
@@ -151,8 +208,17 @@ export async function proposeWeave(idea, worldState, bookId, options = {}) {
     'CAST:',
     summariseCast(actors),
     '',
-    'CHAPTERS:',
+    'CHAPTERS (metadata only — titles/summaries):',
     summariseChapters(chapters),
+    '',
+    'MANUSCRIPT GROUNDING (read this for voice, facts, and who is actually on the page):',
+    manuscriptBlock,
+    '',
+    'Grounding rules:',
+    '- The manuscript block above is the canonical source for who appears and how the prose sounds.',
+    '- The IDEA may name people or events not yet on the page — treat those as author intent for NEW proposals.',
+    '- Do not invent extra Cast entries unless the IDEA calls for them or they are clearly implied by the manuscript.',
+    '- Prefer tying items/places/plot to names that already appear in CAST or the manuscript excerpt.',
     '',
     'PLOT THREADS:',
     summarisePlotThreads(threads),
@@ -198,15 +264,18 @@ export async function proposeWeave(idea, worldState, bookId, options = {}) {
   // book's actual voice — not generic AI filler.
   let styleSystem = 'Return only valid JSON. Do not wrap in markdown.';
   try {
+    const textForBrain = excerptForBrain
+      ? excerptForBrain.slice(-2000)
+      : '';
     const { systemContext } = await storyBrain.getContext({
-      text: '',
-      chapterNumber: typeof currentChapter === 'number' ? currentChapter : null,
+      text: textForBrain,
+      chapterNumber: typeof chapterNumberForBrain === 'number' ? chapterNumberForBrain : null,
       bookId,
-      chapterId: null,
-      action: 'scene',
+      chapterId: activeChapterRow?.id ?? currentChapter,
+      action: 'continue',
     });
     if (systemContext) {
-      styleSystem = `You are the Canon Weaver. Match the book's voice EXACTLY when writing any chapter prose.
+      styleSystem = `You are the Canon Weaver. Match the book's voice EXACTLY when writing any chapter prose (same stack as Continue Writing).
 
 ${systemContext}
 

@@ -346,10 +346,56 @@ function pillBtn(t, active = false) {
   };
 }
 
-function SkillsPane({ character, worldState }) {
+function SkillsPane({ character, worldState, setWorldState }) {
   const t = useTheme();
   const skills = worldState?.skillBank || [];
   const active = character?.activeSkills || [];
+  const [pickId, setPickId] = useState('');
+  const [pickVal, setPickVal] = useState(1);
+
+  const assignedIds = new Set(
+    active.map((r) => (typeof r === 'string' ? r : r?.id)).filter(Boolean),
+  );
+  const available = skills.filter((s) => s?.id && !assignedIds.has(s.id));
+
+  const persistActor = async (next) => {
+    try {
+      await db.update('actors', next);
+    } catch (e) {
+      console.warn('[SkillsPane] db.update', e);
+    }
+    setWorldState?.((prev) => ({
+      ...prev,
+      actors: (prev?.actors || []).map((a) => (a.id === next.id ? next : a)),
+    }));
+  };
+
+  const addSkill = async () => {
+    if (!pickId) return;
+    const nextRefs = [
+      ...active.filter((r) => (typeof r === 'string' ? r : r.id) !== pickId),
+      { id: pickId, val: Math.max(1, Number(pickVal) || 1) },
+    ];
+    await persistActor({ ...character, activeSkills: nextRefs });
+    setPickId('');
+    setPickVal(1);
+  };
+
+  const removeSkill = async (id) => {
+    const nextRefs = active.filter((r) => (typeof r === 'string' ? r : r.id) !== id);
+    await persistActor({ ...character, activeSkills: nextRefs });
+  };
+
+  const updateLevel = async (id, val) => {
+    const v = Math.max(1, Number(val) || 1);
+    const nextRefs = active.map((r) => {
+      const rid = typeof r === 'string' ? r : r.id;
+      if (rid !== id) return r;
+      return typeof r === 'string' ? { id: r, val: v } : { ...r, val: v };
+    });
+    await persistActor({ ...character, activeSkills: nextRefs });
+  };
+
   return (
     <div
       style={{
@@ -363,31 +409,139 @@ function SkillsPane({ character, worldState }) {
       <div style={{ fontFamily: t.display, fontSize: 15, color: t.ink, marginBottom: 10 }}>
         Skills
       </div>
+      <div style={{ fontSize: 12, color: t.ink3, marginBottom: 12, lineHeight: 1.5 }}>
+        Assign skills from the Skills Library when extraction or the tree hasn&apos;t picked them up yet.
+      </div>
+      {available.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            alignItems: 'center',
+            marginBottom: 14,
+            padding: 10,
+            background: t.bg,
+            border: `1px dashed ${t.rule}`,
+            borderRadius: t.radius,
+          }}
+        >
+          <select
+            value={pickId}
+            onChange={(e) => setPickId(e.target.value)}
+            style={{
+              flex: '1 1 180px',
+              padding: '6px 8px',
+              background: t.paper,
+              color: t.ink,
+              border: `1px solid ${t.rule}`,
+              borderRadius: t.radius,
+              fontSize: 12,
+            }}
+          >
+            <option value="">Choose skill from library…</option>
+            {available.map((s) => (
+              <option key={s.id} value={s.id}>{s.name || s.id}</option>
+            ))}
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: t.ink2 }}>
+            Lv
+            <input
+              type="number"
+              min={1}
+              max={99}
+              value={pickVal}
+              onChange={(e) => setPickVal(Number(e.target.value))}
+              style={{
+                width: 52,
+                padding: '4px 6px',
+                background: t.paper,
+                border: `1px solid ${t.rule}`,
+                borderRadius: t.radius,
+                color: t.ink,
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={addSkill}
+            disabled={!pickId}
+            style={{
+              padding: '6px 12px',
+              background: pickId ? t.accent : t.paper2,
+              color: pickId ? t.onAccent : t.ink3,
+              border: `1px solid ${pickId ? t.accent : t.rule}`,
+              borderRadius: t.radius,
+              fontFamily: t.mono,
+              fontSize: 10,
+              letterSpacing: 0.12,
+              textTransform: 'uppercase',
+              cursor: pickId ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Add skill
+          </button>
+        </div>
+      )}
       {active.length === 0 ? (
         <div style={{ color: t.ink3, fontSize: 12 }}>No skills assigned yet.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {active.map((ref) => {
-            const s = skills.find((x) => x.id === ref.id);
+            const id = typeof ref === 'string' ? ref : ref.id;
+            const s = skills.find((x) => x.id === id);
+            const level = typeof ref === 'object' ? (ref.val ?? ref.level ?? 1) : 1;
             return (
               <div
-                key={ref.id}
+                key={id}
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
                   padding: 10,
                   border: `1px solid ${t.rule}`,
                   borderRadius: t.radius,
                   background: t.bg,
                 }}
               >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{s?.name || ref.id}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{s?.name || id}</div>
                   {s?.desc && <div style={{ fontSize: 11, color: t.ink2 }}>{s.desc}</div>}
                 </div>
-                <div style={{ fontFamily: t.mono, fontSize: 11, color: t.accent }}>
-                  Lv {ref.val ?? 1}
-                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: t.mono, fontSize: 11, color: t.accent }}>
+                  Lv
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={level}
+                    onChange={(e) => updateLevel(id, e.target.value)}
+                    style={{
+                      width: 44,
+                      padding: '2px 4px',
+                      background: t.paper,
+                      border: `1px solid ${t.rule}`,
+                      borderRadius: t.radius,
+                      color: t.ink,
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  title="Remove"
+                  onClick={() => removeSkill(id)}
+                  style={{
+                    padding: 4,
+                    background: 'transparent',
+                    border: `1px solid ${t.rule}`,
+                    borderRadius: t.radius,
+                    color: t.ink3,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             );
           })}
@@ -586,23 +740,90 @@ export default function CharacterDetailPage({
         return <CharacterPlotInvolvement character={character} books={books} />;
       case 'wardrobe':
         return (
-          <div
-            style={{
-              background: t.paper,
-              border: `1px solid ${t.rule}`,
-              borderRadius: t.radius,
-              overflow: 'hidden',
-            }}
-          >
-            <CharacterWardrobe
-              scoped
-              actor={character}
-              worldState={worldState}
-              onPatchWorldState={(patch) => {
-                if (!setWorldState) return;
-                setWorldState((prev) => ({ ...prev, ...patch }));
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div
+              style={{
+                padding: 12,
+                background: t.paper2,
+                border: `1px solid ${t.rule}`,
+                borderRadius: t.radius,
+                fontSize: 12,
+                color: t.ink2,
+                lineHeight: 1.55,
               }}
-            />
+            >
+              <strong style={{ color: t.ink }}>Library → bag → slots.</strong>
+              {' '}
+              Pull items from the global library into this character&apos;s inventory, then equip them on the paper doll.
+              {' '}
+              <button
+                type="button"
+                onClick={() => setShowPull(true)}
+                style={{
+                  padding: '3px 8px',
+                  background: t.accent,
+                  color: t.onAccent,
+                  border: 'none',
+                  borderRadius: t.radius,
+                  fontFamily: t.mono,
+                  fontSize: 10,
+                  letterSpacing: 0.1,
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                Add from library
+              </button>
+              {' · '}
+              <button
+                type="button"
+                onClick={() => onNavigate?.('items_library')}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: t.accent,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  fontSize: 12,
+                }}
+              >
+                Items Library
+              </button>
+              {' · '}
+              <button
+                type="button"
+                onClick={() => setTab('journey')}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: t.accent,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  fontSize: 12,
+                }}
+              >
+                Item life matrix (this character)
+              </button>
+            </div>
+            <div
+              style={{
+                background: t.paper,
+                border: `1px solid ${t.rule}`,
+                borderRadius: t.radius,
+                overflow: 'hidden',
+              }}
+            >
+              <CharacterWardrobe
+                scoped
+                actor={character}
+                worldState={worldState}
+                bookId={bookTab}
+                onPatchWorldState={(patch) => {
+                  if (!setWorldState) return;
+                  setWorldState((prev) => ({ ...prev, ...patch }));
+                }}
+              />
+            </div>
           </div>
         );
       case 'stats':
@@ -636,7 +857,7 @@ export default function CharacterDetailPage({
                   letterSpacing: 0.14, textTransform: 'uppercase', cursor: 'pointer',
                 }}
               >
-                + Pull from vault
+                + Add from library
               </button>
             </div>
             <div
@@ -650,31 +871,72 @@ export default function CharacterDetailPage({
               <div style={{ fontFamily: t.display, fontSize: 15, color: t.ink, marginBottom: 8 }}>
                 Base stats
               </div>
+              <div style={{ fontSize: 11, color: t.ink3, marginBottom: 10 }}>
+                Edit values inline; they save to this character&apos;s record.
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
                 {Object.entries(character.baseStats || {}).map(([k, v]) => (
-                  <div
+                  <label
                     key={k}
                     style={{
                       padding: '10px 12px',
                       background: t.bg,
                       border: `1px solid ${t.rule}`,
                       borderRadius: t.radius,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
                     }}
                   >
-                    <div style={{ fontFamily: t.mono, fontSize: 9, color: t.accent, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+                    <span style={{ fontFamily: t.mono, fontSize: 9, color: t.accent, letterSpacing: 0.14, textTransform: 'uppercase' }}>
                       {k}
-                    </div>
-                    <div style={{ fontFamily: t.display, fontSize: 18, color: t.ink, marginTop: 2 }}>{v}</div>
-                  </div>
+                    </span>
+                    <input
+                      type="number"
+                      defaultValue={v}
+                      onBlur={async (e) => {
+                        const num = Number(e.target.value);
+                        if (!Number.isFinite(num)) return;
+                        const next = {
+                          ...character,
+                          baseStats: { ...(character.baseStats || {}), [k]: num },
+                        };
+                        try {
+                          await db.update('actors', next);
+                        } catch (err) {
+                          console.warn('[CharacterDetail] baseStat save', err);
+                        }
+                        setWorldState?.((prev) => ({
+                          ...prev,
+                          actors: (prev?.actors || []).map((a) => (a.id === character.id ? next : a)),
+                        }));
+                      }}
+                      style={{
+                        fontFamily: t.display,
+                        fontSize: 18,
+                        color: t.ink,
+                        width: '100%',
+                        background: t.paper,
+                        border: `1px solid ${t.rule}`,
+                        borderRadius: t.radius,
+                        padding: '4px 6px',
+                      }}
+                    />
+                  </label>
                 ))}
               </div>
+              {Object.keys(character.baseStats || {}).length === 0 && (
+                <div style={{ fontSize: 12, color: t.ink3, fontStyle: 'italic' }}>
+                  No base stats yet. Add stat definitions in the Stats Library, then they can be edited here.
+                </div>
+              )}
             </div>
             <StatHistoryTimeline actor={character} books={books} statRegistry={worldState?.statRegistry || []} />
             <EnhancedInventoryDisplay actor={character} items={itemBank} books={books} />
           </div>
         );
       case 'skills':
-        return <SkillsPane character={character} worldState={worldState} />;
+        return <SkillsPane character={character} worldState={worldState} setWorldState={setWorldState} />;
       default:
         return null;
     }

@@ -34,6 +34,7 @@ function fileIdea(spark) {
 
 const DISMISS_KEY = 'lw-spark-dismissed';
 const CACHE_KEY = (bookId) => `lw-spark-cache-${bookId}`;
+const SPARK_TTL_MS = 24 * 60 * 60 * 1000;
 
 function loadDismissed() {
   try {
@@ -175,6 +176,34 @@ function SparkBody({ worldState }) {
       setSparks([]);
     }
   }, [bookId]);
+
+  const booksLoaded = worldState?.books && Object.keys(worldState.books).length > 0;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!booksLoaded) return;
+      try {
+        const raw = localStorage.getItem(CACHE_KEY(bookId));
+        const cached = raw ? JSON.parse(raw) : null;
+        const fresh = Array.isArray(cached?.sparks) && cached.sparks.length > 0
+          && cached?.at && (Date.now() - cached.at < SPARK_TTL_MS);
+        if (fresh) return;
+        if (!bookIds.length) return;
+        setBusy(true);
+        const out = await generateSparks(worldState, bookId);
+        if (cancelled) return;
+        setSparks(out);
+        localStorage.setItem(CACHE_KEY(bookId), JSON.stringify({ sparks: out, at: Date.now() }));
+      } catch (e) {
+        console.warn('[DailySpark] autoload', e);
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId, booksLoaded, bookIds.length]);
 
   const refresh = async () => {
     setBusy(true);

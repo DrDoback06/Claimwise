@@ -55,13 +55,17 @@ function chapterLabelFor(worldState, bookId, ch) {
 function WardrobeBody({
   actor,
   worldState,
-  bookId,
+  bookId: bookIdProp,
   currentChapter,
   onSelectChapter,
   onPatchWorldState,
   showWizardInitially = false,
 }) {
   const t = useTheme();
+  const bookIds = Object.keys(worldState?.books || {}).map(Number).sort((a, b) => a - b);
+  const bookId = bookIdProp != null && bookIds.includes(Number(bookIdProp))
+    ? Number(bookIdProp)
+    : (bookIds[bookIds.length - 1] || 1);
   const chapters = useChapterList(worldState, bookId);
   const effectiveChapter = currentChapter || chapters[0] || 1;
   const items = useMemo(

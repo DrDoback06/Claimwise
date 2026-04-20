@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Play, Pause, Rewind, FastForward, Upload, BookOpen, FileText,
   ChevronLeft, ChevronRight, Minus, Plus, X, Bookmark, 
@@ -62,6 +62,8 @@ const SpeedReader = ({ worldState }) => {
     averageSpeed: 0
   });
   const [showSettings, setShowSettings] = useState(false);
+  /** Parallel to `words`: which sentence chunk each word belongs to. */
+  const [sentenceIdPerWord, setSentenceIdPerWord] = useState([]);
   
   // Refs
   const intervalRef = useRef(null);
@@ -137,8 +139,9 @@ const SpeedReader = ({ worldState }) => {
       if (chapter) {
         const text = chapter.content || chapter.script || '';
         if (text) {
-          const tokenized = tokenizeText(text);
+          const { words: tokenized, sentenceIdPerWord: sid } = tokenizeTextWithSentences(text);
           setWords(tokenized);
+          setSentenceIdPerWord(sid);
           setCurrentIndex(0);
           setIsPlaying(false);
           toastService.success(`Loaded chapter: ${chapter.title || `Chapter ${chapter.number}`}`);
@@ -160,24 +163,46 @@ const SpeedReader = ({ worldState }) => {
     }
   }, [selectedBook, selectedChapter, sourceType]);
 
-  // Tokenize text into words.
-  //
-  // Previous implementation split on a CAPTURING punctuation group, which
-  // preserved standalone `.`, `,`, `!`, `?` etc. as their own RSVP words -
-  // the user rightly flagged that they flash through as blank-looking
-  // single-character tokens. This version:
-  //   1. Splits on whitespace only.
-  //   2. Strips leading/trailing punctuation from each token so "good." -> "good".
-  //   3. Drops any token that ends up empty or punctuation-only.
-  //   4. Keeps intra-word apostrophes and hyphens intact ("don't", "half-built").
+  const PUNCT_EDGE = /^[\s.,!?;:\u2014\u2013\u2026\-"'`\u2018\u2019\u201C\u201D()[\]{}]+|[\s.,!?;:\u2014\u2013\u2026\-"'`\u2018\u2019\u201C\u201D()[\]{}]+$/g;
+
+  const cleanWordToken = (token) => {
+    const t = String(token).replace(PUNCT_EDGE, '');
+    if (!t.length || !/\p{L}|\p{N}/u.test(t)) return null;
+    return t;
+  };
+
+  // Tokenize text into words (flat list).
   const tokenizeText = (text) => {
     if (!text) return [];
-    // Edge-only punctuation stripper. Unicode dashes + curly quotes included.
-    const PUNCT_EDGE = /^[\s.,!?;:\u2014\u2013\u2026\-"'`\u2018\u2019\u201C\u201D()[\]{}]+|[\s.,!?;:\u2014\u2013\u2026\-"'`\u2018\u2019\u201C\u201D()[\]{}]+$/g;
     return text
       .split(/\s+/)
-      .map((token) => token.replace(PUNCT_EDGE, ''))
-      .filter((token) => token.length > 0 && /\p{L}|\p{N}/u.test(token));
+      .map((token) => cleanWordToken(token))
+      .filter(Boolean);
+  };
+
+  /**
+   * Same word filter as tokenizeText, but keeps a parallel sentence id per
+   * word so we can render past/future words in the same sentence as the focal word.
+   */
+  const tokenizeTextWithSentences = (text) => {
+    if (!text) return { words: [], sentenceIdPerWord: [] };
+    const chunks = text.split(/(?<=[.!?…])\s+/u).filter((s) => s.trim());
+    const words = [];
+    const sentenceIdPerWord = [];
+    chunks.forEach((sentence, sid) => {
+      sentence.split(/\s+/).forEach((raw) => {
+        const w = cleanWordToken(raw);
+        if (w) {
+          words.push(w);
+          sentenceIdPerWord.push(sid);
+        }
+      });
+    });
+    if (words.length === 0) {
+      const w = tokenizeText(text);
+      return { words: w, sentenceIdPerWord: w.map(() => 0) };
+    }
+    return { words, sentenceIdPerWord };
   };
 
   // Handle document upload
@@ -191,10 +216,11 @@ const SpeedReader = ({ worldState }) => {
       const text = parsedData.text;
       
       if (text) {
-        const tokenized = tokenizeText(text);
+        const { words: tokenized, sentenceIdPerWord: sid } = tokenizeTextWithSentences(text);
         setUploadedText(text);
         setUploadedFileName(file.name);
         setWords(tokenized);
+        setSentenceIdPerWord(sid);
         setCurrentIndex(0);
         setIsPlaying(false);
         setSourceType('document');
@@ -518,11 +544,21 @@ const SpeedReader = ({ worldState }) => {
   const progress = words.length > 0 ? ((currentIndex + 1) / words.length) * 100 : 0;
   const timeRemaining = wordsRemaining > 0 ? Math.round((wordsRemaining / speed) * 60) : 0;
   const timeRemainingFormatted = `${Math.floor(timeRemaining / 60)}:${String(timeRemaining % 60).padStart(2, '0')}`;
-  const getPreviewWords = (count = 5) => {
-    if (words.length === 0) return [];
-    const start = Math.min(currentIndex + 1, words.length);
-    return words.slice(start, start + count);
-  };
+  const sentenceContext = useMemo(() => {
+    if (!words.length || currentIndex < 0) return { left: [], right: [] };
+    const sid = sentenceIdPerWord[currentIndex] ?? 0;
+    const inSentence = [];
+    words.forEach((w, i) => {
+      if ((sentenceIdPerWord[i] ?? 0) === sid) inSentence.push({ w, i });
+    });
+    const pos = inSentence.findIndex((x) => x.i === currentIndex);
+    if (pos < 0) return { left: [], right: [] };
+    const WINDOW = 12;
+    return {
+      left: inSentence.slice(Math.max(0, pos - WINDOW), pos).map((x) => x.w),
+      right: inSentence.slice(pos + 1, pos + 1 + WINDOW).map((x) => x.w),
+    };
+  }, [words, sentenceIdPerWord, currentIndex]);
 
   // Render the current word with the focal letter pinned to the container's
   // horizontal centre.
@@ -589,6 +625,7 @@ const SpeedReader = ({ worldState }) => {
     setUploadedText('');
     setUploadedFileName('');
     setWords([]);
+    setSentenceIdPerWord([]);
     setCurrentIndex(0);
     setIsPlaying(false);
     setSourceType('chapter');
@@ -702,39 +739,97 @@ const SpeedReader = ({ worldState }) => {
           <div className="absolute inset-0 bg-black/80 z-10 pointer-events-none" />
         )}
         
-        {/* Word display - focal letter is pinned to the centre by renderWord */}
+        {/* Sentence strip: past words (left) + focal ORP word (centre) + future words (right) */}
         <div
-          ref={wordDisplayRef}
-          className={`relative z-20 ${focusMode ? 'bg-black/90 p-8 rounded-lg' : ''}`}
-          style={{
-            fontSize: `${fontSize}px`,
-            fontWeight: 'bold',
-            lineHeight: '1.2',
-            userSelect: 'none',
-            // Fixed width so the focal-letter centre is always the viewport
-            // centre and doesn't shift with word length.
-            width: '60vw',
-            maxWidth: 640,
-            textAlign: 'center',
-          }}
+          className={`relative z-20 flex flex-row items-center justify-center w-full max-w-[min(96vw,1200px)] gap-2 px-3 ${focusMode ? 'bg-black/90 py-6 rounded-lg' : ''}`}
         >
-          {currentWord ? (
-            renderWord(currentWord)
+          {showPreview && currentWord ? (
+            <>
+              <div
+                className={`flex-1 flex flex-wrap items-baseline justify-end gap-x-2 gap-y-1 min-w-0 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}
+                style={{
+                  fontSize: `${Math.max(13, Math.round(fontSize * 0.28))}px`,
+                  lineHeight: 1.35,
+                  opacity: 0.72,
+                }}
+              >
+                {sentenceContext.left.map((w, i) => (
+                  <span key={`ctx-l-${i}`}>{w}</span>
+                ))}
+              </div>
+              <div
+                ref={wordDisplayRef}
+                style={{
+                  fontSize: `${fontSize}px`,
+                  fontWeight: 'bold',
+                  lineHeight: '1.2',
+                  userSelect: 'none',
+                  flexShrink: 0,
+                  width: 'min(52vw, 520px)',
+                  maxWidth: '100%',
+                  textAlign: 'center',
+                }}
+              >
+                {renderWord(currentWord)}
+              </div>
+              <div
+                className={`flex-1 flex flex-wrap items-baseline justify-start gap-x-2 gap-y-1 min-w-0 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}
+                style={{
+                  fontSize: `${Math.max(13, Math.round(fontSize * 0.28))}px`,
+                  lineHeight: 1.35,
+                  opacity: 0.72,
+                }}
+              >
+                {sentenceContext.right.map((w, i) => (
+                  <span key={`ctx-r-${i}`}>{w}</span>
+                ))}
+              </div>
+            </>
           ) : (
-            <span className={darkMode ? 'text-slate-600' : 'text-slate-400'}>
-              {words.length === 0 ? 'Load a chapter or upload a document to begin' : 'Ready'}
-            </span>
+            <div
+              ref={wordDisplayRef}
+              className={`relative ${focusMode ? 'bg-black/90 p-8 rounded-lg' : ''}`}
+              style={{
+                fontSize: `${fontSize}px`,
+                fontWeight: 'bold',
+                lineHeight: '1.2',
+                userSelect: 'none',
+                width: '60vw',
+                maxWidth: 640,
+                textAlign: 'center',
+              }}
+            >
+              {currentWord ? (
+                renderWord(currentWord)
+              ) : (
+                <span className={darkMode ? 'text-slate-600' : 'text-slate-400'}>
+                  {words.length === 0 ? 'Load a chapter or upload a document to begin' : 'Ready'}
+                </span>
+              )}
+            </div>
           )}
         </div>
-        {/* Faint reticle line + wedge pair to make the focal spot obvious. */}
-        {currentWord ? (
+        {/* Faint reticle on the focal column when strip mode is on */}
+        {showPreview && currentWord ? (
           <div
             aria-hidden="true"
             className="pointer-events-none absolute z-[21]"
             style={{
               left: '50%',
               transform: 'translateX(-50%)',
-              // Position just above and below the word row.
+              top: `calc(50% - ${fontSize * 0.85}px)`,
+              height: `${fontSize * 1.75}px`,
+              width: 0,
+              borderLeft: `1px dashed ${darkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'}`,
+            }}
+          />
+        ) : currentWord ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-[21]"
+            style={{
+              left: '50%',
+              transform: 'translateX(-50%)',
               top: `calc(50% - ${fontSize * 0.9}px)`,
               height: `${fontSize * 1.8}px`,
               width: 0,
@@ -742,16 +837,6 @@ const SpeedReader = ({ worldState }) => {
             }}
           />
         ) : null}
-
-        {/* Enhancement 8: Text preview */}
-        {showPreview && currentWord && getPreviewWords().length > 0 && (
-          <div className={`mt-8 text-center z-20 ${focusMode ? 'bg-black/90 p-4 rounded-lg' : ''}`}>
-            <div className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'} mb-2`}>Next:</div>
-            <div className={`text-lg ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-              {getPreviewWords().join(' ')}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Enhancement 1: Progress bar */}
@@ -888,7 +973,7 @@ const SpeedReader = ({ worldState }) => {
                   className="w-4 h-4"
                 />
                 <label htmlFor="showPreview" className={`text-sm ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                  Show preview words
+                  Sentence context strip (past / focal / future words)
                 </label>
               </div>
               

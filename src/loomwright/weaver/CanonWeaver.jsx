@@ -38,12 +38,19 @@ function saveHistory(list) {
   }
 }
 
-function useBookContext(worldState) {
+function useBookContext(worldState, preferredBookId) {
   const bookIds = Object.keys(worldState?.books || {}).map(Number).sort((a, b) => a - b);
-  const [bookId, setBookId] = useState(bookIds[bookIds.length - 1] || 1);
+  const initial = preferredBookId != null && bookIds.includes(Number(preferredBookId))
+    ? Number(preferredBookId)
+    : (bookIds[bookIds.length - 1] || 1);
+  const [bookId, setBookId] = useState(initial);
   useEffect(() => {
-    if (!bookIds.includes(bookId) && bookIds.length) setBookId(bookIds[bookIds.length - 1]);
-  }, [bookIds.join(','), bookId]);
+    if (preferredBookId != null && bookIds.includes(Number(preferredBookId))) {
+      setBookId(Number(preferredBookId));
+    } else if (!bookIds.includes(bookId) && bookIds.length) {
+      setBookId(bookIds[bookIds.length - 1]);
+    }
+  }, [preferredBookId, bookIds.join(','), bookId, bookIds]);
   const book = worldState?.books?.[bookId] || null;
   return { bookId, setBookId, bookIds, book };
 }
@@ -351,6 +358,10 @@ function Capture({ idea, setIdea, onSubmit, onBack }) {
       </h1>
       <p style={{ fontSize: 13, color: t.ink2, margin: '0 0 16px' }}>
         Character, item, event, contradiction, new scene \u2014 whatever. Plain English.
+      </p>
+      <p style={{ fontSize: 12, color: t.ink3, margin: '0 0 16px', lineHeight: 1.5 }}>
+        The open chapter in Writer&apos;s Room is sent to the Weaver as manuscript context (voice + on-page facts).
+        Names you add only in this box are your intent for the weave.
       </p>
       <textarea
         value={idea}
@@ -907,9 +918,19 @@ function Applied({ summary, onAgain }) {
   );
 }
 
-function WeaverBody({ worldState, setWorldState, onPatchWorldState, captureOnMount, initialIdea, onCaptureConsumed }) {
+function WeaverBody({
+  worldState,
+  setWorldState,
+  onPatchWorldState,
+  captureOnMount,
+  initialIdea,
+  onCaptureConsumed,
+  /** When embedded in Writer's Room, syncs weave target book/chapter to the editor. */
+  writerBookId,
+  writerChapterId,
+}) {
   const t = useTheme();
-  const { bookId, book } = useBookContext(worldState);
+  const { bookId, book } = useBookContext(worldState, writerBookId);
   const actors = worldState?.actors || [];
 
   const [stage, setStage] = useState(captureOnMount ? 'capture' : 'hub');
@@ -930,8 +951,20 @@ function WeaverBody({ worldState, setWorldState, onPatchWorldState, captureOnMou
   const [selected, setSelected] = useState(null);
   const [history, setHistory] = useState(loadHistory());
   const [summary, setSummary] = useState({ accepted: 0, total: 0, systems: [] });
-  const currentChapter =
-    book?.chapters?.length ? book.chapters[book.chapters.length - 1].id : 1;
+  const currentChapter = useMemo(() => {
+    const chs = book?.chapters || [];
+    if (!chs.length) return 1;
+    if (writerChapterId != null) {
+      const hit = chs.find(
+        (c) => c.id === writerChapterId
+          || c.number === writerChapterId
+          || String(c.id) === String(writerChapterId)
+      );
+      if (hit) return hit.id ?? hit.number ?? writerChapterId;
+    }
+    const last = chs[chs.length - 1];
+    return last?.id ?? last?.number ?? 1;
+  }, [book, writerChapterId]);
 
   // External triggers (Daily Spark, Interview handoff, mobile Capture, deep
   // links) publish on the weaver bus. We honour them by seeding state and
@@ -960,6 +993,7 @@ function WeaverBody({ worldState, setWorldState, onPatchWorldState, captureOnMou
     setStage('analyzing');
     const { edits: proposed } = await proposeWeave(theIdea, worldState, bookId, {
       currentChapter,
+      chapterId: currentChapter,
       mode,
       entity,
       transcript: opts.transcript,
