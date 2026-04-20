@@ -1,16 +1,22 @@
 /**
  * Today — the Loomwright home dashboard.
  *
- * Combines Morning Brief (top) and Daily Spark (below) into a single feed,
- * with quick-action chips into Write / Cast / Atlas.
+ * Layout (per redesign doc 00):
+ *   Resume card (active book/chapter, daily goal ring, CTA)
+ *   3-card AI Noticings brief ("what the Loom saw") with deep-links
+ *   Two-up: Morning Brief  +  Daily Spark
+ *   Ritual-aware quick actions tuned to the time of day
  */
 
 import React from 'react';
-import { PenTool, Users, Compass, BookMarked } from 'lucide-react';
+import { PenTool, Users, Compass, BookMarked, GitBranch, Wand2 } from 'lucide-react';
 import { useTheme } from '../loomwright/theme';
 import MorningBrief from '../loomwright/daily/MorningBrief';
 import DailySpark from '../loomwright/daily/DailySpark';
 import { Page, PageHeader, PageBody } from './_shared/PageChrome';
+import ResumeCard from './today/ResumeCard';
+import AINoticingsBrief from './today/AINoticingsBrief';
+import { dispatchWeaver } from '../loomwright/weaver/weaverAI';
 
 function QuickAction({ icon: Icon, label, sublabel, onClick }) {
   const t = useTheme();
@@ -62,9 +68,49 @@ function greeting() {
   return 'Good evening';
 }
 
-export default function TodayPage({ worldState, onNavigate }) {
+function ritualActions(onNavigate) {
+  const h = new Date().getHours();
+  const day = new Date().getDay(); // 0=Sun 6=Sat
+  const weekend = day === 0 || day === 6;
+  // Morning: open yesterday's chapter. Evening: idea capture on mobile.
+  // Weekend: world building.
+  if (h < 11) {
+    return [{
+      icon: PenTool, label: 'Pick up where you left off',
+      sublabel: 'Jump straight back into yesterday\'s chapter',
+      onClick: () => onNavigate?.('write'),
+    }];
+  }
+  if (h >= 20) {
+    return [{
+      icon: Wand2, label: 'Capture an idea for Canon Weaver',
+      sublabel: 'Drop a thought; it routes across your canon overnight.',
+      onClick: () => { dispatchWeaver({ mode: 'single' }); onNavigate?.('write'); },
+    }];
+  }
+  if (weekend) {
+    return [{
+      icon: BookMarked, label: 'Weekend world-building',
+      sublabel: 'Open the World workspace \u2014 new lore + continuity sweep.',
+      onClick: () => onNavigate?.('world'),
+    }];
+  }
+  return [];
+}
+
+export default function TodayPage({ worldState, onNavigate, onNavigateToCharacter }) {
   const t = useTheme();
   const title = worldState?.meta?.title || 'your story';
+
+  const handleNoticingAction = (action, payload) => {
+    if (action === 'cast_detail' && payload?.characterId) {
+      onNavigateToCharacter?.(payload.characterId);
+      return;
+    }
+    onNavigate?.(action);
+  };
+
+  const ritual = ritualActions(onNavigate);
 
   return (
     <Page>
@@ -74,74 +120,105 @@ export default function TodayPage({ worldState, onNavigate }) {
         subtitle={`Here's what's new in ${title}.`}
       />
       <PageBody>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: 10,
-            marginBottom: 24,
-          }}
-        >
-          <QuickAction
-            icon={PenTool}
-            label="Continue writing"
-            sublabel="Open the Writer's Room"
-            onClick={() => onNavigate?.('write')}
-          />
-          <QuickAction
-            icon={Users}
-            label="Review the cast"
-            sublabel="Characters, arcs and relationships"
-            onClick={() => onNavigate?.('cast')}
-          />
-          <QuickAction
-            icon={Compass}
-            label="Explore the atlas"
-            sublabel="Places, maps and floorplans"
-            onClick={() => onNavigate?.('atlas')}
-          />
-          <QuickAction
-            icon={BookMarked}
-            label="World & lore"
-            sublabel="Wiki entries and factions"
-            onClick={() => onNavigate?.('world')}
-          />
-        </div>
+        <div style={{ display: 'grid', gap: 14 }}>
+          <ResumeCard worldState={worldState} onNavigate={onNavigate} />
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-            gap: 20,
-            alignItems: 'start',
-          }}
-        >
-          <section>
-            <SectionLabel eyebrow="Briefing" title="Morning brief" />
+          <AINoticingsBrief worldState={worldState} onNavigate={handleNoticingAction} />
+
+          {ritual.length > 0 && (
             <div
               style={{
-                background: t.paper,
-                border: `1px solid ${t.rule}`,
-                borderRadius: t.radius,
-                overflow: 'hidden',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: 10,
               }}
             >
-              <MorningBrief worldState={worldState} />
+              {ritual.map((a, i) => (
+                <QuickAction
+                  key={i}
+                  icon={a.icon}
+                  label={a.label}
+                  sublabel={a.sublabel}
+                  onClick={a.onClick}
+                />
+              ))}
             </div>
-          </section>
-          <section>
-            <SectionLabel eyebrow="Sparks" title="Daily spark" />
-            <div
-              style={{
-                background: t.paper,
-                border: `1px solid ${t.rule}`,
-                borderRadius: t.radius,
-                overflow: 'hidden',
-              }}
-            >
-              <DailySpark worldState={worldState} />
-            </div>
-          </section>
+          )}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 10,
+            }}
+          >
+            <QuickAction
+              icon={PenTool}
+              label="Writer's Room"
+              sublabel="Editor + Canon Weaver rail + story analysis strip"
+              onClick={() => onNavigate?.('write')}
+            />
+            <QuickAction
+              icon={Users}
+              label="Cast"
+              sublabel="Characters, arcs, relationships, journey"
+              onClick={() => onNavigate?.('cast')}
+            />
+            <QuickAction
+              icon={Compass}
+              label="Atlas"
+              sublabel="Globe, custom maps, pins, travel"
+              onClick={() => onNavigate?.('atlas')}
+            />
+            <QuickAction
+              icon={BookMarked}
+              label="World"
+              sublabel="Wiki, factions, provenance, lore audit"
+              onClick={() => onNavigate?.('world')}
+            />
+            <QuickAction
+              icon={GitBranch}
+              label="Plot Lab"
+              sublabel="Threads, beats, consistency, timeline"
+              onClick={() => onNavigate?.('plot_timeline')}
+            />
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+              gap: 16,
+              alignItems: 'start',
+            }}
+          >
+            <section>
+              <SectionLabel eyebrow="Briefing" title="Morning brief" />
+              <div
+                style={{
+                  background: t.paper,
+                  border: `1px solid ${t.rule}`,
+                  borderRadius: t.radius,
+                  overflow: 'hidden',
+                }}
+              >
+                <MorningBrief scoped worldState={worldState} />
+              </div>
+            </section>
+            <section>
+              <SectionLabel eyebrow="Sparks" title="Daily spark" />
+              <div
+                style={{
+                  background: t.paper,
+                  border: `1px solid ${t.rule}`,
+                  borderRadius: t.radius,
+                  overflow: 'hidden',
+                }}
+              >
+                <DailySpark scoped worldState={worldState} />
+              </div>
+            </section>
+          </div>
         </div>
       </PageBody>
     </Page>
@@ -154,11 +231,8 @@ function SectionLabel({ eyebrow, title }) {
     <div style={{ marginBottom: 10 }}>
       <div
         style={{
-          fontFamily: t.mono,
-          fontSize: 9,
-          color: t.accent,
-          letterSpacing: 0.2,
-          textTransform: 'uppercase',
+          fontFamily: t.mono, fontSize: 9, color: t.accent,
+          letterSpacing: 0.2, textTransform: 'uppercase',
         }}
       >
         {eyebrow}

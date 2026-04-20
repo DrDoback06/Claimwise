@@ -1,8 +1,16 @@
 /**
  * LoomwrightShell — top-level container for the redesign surfaces.
- * Provides the Loomwright theme, imports the Loomwright font stack, and
- * wraps children in a scoped flex container so the existing slate/tailwind
- * UI outside this shell is unaffected.
+ *
+ * Two modes:
+ *   1. Standalone (default)     → owns its own ThemeProvider + font injection.
+ *      Used when a Loomwright component is mounted at the top of an isolated tree
+ *      (e.g. the prototype HTML docs, tests).
+ *   2. Scoped (`scoped` prop)   → inherits the parent ThemeProvider, skips the
+ *      inner theme context + shell body wrapping. Used by every Loomwright
+ *      surface (CanonWeaver, LanguageWorkbench, AtlasAI, Voice, Daily, etc.)
+ *      when rendered INSIDE the Loomwright app shell. This fixes HANDOFF §5.2
+ *      and §5.20 — no more nested ThemeProvider stealing the theme toggle, no
+ *      more duplicate scroll containers.
  */
 
 import React, { useEffect } from 'react';
@@ -20,14 +28,12 @@ function InjectFonts() {
     link.rel = 'stylesheet';
     link.href = FONT_HREF;
     document.head.appendChild(link);
-    return () => {
-      // don't remove — other loomwright mounts reuse it
-    };
+    return () => {};
   }, []);
   return null;
 }
 
-function ShellBody({ children, scrollable = true, pad = true }) {
+function ShellBody({ children, scrollable = true }) {
   const t = useTheme();
   return (
     <div
@@ -43,7 +49,6 @@ function ShellBody({ children, scrollable = true, pad = true }) {
         fontFamily: t.font,
         fontSize: 13,
         overflow: scrollable ? 'auto' : 'hidden',
-        padding: pad ? 0 : 0,
       }}
     >
       {children}
@@ -51,13 +56,21 @@ function ShellBody({ children, scrollable = true, pad = true }) {
   );
 }
 
-export default function LoomwrightShell({ children, initial = 'night', scrollable = true, pad = true }) {
+export default function LoomwrightShell({
+  children,
+  initial = 'night',
+  scrollable = true,
+  scoped = false,
+}) {
+  if (scoped) {
+    // Bare mount: inherit parent ThemeProvider, skip shell wrapper entirely.
+    // This is the path every in-app mount takes.
+    return <>{children}</>;
+  }
   return (
-    <ThemeProvider initial={initial} scoped>
+    <ThemeProvider initial={initial} scoped={false}>
       <InjectFonts />
-      <ShellBody scrollable={scrollable} pad={pad}>
-        {children}
-      </ShellBody>
+      <ShellBody scrollable={scrollable}>{children}</ShellBody>
     </ThemeProvider>
   );
 }

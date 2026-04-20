@@ -5,19 +5,20 @@
  * layer, and routes to feature pages under the 5 verb-based nav groups:
  *   Today • Write • Track • Explore • Settings.
  *
- * The previous 7k-line App.js lives in App.legacy.js for reference only and
- * is NOT imported by this file.
+ * The previous 7k-line App.js lives in docs/legacy/App.legacy.js for reference
+ * only and is NOT imported by this file.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 
-// Core services (shared with legacy surfaces we still mount inside pages)
+// Core services
 import db from './services/database';
 import aiService from './services/aiService';
 import contextEngine from './services/contextEngine';
 import toastService from './services/toastService';
 import undoRedoManager from './services/undoRedo';
 import chapterNavigationService from './services/chapterNavigationService';
+import { resolveTab, parseDeepLink } from './services/keyboardShortcuts';
 
 // Loomwright shell
 import { ThemeProvider, useTheme } from './loomwright/theme';
@@ -28,6 +29,8 @@ import NavigationSidebar from './components/NavigationSidebar';
 import ToastContainer from './components/ToastContainer';
 import GlobalSearch from './components/GlobalSearch';
 import KeyboardShortcutsHelp from './components/KeyboardShortcutsHelp';
+import TutorialWizard, { shouldAutoOpen as shouldAutoOpenTutorial } from './components/TutorialWizard';
+import useIsMobile from './loomwright/useIsMobile';
 
 // Onboarding (re-rendered inside Loomwright shell)
 import OnboardingHost from './pages/OnboardingHost';
@@ -95,17 +98,25 @@ function LoadingScreen() {
 
 function AppInner() {
   const t = useTheme();
-  const [activeTab, setActiveTab] = useState('today');
-  const [selectedCharacterId, setSelectedCharacterId] = useState(null);
+  const { isMobile, isTablet } = useIsMobile();
+  const [navOpen, setNavOpen] = useState(false);
+  const deepLink = useRef(parseDeepLink()).current;
+  const [activeTab, setActiveTab] = useState(deepLink.tab || 'today');
+  const [selectedCharacterId, setSelectedCharacterId] = useState(deepLink.characterId);
   const [worldState, setWorldState] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(true);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [undoRedoInfo, setUndoRedoInfo] = useState({ canUndo: false, canRedo: false });
   const [bookTab, setBookTab] = useState(1);
   const [currentChapter, setCurrentChapter] = useState(1);
+  // Set to `true` when a deep-link or PWA shortcut requested idea capture; the
+  // Write page honours this and focuses the Weaver rail input on mount.
+  const [captureOnMount, setCaptureOnMount] = useState(deepLink.capture);
+  const [initialWeaveIdea] = useState(deepLink.sharedText || '');
 
   // -----------------------------------------------------------------------
   // Init
@@ -133,14 +144,47 @@ function AppInner() {
       }
     })();
 
-    // Chapter navigation service: jump into Write when a flagged issue is clicked
-    chapterNavigationService.setNavigationCallback?.((bookId, chapterId) => {
+    // Chapter navigation service: jump into Write when a flagged issue is
+    // clicked; the range (if any) is forwarded to the editor's seek handler.
+    chapterNavigationService.setNavigationCallback?.((bookId, chapterId, range) => {
       setActiveTab('write');
       if (bookId) setBookTab(bookId);
       if (chapterId) setCurrentChapter(chapterId);
-      toastService.info?.(`Navigated to chapter ${chapterId}`);
+      toastService.info?.(
+        range
+          ? `Jumped to chapter ${chapterId}, range ${range[0]}\u2013${range[1]}`
+          : `Navigated to chapter ${chapterId}`,
+      );
     });
-  }, []);
+
+    // Undo coverage (HANDOFF \u00a75.13): any legacy db.update that touches a
+    // tracked store fires this event. Reload the world and push an undo
+    // snapshot so Ctrl+Z covers those paths too. Throttled so a burst of
+    // writes produces one snapshot, not dozens.
+    let undoTimer = null;
+    const onDbChange = () => {
+      clearTimeout(undoTimer);
+      undoTimer = setTimeout(async () => {
+        try {
+          const actors = await db.getAll('actors').catch(() => []);
+          const itemBank = await db.getAll('itemBank').catch(() => []);
+          const skillBank = await db.getAll('skillBank').catch(() => []);
+          const booksArr = await db.getAll('books').catch(() => []);
+          const plotThreads = await db.getAll('plotThreads').catch(() => []);
+          const booksObj = {};
+          booksArr.forEach((b) => { booksObj[b.id] = b; });
+          setWorldState((prev) => {
+            const next = { ...(prev || {}), actors, itemBank, skillBank, books: booksObj, plotThreads };
+            undoRedoManager.saveState?.(next, 'Legacy db write');
+            setUndoRedoInfo(undoRedoManager.getHistoryInfo?.() || { canUndo: false, canRedo: false });
+            return next;
+          });
+        } catch (_e) { /* swallow */ }
+      }, 250);
+    };
+    window.addEventListener('loomwright:db-change', onDbChange);
+    return () => { window.removeEventListener('loomwright:db-change', onDbChange); clearTimeout(undoTimer); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep aiService aware of current chapter/voice context
   useEffect(() => {
@@ -148,23 +192,31 @@ function AppInner() {
   }, [worldState, bookTab, currentChapter]);
 
   const loadWorld = useCallback(async () => {
+    // Tolerate missing stores on older DBs — any store that isn't provisioned
+    // yet resolves to `[]` instead of throwing the whole boot.
+    const safeGetAll = async (storeName) => {
+      try { return (await db.getAll(storeName)) || []; }
+      catch (e) { console.warn(`[Loomwright] store '${storeName}' unavailable:`, e?.message || e); return []; }
+    };
     try {
-      const actors = await db.getAll('actors');
-      let statRegistry = await db.getAll('statRegistry');
+      const actors = await safeGetAll('actors');
+      let statRegistry = await safeGetAll('statRegistry');
       if (!statRegistry || statRegistry.length === 0) {
-        await db.bulkAdd('statRegistry', DEFAULT_STAT_REGISTRY);
+        try { await db.bulkAdd('statRegistry', DEFAULT_STAT_REGISTRY); } catch (_e) { /* noop */ }
         statRegistry = DEFAULT_STAT_REGISTRY;
       }
       const loaded = {
-        meta: (await db.getAll('meta'))[0] || { premise: '', tone: '', reveal: '' },
+        meta: (await safeGetAll('meta'))[0] || { premise: '', tone: '', reveal: '' },
         statRegistry,
-        skillBank: await db.getAll('skillBank'),
-        itemBank: await db.getAll('itemBank'),
+        skillBank: await safeGetAll('skillBank'),
+        itemBank: await safeGetAll('itemBank'),
         actors,
-        books: await db.getAll('books'),
-        plotThreads: (await db.getAll('plotThreads')) || [],
-        places: (await db.getAll('places')) || [],
-        floorplans: (await db.getAll('floorplans')) || [],
+        books: await safeGetAll('books'),
+        plotThreads: await safeGetAll('plotThreads'),
+        places: await safeGetAll('places'),
+        floorplans: await safeGetAll('floorplans'),
+        factions: await safeGetAll('factions'),
+        loreEntries: await safeGetAll('loreEntries'),
       };
       // Convert books array to object (legacy shape used by many widgets).
       const booksObj = {};
@@ -182,7 +234,7 @@ function AppInner() {
   }, []);
 
   // -----------------------------------------------------------------------
-  // Global keybinds
+  // Global keybinds (see services/keyboardShortcuts.js for the source of truth)
   // -----------------------------------------------------------------------
   useEffect(() => {
     const onKey = (e) => {
@@ -223,11 +275,47 @@ function AppInner() {
     setOnboardingDone(true);
     await loadWorld();
     setActiveTab('today');
+    // Auto-open the Tutorial Wizard on first login after onboarding.
+    if (shouldAutoOpenTutorial()) setShowTutorial(true);
   }, [loadWorld]);
 
   const rerunOnboarding = useCallback(() => {
     setShowOnboarding(true);
     setActiveTab('onboarding');
+  }, []);
+
+  /**
+   * Global search emits hits of shape
+   *   { type: 'actor'|'item'|'skill'|'chapter', id, bookId? }
+   * or, if a consumer calls onNavigate('tabId'), a legacy tab id. Translate
+   * both into a new-nav tab id + any selection state.
+   */
+  const onGlobalSearchNavigate = useCallback((typeOrTab, id, bookId) => {
+    setShowGlobalSearch(false);
+    // Result-object shape
+    switch (typeOrTab) {
+      case 'actor':
+        if (id) setSelectedCharacterId(id);
+        setActiveTab('cast_detail');
+        return;
+      case 'item':
+        setActiveTab('items_library');
+        return;
+      case 'skill':
+        setActiveTab('skills_library');
+        return;
+      case 'stat':
+        setActiveTab('stats_library');
+        return;
+      case 'chapter':
+        if (bookId) setBookTab(bookId);
+        if (id) setCurrentChapter(id);
+        setActiveTab('write');
+        return;
+      default:
+        // Legacy tab id path — run through the canonical resolver.
+        setActiveTab(resolveTab(typeOrTab) || 'today');
+    }
   }, []);
 
   // -----------------------------------------------------------------------
@@ -242,10 +330,14 @@ function AppInner() {
     setBookTab,
     currentChapter,
     setCurrentChapter,
-    onNavigate: setActiveTab,
+    onNavigate: (tab) => setActiveTab(resolveTab(tab) || tab),
     onNavigateToCharacter: navigateToCharacter,
     selectedCharacterId,
     onRerunOnboarding: rerunOnboarding,
+    onOpenTutorial: () => setShowTutorial(true),
+    captureOnMount,
+    initialWeaveIdea,
+    onCaptureConsumed: () => setCaptureOnMount(false),
   };
 
   const renderPage = () => {
@@ -295,11 +387,26 @@ function AppInner() {
           }}
           onOpenSearch={() => setShowGlobalSearch(true)}
           onOpenShortcuts={() => setShowKeyboardShortcuts(true)}
+          onToggleNav={isTablet ? () => setNavOpen((v) => !v) : undefined}
         />
       )}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        {!chromeless && (
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+        {!chromeless && !isTablet && (
           <NavigationSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        )}
+        {!chromeless && isTablet && navOpen && (
+          <>
+            <div
+              onClick={() => setNavOpen(false)}
+              style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.5)' }}
+            />
+            <div style={{ position: 'fixed', top: 48, left: 0, bottom: 0, zIndex: 41 }}>
+              <NavigationSidebar
+                activeTab={activeTab}
+                setActiveTab={(tab) => { setActiveTab(tab); setNavOpen(false); }}
+              />
+            </div>
+          </>
         )}
         <main style={{ flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
           {renderPage()}
@@ -330,13 +437,22 @@ function AppInner() {
           isOpen={showGlobalSearch}
           onClose={() => setShowGlobalSearch(false)}
           worldState={worldState}
-          onNavigate={(tab) => { setActiveTab(tab); setShowGlobalSearch(false); }}
+          onNavigate={onGlobalSearchNavigate}
         />
       )}
       {showKeyboardShortcuts && (
         <KeyboardShortcutsHelp
           isOpen={showKeyboardShortcuts}
           onClose={() => setShowKeyboardShortcuts(false)}
+        />
+      )}
+
+      {showTutorial && (
+        <TutorialWizard
+          isOpen={showTutorial}
+          onClose={() => setShowTutorial(false)}
+          onFinish={() => setShowTutorial(false)}
+          onNavigate={(tab) => setActiveTab(tab)}
         />
       )}
 

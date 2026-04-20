@@ -237,9 +237,9 @@ function SparkBody({ worldState }) {
 
 export { SparkBody };
 
-export default function DailySpark(props) {
+export default function DailySpark({ scoped = false, ...props }) {
   return (
-    <LoomwrightShell>
+    <LoomwrightShell scoped={scoped}>
       <SparkBody {...props} />
     </LoomwrightShell>
   );

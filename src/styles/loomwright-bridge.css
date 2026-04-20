@@ -1,0 +1,285 @@
+/**
+ * Loomwright palette bridge.
+ *
+ * Retheming without rebuilding every component.
+ * ---------------------------------------------
+ * Legacy components use Tailwind slate/emerald utility classes (`bg-slate-900`,
+ * `text-emerald-400`, etc.) and the legacy `--bg-*` CSS variables from
+ * styles/theme.css. They were written for the Claimwise dark palette and look
+ * wrong inside the Loomwright cream/ochre chrome.
+ *
+ * This file defines two cascades triggered by the ThemeProvider (which sets
+ * `document.body.dataset.lwTheme = 'night' | 'day'`):
+ *
+ *   1. Legacy `--bg-*`, `--text-*`, `--accent-*`, `--border-*` CSS vars are
+ *      re-pointed at Loomwright tokens so `card`, `btn`, `.input`, etc. inherit
+ *      the Loomwright palette automatically.
+ *   2. Hard-coded Tailwind utility classes (bg/text/border slate-*, emerald-*,
+ *      blue-*, gray-*) are overridden with `!important` CSS to match Loomwright
+ *      tones. This covers ~90% of legacy component surfaces cheaply and
+ *      reversibly. Wrongly-themed spots can be addressed surgically later.
+ *
+ * Only applies under `body[data-lw-theme="..."]`, so the standalone redesign
+ * preview HTMLs (which don't set this attribute) are unaffected.
+ */
+
+/* -----------------------------------------------------------------------------
+ * Loomwright tokens as native CSS vars under the body — mirror theme.js so
+ * plain CSS can reference them without JS.
+ * -------------------------------------------------------------------------- */
+
+body[data-lw-theme="night"] {
+  --lw-bg: #0f1419;
+  --lw-paper: #171d24;
+  --lw-paper2: #1d242c;
+  --lw-sidebar: #0a0e12;
+  --lw-ink: #e8e1d0;
+  --lw-ink-2: #a8a18f;
+  --lw-ink-3: #6a655a;
+  --lw-rule: #262d36;
+  --lw-accent: oklch(78% 0.13 78);
+  --lw-accent-soft: oklch(78% 0.13 78 / 0.25);
+  --lw-accent-2: oklch(72% 0.10 200);
+  --lw-good: oklch(72% 0.13 145);
+  --lw-warn: oklch(78% 0.13 78);
+  --lw-bad: oklch(65% 0.18 25);
+  --lw-on-accent: #0a0e12;
+}
+
+body[data-lw-theme="day"] {
+  --lw-bg: #f4efe4;
+  --lw-paper: #fbf7ed;
+  --lw-paper2: #ffffff;
+  --lw-sidebar: #ebe4d2;
+  --lw-ink: #2a261e;
+  --lw-ink-2: #5a544a;
+  --lw-ink-3: #8a8478;
+  --lw-rule: #d9d2bf;
+  --lw-accent: oklch(55% 0.15 45);
+  --lw-accent-soft: oklch(55% 0.15 45 / 0.18);
+  --lw-accent-2: oklch(48% 0.09 200);
+  --lw-good: oklch(50% 0.13 145);
+  --lw-warn: oklch(55% 0.15 45);
+  --lw-bad: oklch(55% 0.18 25);
+  --lw-on-accent: #fbf7ed;
+}
+
+/* -----------------------------------------------------------------------------
+ * Legacy `--bg-*` / `--text-*` / `--accent-*` / `--border-*` redirect to
+ * Loomwright tokens. Every legacy component that uses the RPG theme (card,
+ * btn, input, etc.) now picks up Loomwright colors automatically.
+ * -------------------------------------------------------------------------- */
+
+body[data-lw-theme] {
+  --bg-primary: var(--lw-bg);
+  --bg-secondary: var(--lw-paper);
+  --bg-tertiary: var(--lw-paper2);
+  --bg-elevated: var(--lw-paper2);
+
+  --accent-primary: var(--lw-accent);
+  --accent-primary-hover: var(--lw-accent);
+  --accent-primary-muted: var(--lw-accent-soft);
+  --accent-secondary: var(--lw-accent-2);
+  --accent-secondary-hover: var(--lw-accent-2);
+  --accent-secondary-muted: color-mix(in oklch, var(--lw-accent-2) 25%, transparent);
+
+  --text-primary: var(--lw-ink);
+  --text-secondary: var(--lw-ink-2);
+  --text-muted: var(--lw-ink-3);
+  --text-disabled: var(--lw-ink-3);
+
+  --border-subtle: var(--lw-rule);
+  --border-default: var(--lw-rule);
+  --border-active: var(--lw-accent);
+  --border-muted: var(--lw-rule);
+
+  --status-success: var(--lw-good);
+  --status-warning: var(--lw-warn);
+  --status-error: var(--lw-bad);
+  --status-info: var(--lw-accent-2);
+}
+
+/* -----------------------------------------------------------------------------
+ * Tailwind utility class overrides.
+ *
+ * Tailwind emits hard hex values for bg-slate-900, text-emerald-500 etc. They
+ * cannot be reshaped via CSS variables, so we override the compiled class
+ * itself. Scoping by `body[data-lw-theme]` ensures the standalone redesign
+ * HTML previews are unaffected.
+ *
+ * Strategy:
+ *   - Dark scales (bg-slate-900/800/700 + bg-gray-900/800) → Loomwright surface ramp
+ *   - Emerald scales (bg-emerald-*/text-emerald-*) → Loomwright accent
+ *   - Border slate/emerald scales → rule / accent
+ *   - Text slate/white/gray scales → ink ramp
+ *
+ * These rules are intentionally broad + `!important`. If a specific legacy
+ * component needs a bespoke tone, it should use `style={...}` + `useTheme()`
+ * rather than Tailwind utilities.
+ * -------------------------------------------------------------------------- */
+
+body[data-lw-theme] .bg-slate-900,
+body[data-lw-theme] .bg-gray-900,
+body[data-lw-theme] .bg-zinc-900,
+body[data-lw-theme] .bg-neutral-900,
+body[data-lw-theme] .bg-black { background-color: var(--lw-bg) !important; }
+
+body[data-lw-theme] .bg-slate-800,
+body[data-lw-theme] .bg-gray-800,
+body[data-lw-theme] .bg-zinc-800,
+body[data-lw-theme] .bg-neutral-800 { background-color: var(--lw-paper) !important; }
+
+body[data-lw-theme] .bg-slate-700,
+body[data-lw-theme] .bg-gray-700,
+body[data-lw-theme] .bg-zinc-700,
+body[data-lw-theme] .bg-neutral-700 { background-color: var(--lw-paper2) !important; }
+
+body[data-lw-theme] .bg-slate-600,
+body[data-lw-theme] .bg-gray-600 { background-color: var(--lw-rule) !important; }
+
+body[data-lw-theme] .bg-slate-950,
+body[data-lw-theme] .bg-gray-950 { background-color: var(--lw-sidebar) !important; }
+
+body[data-lw-theme] .bg-white { background-color: var(--lw-paper) !important; }
+body[data-lw-theme] .bg-slate-50,
+body[data-lw-theme] .bg-gray-50,
+body[data-lw-theme] .bg-slate-100,
+body[data-lw-theme] .bg-gray-100 { background-color: var(--lw-paper2) !important; }
+
+/* Accent — emerald scales get redirected to Loomwright accent */
+body[data-lw-theme] .bg-emerald-500,
+body[data-lw-theme] .bg-emerald-600,
+body[data-lw-theme] .bg-green-500,
+body[data-lw-theme] .bg-green-600 { background-color: var(--lw-accent) !important; color: var(--lw-on-accent) !important; }
+
+body[data-lw-theme] .bg-emerald-400,
+body[data-lw-theme] .bg-green-400 { background-color: color-mix(in oklch, var(--lw-accent) 80%, transparent) !important; }
+
+body[data-lw-theme] .bg-emerald-900\/20,
+body[data-lw-theme] .bg-emerald-900\/30,
+body[data-lw-theme] .bg-emerald-500\/20,
+body[data-lw-theme] .bg-emerald-500\/10,
+body[data-lw-theme] .bg-green-900\/20,
+body[data-lw-theme] .bg-green-500\/20 { background-color: var(--lw-accent-soft) !important; }
+
+/* Text */
+body[data-lw-theme] .text-white,
+body[data-lw-theme] .text-slate-100,
+body[data-lw-theme] .text-slate-50,
+body[data-lw-theme] .text-gray-100,
+body[data-lw-theme] .text-gray-50 { color: var(--lw-ink) !important; }
+
+body[data-lw-theme] .text-slate-200,
+body[data-lw-theme] .text-slate-300,
+body[data-lw-theme] .text-gray-200,
+body[data-lw-theme] .text-gray-300 { color: var(--lw-ink) !important; }
+
+body[data-lw-theme] .text-slate-400,
+body[data-lw-theme] .text-slate-500,
+body[data-lw-theme] .text-gray-400,
+body[data-lw-theme] .text-gray-500 { color: var(--lw-ink-2) !important; }
+
+body[data-lw-theme] .text-slate-600,
+body[data-lw-theme] .text-slate-700,
+body[data-lw-theme] .text-gray-600,
+body[data-lw-theme] .text-gray-700 { color: var(--lw-ink-3) !important; }
+
+body[data-lw-theme] .text-emerald-300,
+body[data-lw-theme] .text-emerald-400,
+body[data-lw-theme] .text-emerald-500,
+body[data-lw-theme] .text-emerald-600,
+body[data-lw-theme] .text-green-300,
+body[data-lw-theme] .text-green-400,
+body[data-lw-theme] .text-green-500,
+body[data-lw-theme] .text-green-600 { color: var(--lw-accent) !important; }
+
+body[data-lw-theme] .text-cyan-400,
+body[data-lw-theme] .text-cyan-500,
+body[data-lw-theme] .text-blue-400,
+body[data-lw-theme] .text-blue-500,
+body[data-lw-theme] .text-sky-400,
+body[data-lw-theme] .text-sky-500 { color: var(--lw-accent-2) !important; }
+
+body[data-lw-theme] .text-red-400,
+body[data-lw-theme] .text-red-500,
+body[data-lw-theme] .text-rose-400,
+body[data-lw-theme] .text-rose-500 { color: var(--lw-bad) !important; }
+
+body[data-lw-theme] .text-yellow-400,
+body[data-lw-theme] .text-yellow-500,
+body[data-lw-theme] .text-amber-400,
+body[data-lw-theme] .text-amber-500 { color: var(--lw-warn) !important; }
+
+/* Borders */
+body[data-lw-theme] [class*="border-slate-"],
+body[data-lw-theme] [class*="border-gray-"],
+body[data-lw-theme] [class*="border-zinc-"],
+body[data-lw-theme] [class*="border-neutral-"] { border-color: var(--lw-rule) !important; }
+
+body[data-lw-theme] [class*="border-emerald-"],
+body[data-lw-theme] [class*="border-green-"] { border-color: var(--lw-accent) !important; }
+
+body[data-lw-theme] [class*="border-cyan-"],
+body[data-lw-theme] [class*="border-blue-"],
+body[data-lw-theme] [class*="border-sky-"] { border-color: var(--lw-accent-2) !important; }
+
+/* Hover/focus accent states */
+body[data-lw-theme] [class*="hover:bg-slate-"]:hover,
+body[data-lw-theme] [class*="hover:bg-gray-"]:hover { background-color: var(--lw-paper2) !important; }
+
+body[data-lw-theme] [class*="hover:bg-emerald-"]:hover,
+body[data-lw-theme] [class*="hover:bg-green-"]:hover { background-color: var(--lw-accent-soft) !important; }
+
+body[data-lw-theme] [class*="hover:text-emerald-"]:hover,
+body[data-lw-theme] [class*="hover:text-green-"]:hover { color: var(--lw-accent) !important; }
+
+/* Gradients — neutralize dark slate gradients so they don't fight the body bg */
+body[data-lw-theme] .bg-gradient-to-br.from-slate-900,
+body[data-lw-theme] .bg-gradient-to-br.from-slate-800,
+body[data-lw-theme] .bg-gradient-to-r.from-slate-900,
+body[data-lw-theme] .bg-gradient-to-b.from-slate-900 {
+  background-image: linear-gradient(135deg, var(--lw-bg), var(--lw-paper)) !important;
+}
+
+/* -----------------------------------------------------------------------------
+ * Scrollbars — match Loomwright palette.
+ * -------------------------------------------------------------------------- */
+
+body[data-lw-theme] ::-webkit-scrollbar-track { background: var(--lw-paper) !important; }
+body[data-lw-theme] ::-webkit-scrollbar-thumb { background: var(--lw-rule) !important; border: 2px solid var(--lw-paper) !important; }
+body[data-lw-theme] ::-webkit-scrollbar-thumb:hover { background: var(--lw-ink-3) !important; }
+
+/* -----------------------------------------------------------------------------
+ * Body baseline — ensures the page background matches even before the shell
+ * mounts, and smooths font rendering.
+ * -------------------------------------------------------------------------- */
+
+body[data-lw-theme] {
+  background: var(--lw-bg);
+  color: var(--lw-ink);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body[data-lw-theme] .grimguff-app {
+  background: var(--lw-bg) !important;
+}
+
+/* -----------------------------------------------------------------------------
+ * OnboardingWizard — apply a denser accent override so its orange/amber CTAs
+ * also read as Loomwright's accent. (HANDOFF §5.4 cheap-mode retheme.)
+ * -------------------------------------------------------------------------- */
+
+body[data-lw-theme] .loomwright-onboarding .bg-amber-500,
+body[data-lw-theme] .loomwright-onboarding .bg-orange-500,
+body[data-lw-theme] .loomwright-onboarding .bg-yellow-500 { background-color: var(--lw-accent) !important; color: var(--lw-on-accent) !important; }
+body[data-lw-theme] .loomwright-onboarding .text-amber-400,
+body[data-lw-theme] .loomwright-onboarding .text-amber-500,
+body[data-lw-theme] .loomwright-onboarding .text-orange-400,
+body[data-lw-theme] .loomwright-onboarding .text-orange-500 { color: var(--lw-accent) !important; }
+body[data-lw-theme] .loomwright-onboarding .border-amber-500,
+body[data-lw-theme] .loomwright-onboarding .border-orange-500 { border-color: var(--lw-accent) !important; }
+body[data-lw-theme] .loomwright-onboarding h1,
+body[data-lw-theme] .loomwright-onboarding h2,
+body[data-lw-theme] .loomwright-onboarding h3 { font-family: 'Fraunces', Georgia, serif !important; letter-spacing: -0.01em; }

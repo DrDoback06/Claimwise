@@ -1,21 +1,24 @@
 /**
- * Atlas — Explore > Atlas tab.
+ * Atlas — Explore > Atlas.
  *
- * Three views in one tab: Regional (UK map / world map), Floorplan (AtlasAI
- * editor with region + floorplan + propose sub-tabs), and Places (flat list
- * of all worldState.places for quick reference).
+ * Primary mode is the new AtlasBuilder (globe + maker + hybrid, time scrubber).
+ * AtlasAI stays as a secondary "AI proposals" surface for the structured
+ * chapter-region extraction pipeline; UKMapVisualization is preserved as a
+ * "Legacy UK" view for parity with old data.
  */
 
 import React, { useState } from 'react';
 import { useTheme } from '../loomwright/theme';
 import { Page, PageHeader, PageBody, TabStrip } from './_shared/PageChrome';
+import AtlasBuilder from './atlas/AtlasBuilder';
 import AtlasAI from '../loomwright/atlas/AtlasAI';
 import UKMapVisualization from '../components/UKMapVisualization';
 
 const TABS = [
-  { id: 'regional', label: 'Regional' },
-  { id: 'atlas', label: 'Atlas AI' },
-  { id: 'places', label: 'Places' },
+  { id: 'builder', label: 'Builder' },
+  { id: 'ai',      label: 'AI proposals' },
+  { id: 'places',  label: 'Places' },
+  { id: 'legacy',  label: 'UK legacy' },
 ];
 
 function PlacesList({ worldState }) {
@@ -34,7 +37,7 @@ function PlacesList({ worldState }) {
           background: t.paper,
         }}
       >
-        No places defined yet. Pin some in Atlas AI or run Canon Weaver to extract them from your manuscript.
+        No places defined yet. Pin some in the Builder or run Canon Weaver to extract them from your manuscript.
       </div>
     );
   }
@@ -56,7 +59,12 @@ function PlacesList({ worldState }) {
             borderRadius: t.radius,
           }}
         >
-          <div style={{ fontFamily: t.mono, fontSize: 9, color: t.accent, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+          <div
+            style={{
+              fontFamily: t.mono, fontSize: 9, color: t.accent,
+              letterSpacing: 0.14, textTransform: 'uppercase',
+            }}
+          >
             {p.kind || 'place'}
           </div>
           <div style={{ fontFamily: t.display, fontSize: 15, color: t.ink, marginTop: 2 }}>
@@ -67,9 +75,14 @@ function PlacesList({ worldState }) {
               {p.note}
             </div>
           )}
-          {p.chapterIds?.length > 0 && (
-            <div style={{ marginTop: 8, fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.12 }}>
-              {p.chapterIds.length} chapter references
+          {(p.chapterIds || []).length > 0 && (
+            <div
+              style={{
+                marginTop: 8,
+                fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.12,
+              }}
+            >
+              {p.chapterIds.length} chapter reference{p.chapterIds.length === 1 ? '' : 's'}
             </div>
           )}
         </div>
@@ -78,10 +91,8 @@ function PlacesList({ worldState }) {
   );
 }
 
-export default function AtlasPage({ worldState, setWorldState }) {
-  const t = useTheme();
-  const [tab, setTab] = useState('atlas');
-
+export default function AtlasPage({ worldState, setWorldState, onNavigate }) {
+  const [tab, setTab] = useState('builder');
   const actors = worldState?.actors || [];
   const books = Object.values(worldState?.books || {});
 
@@ -90,19 +101,22 @@ export default function AtlasPage({ worldState, setWorldState }) {
       <PageHeader
         eyebrow="Explore"
         title="Atlas"
-        subtitle="Regional maps, floorplans and places tied to your chapters."
+        subtitle="Globe, custom fantasy maps, and the places tied to your chapters."
       />
       <TabStrip tabs={TABS} activeId={tab} onChange={setTab} />
-      <PageBody padding={tab === 'atlas' ? 0 : 28}>
-        {tab === 'regional' && (
-          <UKMapVisualization actors={actors} books={books} onClose={() => {}} />
+      <PageBody padding={tab === 'builder' || tab === 'ai' ? 16 : 28}>
+        {tab === 'builder' && (
+          <div style={{ height: '100%', minHeight: 560 }}>
+            <AtlasBuilder worldState={worldState} setWorldState={setWorldState} onNavigate={onNavigate} />
+          </div>
         )}
-        {tab === 'atlas' && (
+        {tab === 'ai' && (
           <div style={{ height: '100%', minHeight: 540 }}>
-            <AtlasAI worldState={worldState} setWorldState={setWorldState} />
+            <AtlasAI scoped worldState={worldState} setWorldState={setWorldState} />
           </div>
         )}
         {tab === 'places' && <PlacesList worldState={worldState} />}
+        {tab === 'legacy' && <UKMapVisualization actors={actors} books={books} onClose={() => {}} />}
       </PageBody>
     </Page>
   );

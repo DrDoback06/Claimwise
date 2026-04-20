@@ -4,7 +4,27 @@
  */
 
 const DB_NAME = 'ClaimwiseOmniscience';
-const DB_VERSION = 22; // Story Brain: chapter memories for forward context
+const DB_VERSION = 23; // Loomwright: places + floorplans + loreEntries stores
+
+// Loomwright undo coverage: fire a lightweight DOM event so the App can
+// observe every write through the db without each legacy component having
+// to route through setWorldState. Stores that are purely infrastructural
+// (caches, telemetry) are excluded to keep the noise down.
+const UNDO_TRACKED_STORES = new Set([
+  'actors', 'books', 'itemBank', 'skillBank', 'statRegistry',
+  'plotThreads', 'plotQuests', 'factions', 'places', 'floorplans',
+  'loreEntries', 'wiki', 'wikiEntries', 'meta', 'relationships',
+  'characterArcs', 'timelineEvents', 'locations',
+]);
+function _emitDbChange(op, storeName, data) {
+  if (typeof window === 'undefined' || !window.dispatchEvent) return;
+  if (!UNDO_TRACKED_STORES.has(storeName)) return;
+  try {
+    window.dispatchEvent(new CustomEvent('loomwright:db-change', {
+      detail: { op, storeName, id: data?.id },
+    }));
+  } catch (_e) { /* noop */ }
+}
 
 class ClaimwiseDB {
   constructor() {
@@ -628,6 +648,29 @@ class ClaimwiseDB {
             memoryStore.createIndex('generatedAt', 'generatedAt', { unique: false });
           }
         }
+
+        // Migration for version 23: Loomwright World workspace unification.
+        // Gives us first-class places + floorplans + loreEntries stores so
+        // the World page stops having to scavenge them out of items/wiki.
+        if (oldVersion < 23) {
+          if (!db.objectStoreNames.contains('places')) {
+            const placeStore = db.createObjectStore('places', { keyPath: 'id' });
+            placeStore.createIndex('name', 'name', { unique: false });
+            placeStore.createIndex('region', 'region', { unique: false });
+            placeStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('floorplans')) {
+            const fpStore = db.createObjectStore('floorplans', { keyPath: 'id' });
+            fpStore.createIndex('placeId', 'placeId', { unique: false });
+            fpStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('loreEntries')) {
+            const loreStore = db.createObjectStore('loreEntries', { keyPath: 'id' });
+            loreStore.createIndex('category', 'category', { unique: false });
+            loreStore.createIndex('name', 'name', { unique: false });
+            loreStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+        }
       };
     });
   }
@@ -918,14 +961,19 @@ class ClaimwiseDB {
     if (data && data.id) {
       this.cache.delete(`${storeName}:get:${data.id}`);
     }
-    
+
     const transaction = this.db.transaction([storeName], 'readwrite');
     const store = transaction.objectStore(storeName);
-    return new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       const request = store.put(data);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
+    // Loomwright undo coverage (HANDOFF \u00a75.13): emit a DOM event for any
+    // writer-path store change so App.js can snapshot worldState into the
+    // undoRedoManager. Fires non-blocking; throttled on the consumer side.
+    _emitDbChange('update', storeName, data);
+    return result;
   }
 
   async delete(storeName, key) {
@@ -933,14 +981,16 @@ class ClaimwiseDB {
     // Invalidate cache
     this._invalidateStoreCache(storeName);
     this.cache.delete(`${storeName}:get:${key}`);
-    
+
     const transaction = this.db.transaction([storeName], 'readwrite');
     const store = transaction.objectStore(storeName);
-    return new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       const request = store.delete(key);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
+    _emitDbChange('delete', storeName, { id: key });
+    return result;
   }
 
   async clear(storeName) {

@@ -676,9 +676,9 @@ function WardrobeBody({
 
 export { WardrobeBody };
 
-export default function CharacterWardrobe(props) {
+export default function CharacterWardrobe({ scoped = false, ...props }) {
   return (
-    <LoomwrightShell scrollable>
+    <LoomwrightShell scrollable scoped={scoped}>
       <WardrobeBody {...props} />
     </LoomwrightShell>
   );

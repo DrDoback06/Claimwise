@@ -19,6 +19,7 @@ import CharacterProgressionView from '../../components/CharacterProgressionView'
 import CharacterTimelineView from '../../components/CharacterTimelineView';
 import CharacterRelationshipHub from '../../components/CharacterRelationshipHub';
 import CharacterRelationshipWeb from '../../components/CharacterRelationshipWeb';
+import RelationshipNetworkGraph from '../../components/RelationshipNetworkGraph';
 import CharacterDialogueHub from '../../components/CharacterDialogueHub';
 import CharacterDialogueAnalysis from '../../components/CharacterDialogueAnalysis';
 import CharacterPlotInvolvement from '../../components/CharacterPlotInvolvement';
@@ -29,9 +30,11 @@ import StatHistoryTimeline from '../../components/StatHistoryTimeline';
 
 // Loomwright surfaces
 import CharacterWardrobe from '../../loomwright/wardrobe/CharacterWardrobe';
+import InventoryOverChapters from './InventoryOverChapters';
 
 const TABS = [
   { id: 'profile',       label: 'Profile' },
+  { id: 'journey',       label: 'Journey' },
   { id: 'arc',           label: 'Arc' },
   { id: 'progression',   label: 'Progression' },
   { id: 'timeline',      label: 'Timeline' },
@@ -42,6 +45,12 @@ const TABS = [
   { id: 'wardrobe',      label: 'Wardrobe' },
   { id: 'stats',         label: 'Stats' },
   { id: 'skills',        label: 'Skills' },
+];
+
+const RELATIONSHIP_VIEWS = [
+  { id: 'hub',   label: 'Hub'   },
+  { id: 'web',   label: 'Web'   },
+  { id: 'graph', label: 'Graph' },
 ];
 
 function BackLink({ onNavigate }) {
@@ -167,11 +176,13 @@ export default function CharacterDetailPage({
   worldState,
   setWorldState,
   selectedCharacterId,
+  bookTab,
   onNavigate,
   onNavigateToCharacter,
 }) {
   const t = useTheme();
   const [tab, setTab] = useState('profile');
+  const [relView, setRelView] = useState('hub');
 
   const actors = worldState?.actors || [];
   const books = worldState?.books || {};
@@ -204,6 +215,14 @@ export default function CharacterDetailPage({
             <CallbacksAndMemoriesDisplay character={character} books={books} />
           </div>
         );
+      case 'journey':
+        return (
+          <InventoryOverChapters
+            character={character}
+            worldState={worldState}
+            bookId={bookTab}
+          />
+        );
       case 'arc':
         return <CharacterArcMapper actors={[character]} books={books} onClose={() => {}} />;
       case 'progression':
@@ -213,17 +232,77 @@ export default function CharacterDetailPage({
       case 'relationships':
         return (
           <div style={{ display: 'grid', gap: 12 }}>
-            <CharacterRelationshipHub
-              character={character}
-              actors={actors}
-              books={books}
-              onActorSelect={(id) => onNavigateToCharacter?.(id)}
-            />
-            <CharacterRelationshipWeb
-              actor={character}
-              actors={actors}
-              onActorSelect={(id) => onNavigateToCharacter?.(id)}
-            />
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: 8,
+                background: t.paper,
+                border: `1px solid ${t.rule}`,
+                borderRadius: t.radius,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: t.mono, fontSize: 10, color: t.ink3,
+                  letterSpacing: 0.14, textTransform: 'uppercase', marginRight: 6,
+                }}
+              >
+                View
+              </div>
+              {RELATIONSHIP_VIEWS.map((v) => {
+                const on = relView === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setRelView(v.id)}
+                    style={{
+                      padding: '4px 10px',
+                      background: on ? t.accentSoft : 'transparent',
+                      color: on ? t.ink : t.ink2,
+                      border: `1px solid ${on ? t.accent : t.rule}`,
+                      borderRadius: t.radius,
+                      cursor: 'pointer',
+                      fontFamily: t.mono, fontSize: 10,
+                      letterSpacing: 0.12, textTransform: 'uppercase',
+                    }}
+                  >
+                    {v.label}
+                  </button>
+                );
+              })}
+            </div>
+            {relView === 'hub' && (
+              <CharacterRelationshipHub
+                character={character}
+                actors={actors}
+                books={books}
+                onActorSelect={(id) => onNavigateToCharacter?.(id)}
+              />
+            )}
+            {relView === 'web' && (
+              <CharacterRelationshipWeb
+                actor={character}
+                actors={actors}
+                onActorSelect={(id) => onNavigateToCharacter?.(id)}
+              />
+            )}
+            {relView === 'graph' && (
+              <div
+                style={{
+                  padding: 8,
+                  background: t.paper,
+                  border: `1px solid ${t.rule}`,
+                  borderRadius: t.radius,
+                }}
+              >
+                <RelationshipNetworkGraph
+                  relationships={character?.relationships || []}
+                  characters={actors}
+                  onNodeClick={(id) => onNavigateToCharacter?.(id)}
+                />
+              </div>
+            )}
           </div>
         );
       case 'voice':
@@ -248,6 +327,7 @@ export default function CharacterDetailPage({
             }}
           >
             <CharacterWardrobe
+              scoped
               actor={character}
               worldState={worldState}
               onPatchWorldState={(patch) => {

@@ -222,9 +222,9 @@ function BriefBody({ worldState }) {
 
 export { BriefBody };
 
-export default function MorningBrief(props) {
+export default function MorningBrief({ scoped = false, ...props }) {
   return (
-    <LoomwrightShell>
+    <LoomwrightShell scoped={scoped}>
       <BriefBody {...props} />
     </LoomwrightShell>
   );

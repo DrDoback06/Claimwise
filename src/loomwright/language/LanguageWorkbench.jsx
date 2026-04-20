@@ -585,9 +585,9 @@ function WorkbenchBody({ worldState }) {
 
 export { WorkbenchBody };
 
-export default function LanguageWorkbench(props) {
+export default function LanguageWorkbench({ scoped = false, ...props }) {
   return (
-    <LoomwrightShell scrollable={false}>
+    <LoomwrightShell scrollable={false} scoped={scoped}>
       <WorkbenchBody {...props} />
     </LoomwrightShell>
   );

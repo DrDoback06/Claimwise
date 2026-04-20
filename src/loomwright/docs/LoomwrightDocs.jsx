@@ -154,9 +154,9 @@ function DocsBody() {
   );
 }
 
-export default function LoomwrightDocs() {
+export default function LoomwrightDocs({ scoped = false } = {}) {
   return (
-    <LoomwrightShell>
+    <LoomwrightShell scoped={scoped}>
       <DocsBody />
     </LoomwrightShell>
   );

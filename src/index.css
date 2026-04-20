@@ -6,6 +6,11 @@
 @import './styles/rpgComponents.css';
 @import './styles/rpgAnimations.css';
 
+/* Loomwright palette bridge — retheme legacy components under the
+   Loomwright Night/Day chrome (HANDOFF §5.3, §5.4). Must import AFTER the
+   legacy RPG styles so the bridge selectors win the cascade. */
+@import './styles/loomwright-bridge.css';
+
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
     width: 8px;

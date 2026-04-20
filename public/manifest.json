@@ -31,19 +31,35 @@
   "screenshots": [],
   "shortcuts": [
     {
-      "name": "Writer's Room",
-      "short_name": "Write",
-      "description": "Open the Writer's Room",
-      "url": "/?tab=story",
+      "name": "Today",
+      "short_name": "Today",
+      "description": "Morning brief, daily spark and AI noticings",
+      "url": "/?tab=today",
       "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Canon Weaver",
-      "short_name": "Weaver",
-      "description": "Capture an idea and let Canon Weaver propose coordinated edits",
-      "url": "/?tab=lw_weaver",
+      "name": "Writer's Room",
+      "short_name": "Write",
+      "description": "Open the Writer's Room with Canon Weaver at hand",
+      "url": "/?tab=write",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Capture idea",
+      "short_name": "Capture",
+      "description": "Drop an idea for Canon Weaver to route across your canon",
+      "url": "/?tab=write&capture=1",
       "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
     }
   ],
+  "share_target": {
+    "action": "/?tab=write&capture=1",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "prefer_related_applications": false
 }

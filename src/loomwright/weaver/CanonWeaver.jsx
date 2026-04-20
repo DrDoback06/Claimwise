@@ -13,7 +13,8 @@ import LoomwrightShell from '../LoomwrightShell';
 import { useTheme, ThemeToggle } from '../theme';
 import Icon from '../primitives/Icon';
 import Button from '../primitives/Button';
-import { proposeWeave, SYSTEM_COLORS, SYSTEM_ICON } from './weaverAI';
+import { proposeWeave, SYSTEM_COLORS, SYSTEM_ICON, subscribeWeaver } from './weaverAI';
+import undoRedoManager from '../../services/undoRedo';
 
 const HISTORY_KEY = 'lw-weaver-history';
 
@@ -115,7 +116,7 @@ function Stepper({ stage }) {
   );
 }
 
-function Hub({ book, history, onStart, onLoadExample }) {
+function Hub({ book, history, onStart, onLoadExample, onSweep }) {
   const t = useTheme();
   return (
     <div style={{ padding: '40px 48px', maxWidth: 900, margin: '0 auto' }}>
@@ -227,9 +228,22 @@ function Hub({ book, history, onStart, onLoadExample }) {
           <Button variant="primary" size="lg" onClick={onStart} icon={<Icon name="sparkle" size={14} color={t.onAccent} />}>
             New weave
           </Button>
+          <Button variant="default" onClick={onSweep} icon={<Icon name="refresh" size={14} color={t.ink} />}>
+            Continuity sweep
+          </Button>
           <Button variant="default" onClick={onLoadExample}>
             Load example idea
           </Button>
+        </div>
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: t.ink2,
+            lineHeight: 1.6,
+          }}
+        >
+          <strong style={{ color: t.ink }}>Continuity sweep</strong> scans every chapter, character and thread and proposes coordinated fixes for dangling plants, silent characters and drifting facts &mdash; no new idea required.
         </div>
       </div>
 
@@ -892,14 +906,24 @@ function Applied({ summary, onAgain }) {
   );
 }
 
-function WeaverBody({ worldState, setWorldState, onPatchWorldState }) {
+function WeaverBody({ worldState, setWorldState, onPatchWorldState, captureOnMount, initialIdea, onCaptureConsumed }) {
   const t = useTheme();
   const { bookId, book } = useBookContext(worldState);
   const actors = worldState?.actors || [];
 
-  const [stage, setStage] = useState('hub');
-  const [idea, setIdea] = useState('');
+  const [stage, setStage] = useState(captureOnMount ? 'capture' : 'hub');
+  const [idea, setIdea] = useState(initialIdea || '');
   const [edits, setEdits] = useState([]);
+  const [weaveMode, setWeaveMode] = useState('single');
+  const [weaveEntity, setWeaveEntity] = useState(null);
+
+  useEffect(() => {
+    if (captureOnMount) {
+      setStage('capture');
+      if (initialIdea) setIdea(initialIdea);
+      onCaptureConsumed?.();
+    }
+  }, [captureOnMount]); // eslint-disable-line react-hooks/exhaustive-deps
   const [decisions, setDecisions] = useState({});
   const [selected, setSelected] = useState(null);
   const [history, setHistory] = useState(loadHistory());
@@ -907,12 +931,36 @@ function WeaverBody({ worldState, setWorldState, onPatchWorldState }) {
   const currentChapter =
     book?.chapters?.length ? book.chapters[book.chapters.length - 1].id : 1;
 
-  const submit = async (text) => {
+  // External triggers (Daily Spark, Interview handoff, mobile Capture, deep
+  // links) publish on the weaver bus. We honour them by seeding state and
+  // jumping to the right stage.
+  useEffect(() => {
+    const off = subscribeWeaver(({ mode = 'single', text, entity, autoRun = false } = {}) => {
+      if (text) setIdea(text);
+      if (entity) setWeaveEntity(entity);
+      setWeaveMode(mode);
+      if (autoRun && (text || mode === 'sweep' || mode === 'backfill')) {
+        // Kick off immediately, skipping the Capture step.
+        submit(text ?? '', { mode, entity });
+      } else {
+        setStage('capture');
+      }
+    });
+    return off;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const submit = async (text, opts = {}) => {
     const theIdea = text ?? idea;
+    const mode = opts.mode || weaveMode || 'single';
+    const entity = opts.entity || weaveEntity;
     setIdea(theIdea);
+    setWeaveMode(mode);
     setStage('analyzing');
     const { edits: proposed } = await proposeWeave(theIdea, worldState, bookId, {
       currentChapter,
+      mode,
+      entity,
+      transcript: opts.transcript,
     });
     setEdits(proposed);
     const seed = {};
@@ -921,7 +969,6 @@ function WeaverBody({ worldState, setWorldState, onPatchWorldState }) {
     });
     setDecisions(seed);
     setSelected(proposed[0]?.id || null);
-    // leave analyzing view up for a beat before swapping to review
     setTimeout(() => setStage('review'), 600);
   };
 
@@ -930,16 +977,24 @@ function WeaverBody({ worldState, setWorldState, onPatchWorldState }) {
     const systems = Array.from(new Set(accepted.map((e) => e.system)));
 
     // Dispatch accepted edits to worldState. These are ADDITIVE.
-    const nextState = dispatchWeaveEdits(worldState, accepted, bookId, currentChapter);
-    if (nextState) onPatchWorldState?.(nextState);
+    const patch = dispatchWeaveEdits(worldState, accepted, bookId, currentChapter);
+    if (patch) {
+      // One-click-undo: record the pre-apply snapshot as a single history
+      // step labeled with the idea. `Ctrl+Z` in the header reverts the whole
+      // batch.
+      try {
+        undoRedoManager.saveState?.(worldState, `Weave: ${String(idea).slice(0, 80) || weaveMode}`);
+      } catch (_e) { /* noop */ }
+      onPatchWorldState?.(patch);
+    }
 
-    // Record history entry
     const entry = {
       id: `h_${Date.now()}`,
-      title: idea.slice(0, 140),
+      title: (idea || weaveMode).slice(0, 140),
       when: Date.now(),
       touched: edits.length,
       accepted: accepted.length,
+      mode: weaveMode,
       status: accepted.length > 0 ? 'accepted' : 'rejected',
     };
     const next = [entry, ...history];
@@ -963,7 +1018,12 @@ function WeaverBody({ worldState, setWorldState, onPatchWorldState }) {
         <Hub
           book={book}
           history={history}
-          onStart={() => setStage('capture')}
+          onStart={() => { setWeaveMode('single'); setStage('capture'); }}
+          onSweep={() => {
+            setWeaveMode('sweep');
+            setIdea('Run a continuity sweep on the whole book.');
+            submit('Run a continuity sweep on the whole book.', { mode: 'sweep' });
+          }}
           onLoadExample={loadExample}
         />
       )}
@@ -1188,8 +1248,8 @@ function dispatchWeaveEdits(worldState, accepted, bookId, chapterId) {
 
 export { WeaverBody };
 
-export default function CanonWeaver(props) {
-  const onPatchWorldState = (patch) => {
+export default function CanonWeaver({ scoped = false, ...props }) {
+  const onPatchWorldState = props.onPatchWorldState || ((patch) => {
     props.setWorldState?.((prev) => ({
       ...prev,
       itemBank: patch.itemBank || prev.itemBank,
@@ -1197,9 +1257,9 @@ export default function CanonWeaver(props) {
       books: patch.books || prev.books,
       plotThreads: patch.plotThreads || prev.plotThreads,
     }));
-  };
+  });
   return (
-    <LoomwrightShell scrollable={false}>
+    <LoomwrightShell scrollable={false} scoped={scoped}>
       <WeaverBody {...props} onPatchWorldState={onPatchWorldState} />
     </LoomwrightShell>
   );

@@ -14,6 +14,8 @@ import LoomwrightShell from '../LoomwrightShell';
 import { useTheme, ThemeToggle } from '../theme';
 import Icon from '../primitives/Icon';
 import Button from '../primitives/Button';
+import aiService from '../../services/aiService';
+import toastService from '../../services/toastService';
 
 const DEFAULT_PROVIDERS = [
   { id: 'p_anthropic', name: 'Anthropic',   model: 'claude-3.5-sonnet', enabled: true,  notes: 'Best for long-form prose, nuance.' },
@@ -107,6 +109,31 @@ function ProvidersBody({ worldState, setWorldState, scoped = false }) {
   const updateProvider = (id, patchP) => {
     const next = providers.map((p) => (p.id === id ? { ...p, ...patchP } : p));
     patch({ ...settings, providers: next });
+  };
+
+  const [probing, setProbing] = useState({});
+  const probeProvider = async (p) => {
+    setProbing((x) => ({ ...x, [p.id]: 'pending' }));
+    const started = performance.now();
+    try {
+      // Temporarily set preferredProvider to the target, call a tiny probe.
+      const prev = aiService.preferredProvider;
+      if (typeof aiService.setPreferredProvider === 'function') {
+        aiService.setPreferredProvider(p.name?.toLowerCase());
+      } else {
+        aiService.preferredProvider = p.name?.toLowerCase();
+      }
+      await aiService.callAI('Return the single word OK.', 'ping', 'Reply with just OK.', { useCache: false, skipQueue: true });
+      aiService.preferredProvider = prev;
+      const ms = Math.round(performance.now() - started);
+      setProbing((x) => ({ ...x, [p.id]: { ok: true, ms } }));
+      updateProvider(p.id, { lastProbeAt: Date.now(), lastProbeOk: true, lastProbeMs: ms });
+      toastService.success?.(`${p.name}: ping ok (${ms}ms)`);
+    } catch (e) {
+      setProbing((x) => ({ ...x, [p.id]: { ok: false, error: e?.message || String(e) } }));
+      updateProvider(p.id, { lastProbeAt: Date.now(), lastProbeOk: false, lastProbeError: e?.message || String(e) });
+      toastService.error?.(`${p.name}: ${e?.message || 'ping failed'}`);
+    }
   };
 
   const addProvider = () => {
@@ -320,6 +347,20 @@ function ProvidersBody({ worldState, setWorldState, scoped = false }) {
                       />
                       Enabled
                     </label>
+                    <Button size="sm" variant="ghost" onClick={() => probeProvider(p)} icon={<Icon name="refresh" size={10} />}>
+                      {probing[p.id] === 'pending' ? 'Pinging\u2026' : 'Test'}
+                    </Button>
+                    {probing[p.id] && probing[p.id] !== 'pending' && (
+                      <div
+                        style={{
+                          fontFamily: t.mono, fontSize: 9,
+                          color: probing[p.id].ok ? t.good : t.bad,
+                          letterSpacing: 0.12, textTransform: 'uppercase',
+                        }}
+                      >
+                        {probing[p.id].ok ? `OK \u00b7 ${probing[p.id].ms}ms` : 'Failed'}
+                      </div>
+                    )}
                     <Button size="sm" variant="ghost" onClick={() => removeProvider(p.id)} icon={<Icon name="trash" size={10} />}>
                       Remove
                     </Button>

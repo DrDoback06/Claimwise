@@ -10,6 +10,7 @@ import React, { useMemo, useState } from 'react';
 import { Users, Search, Plus } from 'lucide-react';
 import { useTheme } from '../loomwright/theme';
 import { Page, PageHeader, PageBody } from './_shared/PageChrome';
+import NewCharacterModal from './cast/NewCharacterModal';
 
 function ActorTile({ actor, onClick }) {
   const t = useTheme();
@@ -72,9 +73,10 @@ function ActorTile({ actor, onClick }) {
   );
 }
 
-export default function CastPage({ worldState, onNavigateToCharacter }) {
+export default function CastPage({ worldState, setWorldState, onNavigateToCharacter }) {
   const t = useTheme();
   const [query, setQuery] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
 
   const actors = worldState?.actors || [];
   const filtered = useMemo(() => {
@@ -119,6 +121,23 @@ export default function CastPage({ worldState, onNavigateToCharacter }) {
                 }}
               />
             </div>
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 12px',
+                background: t.accent, color: t.onAccent,
+                border: `1px solid ${t.accent}`,
+                borderRadius: t.radius,
+                fontFamily: t.mono, fontSize: 10,
+                letterSpacing: 0.14, textTransform: 'uppercase',
+                cursor: 'pointer',
+              }}
+              title="Create a new character"
+            >
+              <Plus size={12} /> New character
+            </button>
           </div>
         }
       />
@@ -139,7 +158,26 @@ export default function CastPage({ worldState, onNavigateToCharacter }) {
             <div style={{ fontFamily: t.display, fontSize: 15, color: t.ink, marginBottom: 4 }}>
               No cast yet
             </div>
-            <div>Run the onboarding wizard to populate characters, or add them from the Writer's Room as you draft.</div>
+            <div style={{ marginBottom: 10 }}>
+              Run the onboarding wizard to populate characters, add them from the
+              Writer&rsquo;s Room as you draft, or create one directly.
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 12px',
+                background: t.accent, color: t.onAccent,
+                border: `1px solid ${t.accent}`,
+                borderRadius: t.radius,
+                fontFamily: t.mono, fontSize: 10,
+                letterSpacing: 0.14, textTransform: 'uppercase',
+                cursor: 'pointer',
+              }}
+            >
+              <Plus size={12} /> New character
+            </button>
           </div>
         ) : (
           <div
@@ -159,6 +197,14 @@ export default function CastPage({ worldState, onNavigateToCharacter }) {
           </div>
         )}
       </PageBody>
+
+      <NewCharacterModal
+        isOpen={showCreate}
+        onClose={() => setShowCreate(false)}
+        worldState={worldState}
+        setWorldState={setWorldState}
+        onCreated={(actor) => onNavigateToCharacter?.(actor.id)}
+      />
     </Page>
   );
 }

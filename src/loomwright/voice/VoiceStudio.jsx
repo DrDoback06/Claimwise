@@ -812,9 +812,9 @@ function StudioBody({ worldState, setWorldState }) {
   );
 }
 
-export default function VoiceStudio(props) {
+export default function VoiceStudio({ scoped = false, ...props }) {
   return (
-    <LoomwrightShell scrollable={false}>
+    <LoomwrightShell scrollable={false} scoped={scoped}>
       <StudioBody {...props} />
     </LoomwrightShell>
   );

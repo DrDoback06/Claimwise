@@ -12,6 +12,8 @@ import { useTheme, ThemeToggle } from '../theme';
 import Icon from '../primitives/Icon';
 import Button from '../primitives/Button';
 import { askActor, askGroup, PROMPT_DECK } from './interviewAI';
+import { dispatchWeaver } from '../weaver/weaverAI';
+import toastService from '../../services/toastService';
 
 const MODES = [
   { id: 'solo',  label: 'Solo'  },
@@ -275,6 +277,22 @@ function SavedView({ actors }) {
     });
     return out.sort((x, y) => y.at - x.at);
   }, [actors]);
+
+  const sendToWeaver = (quote, kind) => {
+    const map = {
+      scene:   `Turn the following character interview into a scene in the next chapter.\n\n${quote.actor}: ${quote.a}\n(Prompted by: ${quote.q})`,
+      thread:  `Turn this character insight into a plot thread with 3-5 beats.\n\n${quote.actor}: ${quote.a}`,
+      item:    `Extract any item or artefact referenced here and propose it into the canon.\n\n${quote.actor}: ${quote.a}`,
+    };
+    dispatchWeaver({
+      mode: kind === 'scene' ? 'scene' : 'single',
+      text: map[kind],
+      transcript: kind === 'scene' ? quote.a : undefined,
+      autoRun: true,
+    });
+    toastService.info?.(`Sent to Canon Weaver: ${kind}.`);
+  };
+
   if (!all.length) return <div style={{ padding: 20, color: t.ink3 }}>No saved quotes yet.</div>;
   return (
     <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -304,6 +322,27 @@ function SavedView({ actors }) {
           </div>
           <div style={{ fontFamily: t.display, fontSize: 15, color: t.ink, lineHeight: 1.6, marginTop: 6, fontStyle: 'italic' }}>
             {q.a}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            {['scene', 'thread', 'item'].map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => sendToWeaver(q, kind)}
+                style={{
+                  padding: '4px 10px',
+                  background: 'transparent',
+                  color: t.accent,
+                  border: `1px solid ${t.rule}`,
+                  borderRadius: t.radius,
+                  fontFamily: t.mono, fontSize: 10,
+                  letterSpacing: 0.14, textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                Turn into {kind}
+              </button>
+            ))}
           </div>
         </div>
       ))}
@@ -513,9 +552,9 @@ function InterviewBody({ worldState, setWorldState }) {
 
 export { InterviewBody };
 
-export default function InterviewMode(props) {
+export default function InterviewMode({ scoped = false, ...props }) {
   return (
-    <LoomwrightShell scrollable={false}>
+    <LoomwrightShell scrollable={false} scoped={scoped}>
       <InterviewBody {...props} />
     </LoomwrightShell>
   );

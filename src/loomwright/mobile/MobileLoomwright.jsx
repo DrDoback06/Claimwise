@@ -345,9 +345,9 @@ function MobileBody({ worldState }) {
   );
 }
 
-export default function MobileLoomwright(props) {
+export default function MobileLoomwright({ scoped = false, ...props }) {
   return (
-    <LoomwrightShell scrollable>
+    <LoomwrightShell scrollable scoped={scoped}>
       <MobileBody {...props} />
     </LoomwrightShell>
   );

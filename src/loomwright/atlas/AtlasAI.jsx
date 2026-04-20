@@ -693,9 +693,9 @@ function AtlasBody({ worldState, setWorldState }) {
   );
 }
 
-export default function AtlasAI(props) {
+export default function AtlasAI({ scoped = false, ...props }) {
   return (
-    <LoomwrightShell scrollable={false}>
+    <LoomwrightShell scrollable={false} scoped={scoped}>
       <AtlasBody {...props} />
     </LoomwrightShell>
   );

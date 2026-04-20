@@ -11,7 +11,7 @@ import VoiceStudio from '../loomwright/voice/VoiceStudio';
 export default function VoiceStudioPage({ worldState, setWorldState }) {
   return (
     <div style={{ height: '100%' }}>
-      <VoiceStudio worldState={worldState} setWorldState={setWorldState} />
+      <VoiceStudio scoped worldState={worldState} setWorldState={setWorldState} />
     </div>
   );
 }

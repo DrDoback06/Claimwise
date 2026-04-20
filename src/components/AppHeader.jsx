@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { ArrowLeft, ArrowRight, Keyboard, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Keyboard, Search, Menu } from 'lucide-react';
 import { useTheme, ThemeToggle } from '../loomwright/theme';
 
 function IconButton({ title, onClick, disabled, children }) {
@@ -41,7 +41,7 @@ function IconButton({ title, onClick, disabled, children }) {
   );
 }
 
-export default function AppHeader({ undoRedoInfo, onUndo, onRedo, onOpenSearch, onOpenShortcuts }) {
+export default function AppHeader({ undoRedoInfo, onUndo, onRedo, onOpenSearch, onOpenShortcuts, onToggleNav }) {
   const t = useTheme();
   return (
     <header
@@ -57,6 +57,23 @@ export default function AppHeader({ undoRedoInfo, onUndo, onRedo, onOpenSearch, 
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {onToggleNav && (
+          <button
+            type="button"
+            onClick={onToggleNav}
+            title="Toggle navigation"
+            style={{
+              padding: 6,
+              background: 'transparent',
+              color: t.ink2,
+              border: `1px solid ${t.rule}`,
+              borderRadius: t.radius,
+              cursor: 'pointer',
+            }}
+          >
+            <Menu size={14} />
+          </button>
+        )}
         <div
           style={{
             width: 28, height: 28, borderRadius: t.radius,

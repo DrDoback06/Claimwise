@@ -75,7 +75,7 @@ export default function OnboardingHost({ onComplete, onExit }) {
           </button>
         )}
       </header>
-      <div style={{ flex: 1 }}>
+      <div className="loomwright-onboarding" style={{ flex: 1 }}>
         <OnboardingWizard onComplete={onComplete} />
       </div>
     </div>

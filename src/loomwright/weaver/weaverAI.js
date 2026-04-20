@@ -1,7 +1,23 @@
 /**
- * weaverAI — structured AI bridge for Canon Weaver.
- * Given a user's idea, returns a list of proposed edits grouped by system.
- * Falls back to a deterministic preview if the model is unreachable.
+ * weaverAI — the AI bridge for Canon Weaver.
+ *
+ * Takes a writer's idea (or a sweep request / a backfill request) plus the
+ * full worldState and returns a list of coordinated cross-system edit
+ * proposals. The Review view in `CanonWeaver.jsx` renders these and the user
+ * accepts/edits/rejects each; `dispatchWeaveEdits` applies accepted ones.
+ *
+ * Modes:
+ *   - 'single'   : default — the writer dropped a fresh idea.
+ *   - 'sweep'    : continuity sweep across the whole manuscript (no new idea;
+ *                   the AI finds gaps and proposes coordinated fixes).
+ *   - 'backfill' : an entity (character/item/thread) was just created and we
+ *                   want Canon Weaver to propose retroactive mentions in
+ *                   earlier chapters.
+ *   - 'scene'    : we have transcript/raw text (e.g. from Interview Mode) we
+ *                   want woven into the canon as a scene + supporting edits.
+ *
+ * Falls back to a deterministic proposal if aiService is unreachable so the
+ * review flow is always exercised.
  */
 
 import aiService from '../../services/aiService';
@@ -13,6 +29,10 @@ export const SYSTEM_COLORS = {
   Timeline: 'oklch(70% 0.13 280)',
   Atlas:    'oklch(72% 0.13 145)',
   Chapter:  'oklch(78% 0.13 78)',
+  Item:     'oklch(72% 0.13 60)',
+  Skill:    'oklch(72% 0.13 100)',
+  Wiki:     'oklch(70% 0.10 220)',
+  Faction:  'oklch(68% 0.14 340)',
 };
 
 export const SYSTEM_ICON = {
@@ -22,18 +42,18 @@ export const SYSTEM_ICON = {
   Timeline: 'clock',
   Atlas: 'map',
   Chapter: 'pen',
+  Item: 'briefcase',
+  Skill: 'zap',
+  Wiki: 'book',
+  Faction: 'shield',
 };
 
 function safeParseJSON(text) {
   if (!text) return null;
-  let s = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  const m = s.match(/[\{\[][\s\S]*[\}\]]/);
+  const s = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+  const m = s.match(/[{[][\s\S]*[}\]]/);
   if (!m) return null;
-  try {
-    return JSON.parse(m[0]);
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(m[0]); } catch { return null; }
 }
 
 function pickChaptersFor(worldState, bookId) {
@@ -43,122 +63,207 @@ function pickChaptersFor(worldState, bookId) {
 
 function summariseCast(actors) {
   if (!actors?.length) return '(no cast)';
-  return actors
-    .slice(0, 30)
+  return actors.slice(0, 30)
     .map((a) => `- ${a.name}${a.role ? ` (${a.role})` : ''}${a.desc ? `: ${a.desc.slice(0, 140)}` : ''}`)
     .join('\n');
 }
 
 function summariseChapters(chapters) {
   if (!chapters?.length) return '(no chapters)';
-  return chapters
-    .slice(0, 40)
+  return chapters.slice(0, 40)
     .map((c) => `- Ch.${c.id}${c.title ? ` "${c.title}"` : ''}${c.summary ? `: ${c.summary.slice(0, 180)}` : ''}`)
     .join('\n');
 }
 
 function summarisePlotThreads(threads) {
   if (!threads?.length) return '(no explicit threads)';
-  return threads.slice(0, 20).map((t) => `- ${t.name || t.title || t.id}`).join('\n');
+  return threads.slice(0, 20).map((t) => `- ${t.name || t.title || t.id}${t.status ? ` [${t.status}]` : ''}`).join('\n');
+}
+
+function summariseItems(items) {
+  if (!items?.length) return '(no items)';
+  return items.slice(0, 30)
+    .map((i) => `- ${i.name}${i.type ? ` (${i.type})` : ''}${i.desc ? `: ${i.desc.slice(0, 120)}` : ''}`)
+    .join('\n');
+}
+
+function summarisePlaces(places) {
+  if (!places?.length) return '(no places)';
+  return places.slice(0, 25)
+    .map((p) => `- ${p.name}${p.region ? ` (${p.region})` : ''}${p.desc ? `: ${p.desc.slice(0, 120)}` : ''}`)
+    .join('\n');
+}
+
+function summariseFactions(factions) {
+  if (!factions?.length) return '(no factions)';
+  return factions.slice(0, 15).map((f) => `- ${f.name}${f.desc ? `: ${f.desc.slice(0, 120)}` : ''}`).join('\n');
+}
+
+function modeInstructions(mode, { idea, entity, transcript }) {
+  switch (mode) {
+    case 'sweep':
+      return `MODE: CONTINUITY SWEEP.
+Find gaps, forgotten threads, dangling plants without payoffs, characters who
+haven't appeared in many chapters, inventory items that vanish, factions that
+change power without on-page cause. Propose coordinated fixes. No new idea —
+the idea is "tighten the canon".`;
+    case 'backfill':
+      return `MODE: BACKFILL.
+An entity was just added to the canon:
+${JSON.stringify(entity || {}, null, 2)}
+Propose 5-10 retroactive mentions across earlier chapters that would make this
+entity feel like it was always there. Each proposal should include concrete
+before/after prose for the target chapter.`;
+    case 'scene':
+      return `MODE: WEAVE SCENE.
+A transcript / raw draft arrived; fold it into the canon as a scene and propose
+supporting edits (new items, relationship updates, thread ticks).
+TRANSCRIPT:
+${String(transcript || '').slice(0, 6000)}`;
+    case 'single':
+    default:
+      return `MODE: NEW IDEA.\nIDEA:\n${String(idea)}`;
+  }
 }
 
 export async function proposeWeave(idea, worldState, bookId, options = {}) {
+  const mode = options.mode || 'single';
   const chapters = pickChaptersFor(worldState, bookId);
   const actors = worldState?.actors || [];
   const threads = worldState?.plotThreads || worldState?.plot?.threads || [];
+  const items = worldState?.itemBank || [];
+  const places = worldState?.places || [];
+  const factions = worldState?.factions || [];
   const currentChapter = options.currentChapter || chapters[chapters.length - 1]?.id || 1;
   const book = worldState?.books?.[bookId];
 
   const prompt = [
-    `You are the Canon Weaver, an editor that proposes coordinated changes`,
-    `across a novel's world, cast, plot, timeline, atlas, and chapters in response`,
-    `to a writer's idea. Output STRICT JSON.`,
-    ``,
-    `IDEA:`,
-    String(idea),
-    ``,
-    `BOOK: ${book?.title || 'Untitled'}`,
-    `Current chapter: ${currentChapter}`,
-    ``,
-    `CAST:`,
+    'You are the Canon Weaver, an editor that proposes coordinated changes',
+    "across a novel's world, cast, plot, timeline, atlas, items, wiki and",
+    "chapters in response to a writer's idea or a continuity review. Output",
+    'STRICT JSON only.',
+    '',
+    modeInstructions(mode, { idea, entity: options.entity, transcript: options.transcript }),
+    '',
+    `BOOK: ${book?.title || 'Untitled'}   Current chapter: ${currentChapter}`,
+    '',
+    'CAST:',
     summariseCast(actors),
-    ``,
-    `CHAPTERS:`,
+    '',
+    'CHAPTERS:',
     summariseChapters(chapters),
-    ``,
-    `PLOT THREADS:`,
+    '',
+    'PLOT THREADS:',
     summarisePlotThreads(threads),
-    ``,
-    `Return JSON:`,
-    `{`,
-    `  "confidence": 0.0-1.0,`,
-    `  "edits": [`,
-    `    {`,
-    `      "id": "stable-id-string",`,
-    `      "system": "World | Cast | Plot | Timeline | Atlas | Chapter",`,
-    `      "action": "short verb e.g. create | update | trait-hint | suggest-edit | pin-place | create-thread",`,
-    `      "target": "optional name of the target entity (actor name, chapter number, place name)",`,
-    `      "title": "one-line human title for the edit",`,
-    `      "reasoning": "2-4 sentences explaining WHY this edit is suggested and how it fits",`,
-    `      "payload": { /* system-specific structured object */ },`,
-    `      "references": ["ch.N", "ch.M"]`,
-    `    }`,
-    `  ]`,
-    `}`,
-    ``,
-    `Guidance:`,
-    `- Never change anything destructively; propose additions and soft trait hints.`,
-    `- Always include AT LEAST one Chapter edit (suggest-edit) with concrete before/after prose when a scene is implied.`,
-    `- Match the author's existing tone. No purple prose.`,
-    `- 5 to 12 edits total.`,
+    '',
+    'ITEMS:',
+    summariseItems(items),
+    '',
+    'PLACES:',
+    summarisePlaces(places),
+    '',
+    'FACTIONS:',
+    summariseFactions(factions),
+    '',
+    'Return JSON:',
+    '{',
+    '  "confidence": 0.0-1.0,',
+    '  "rationale": "1-3 sentence high-level summary of what this weave does",',
+    '  "edits": [',
+    '    {',
+    '      "id": "stable-id-string",',
+    '      "system": "World | Cast | Plot | Timeline | Atlas | Chapter | Item | Skill | Wiki | Faction",',
+    '      "action": "create | update | trait-hint | suggest-edit | pin-place | create-thread | add-to-inventory | tick-beat",',
+    '      "target": "optional name of target entity (actor name, chapter number, place name, item name)",',
+    '      "title": "one-line human title",',
+    '      "reasoning": "2-4 sentences explaining WHY and how this fits existing canon",',
+    '      "payload": { /* system-specific structured object (e.g. {name, type, desc} for Item) */ },',
+    '      "references": ["ch.N", "ch.M"]',
+    '    }',
+    '  ]',
+    '}',
+    '',
+    'Guidance:',
+    '- Never change anything destructively; propose additions and soft trait hints.',
+    '- Include at least one Chapter edit with concrete before/after prose if a scene is implied.',
+    '- Touch MULTIPLE systems — a real weave usually hits 3-5 of them (e.g. a cursed dagger = Item + Cast inventory add + Wiki entry + Plot thread tick + Chapter foreshadow).',
+    '- Match existing tone. No purple prose. Be surgical.',
+    '- 5 to 14 edits total.',
   ].join('\n');
 
   try {
     const response = await aiService.callAI(
       prompt,
       'structured',
-      'Return only valid JSON. Do not wrap in markdown.'
+      'Return only valid JSON. Do not wrap in markdown.',
     );
     const parsed = safeParseJSON(response);
-    if (!parsed || !Array.isArray(parsed.edits)) return fallbackProposal(idea);
+    if (!parsed || !Array.isArray(parsed.edits)) return fallbackProposal(idea, mode);
     parsed.edits.forEach((e, i) => {
       if (!e.id) e.id = `e_${Date.now()}_${i}`;
     });
-    return { confidence: parsed.confidence || 0.7, edits: parsed.edits };
-  } catch (_e) {
-    return fallbackProposal(idea);
+    return {
+      confidence: parsed.confidence || 0.7,
+      rationale: parsed.rationale || null,
+      edits: parsed.edits,
+      mode,
+    };
+  } catch (e) {
+    console.warn('[weaverAI] proposeWeave fallback:', e);
+    return fallbackProposal(idea, mode);
   }
 }
 
-function fallbackProposal(idea) {
+function fallbackProposal(idea, mode = 'single') {
   const id = (x) => `e_${Date.now()}_${x}`;
+  const label = mode === 'sweep'
+    ? 'Continuity sweep placeholder'
+    : mode === 'backfill' ? 'Backfill placeholder'
+    : mode === 'scene' ? 'Scene weave placeholder'
+    : 'Idea placeholder';
   return {
     confidence: 0.5,
+    rationale: `Offline fallback (${label}). Connect an AI provider in Settings for real proposals.`,
+    mode,
     edits: [
       {
         id: id(1),
         system: 'World',
         action: 'create',
-        title: 'Add a new world-entry for this idea',
-        reasoning: 'The proxy is offline or returned an unparseable response. This is a safe placeholder so you can see the review flow with real controls. Edit or reject as needed.',
-        payload: { note: idea },
+        title: 'Add a world-entry placeholder',
+        reasoning: 'AI provider unreachable or returned unparseable output. Placeholder keeps the review flow working so you can exercise accept/reject.',
+        payload: { note: String(idea || '(no text)').slice(0, 400) },
         references: [],
       },
       {
         id: id(2),
         system: 'Chapter',
         action: 'suggest-edit',
-        title: 'Suggest a 2-line foreshadow insertion in the next chapter',
-        reasoning: 'A placeholder until the model is reachable. Shows how Chapter edits render with before/after prose.',
-        payload: {
-          before: '(no preview available)',
-          after: '(no preview available)',
-          intrusion: 'low',
-        },
+        title: 'Suggest a 2-line foreshadow in the next chapter',
+        reasoning: 'Placeholder Chapter edit so the Review view shows the before/after pattern.',
+        payload: { before: '(no preview available)', after: '(no preview available)', intrusion: 'low' },
         references: [],
       },
     ],
   };
 }
 
-export default { proposeWeave, SYSTEM_COLORS, SYSTEM_ICON };
+/**
+ * Public, tiny command bus so non-rail triggers (Daily Spark "Use this",
+ * Interview handoff, mobile Capture, the ?capture=1 deep link) can ask the
+ * Write page's Weaver rail to start a weave. The rail subscribes via
+ * `subscribeWeaver` in a useEffect; triggers call `dispatchWeaver`.
+ */
+const weaverBus = (() => {
+  const listeners = new Set();
+  return {
+    dispatch(payload) { listeners.forEach((fn) => { try { fn(payload); } catch (_e) {} }); },
+    subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+})();
+
+export function dispatchWeaver(payload) { weaverBus.dispatch(payload); }
+export function subscribeWeaver(fn) { return weaverBus.subscribe(fn); }
+
+// eslint-disable-next-line import/no-anonymous-default-export
+export default { proposeWeave, SYSTEM_COLORS, SYSTEM_ICON, dispatchWeaver, subscribeWeaver };
