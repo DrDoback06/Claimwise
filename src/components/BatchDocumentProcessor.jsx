@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, FileText, Sparkles, CheckCircle, XCircle, AlertCircle, RefreshCw, Eye, Edit3, Save, Trash2, Filter, Download, ArrowRight, Briefcase, Zap, Users, BookOpen, ChevronRight, ChevronLeft } from 'lucide-react';
-import documentService from '../src/services/documentService';
-import aiService from '../src/services/aiService';
+import documentService from '../services/documentService';
+import aiService from '../services/aiService';
 import toastService from '../services/toastService';
 
 const BatchDocumentProcessor = ({ worldState, onClose, onDataImported }) => {

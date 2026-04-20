@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 /* Import RPG component styles */
-@import './styles/rpgComponents.css';
-@import './styles/rpgAnimations.css';
+@import './src/styles/rpgComponents.css';
+@import './src/styles/rpgAnimations.css';
 
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {

@@ -4,7 +4,7 @@
  * Supports: JSON file export, QR code, cloud storage
  */
 
-import db from '../src/services/database';
+import db from './database';
 
 class SyncService {
   async getSyncableStores() {

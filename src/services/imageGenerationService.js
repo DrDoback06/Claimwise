@@ -748,7 +748,7 @@ class ImageGenerationService {
       // #endregion
       
       // Store in IndexedDB
-      const dbModule = await import('../src/services/database');
+      const dbModule = await import('./database');
       const db = dbModule.default;
       await db.init();
       
@@ -804,7 +804,7 @@ class ImageGenerationService {
       const relativePath = `${category}s/${filename}`;
 
       // Store in IndexedDB
-      const dbModule = await import('../src/services/database');
+      const dbModule = await import('./database');
       const db = dbModule.default;
       await db.init();
       const imageData = {
@@ -836,7 +836,7 @@ class ImageGenerationService {
       fetch('http://127.0.0.1:7243/ingest/7f220f75-c016-4c9b-b964-8e91314a01c2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageGenerationService.js:getImageData',message:'Getting image data',data:{imagePath},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'O'})}).catch(()=>{});
       // #endregion
       
-      const dbModule = await import('../src/services/database');
+      const dbModule = await import('./database');
       const db = dbModule.default;
       await db.init();
       

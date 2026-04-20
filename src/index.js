@@ -2,10 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 // Ensure RPG styles are loaded
-import './src/styles/rpgComponents.css';
-import './src/styles/rpgAnimations.css';
+import './styles/rpgComponents.css';
+import './styles/rpgAnimations.css';
 import App from './App';
-import ErrorBoundary from './src/components/ErrorBoundary';
+import ErrorBoundary from './components/ErrorBoundary';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
