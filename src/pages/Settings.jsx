@@ -195,7 +195,11 @@ export default function SettingsPage({ worldState, setWorldState, onRerunOnboard
                       overflow: 'hidden',
                     }}
                   >
-                    <MobileLoomwright scoped />
+                    <MobileLoomwright
+                      scoped
+                      worldState={worldState}
+                      setWorldState={setWorldState}
+                    />
                   </div>
                 </DevFlag>
                 <DevFlag label="Show Design & Docs" flag="lw-dev-docs">

@@ -53,7 +53,7 @@ function buildBacklinkIndex(worldState) {
   const entries = [];
   Object.values(books).forEach((book) => {
     (book.chapters || []).forEach((c) => {
-      const text = `${c.title || ''}\n${c.summary || ''}\n${c.script || ''}`;
+      const text = `${c.title || ''}\n${c.summary || ''}\n${c.script || ''}\n${c.content || ''}`;
       if (text.trim()) {
         entries.push({ kind: 'chapter', bookId: book.id, chapterId: c.id, label: `${book.title || 'Book'} \u00b7 Ch.${c.id}`, text });
       }
@@ -80,11 +80,11 @@ function findBacklinks(index, needle) {
 
 function EntityBrowser({ worldState, onNavigate }) {
   const t = useTheme();
-  const [activeType, setActiveType] = useState('items');
+  const [activeType, setActiveType] = useState('characters');
   const [query, setQuery] = useState('');
   const [selectedName, setSelectedName] = useState('');
 
-  const current = WIKI_TYPES.find((x) => x.id === activeType) || WIKI_TYPES[1];
+  const current = WIKI_TYPES.find((x) => x.id === activeType) || WIKI_TYPES[0];
   const entities = current.source(worldState) || [];
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

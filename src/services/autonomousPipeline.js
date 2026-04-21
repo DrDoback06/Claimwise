@@ -1,7 +1,10 @@
 /**
  * Autonomous Processing Pipeline
  * The brain of the self-updating story management system
- * 
+ *
+ * Entry points (UI): WritersRoomEnhanced.jsx — live typing, entity extract,
+ * processText, acceptEntity, lock/unlock. Not duplicated in Loomwright shell routes.
+ *
  * Handles:
  * - Live spell/grammar suggestions
  * - Text processing against previous chapters

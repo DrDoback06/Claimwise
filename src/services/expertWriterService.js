@@ -6,6 +6,7 @@
 
 import { getExpertWriterContent } from '../data/expertWriterBase';
 import aiService from './aiService';
+import { LW_AI_TASK } from './aiTaskIds';
 import contextEngine from './contextEngine';
 
 class ExpertWriterService {
@@ -53,7 +54,7 @@ Format as:
 === GENRE-SPECIFIC WRITING GUIDANCE ===
 [Your guidance here]`;
 
-      const enhancement = await aiService.callAI(prompt, 'creative');
+      const enhancement = await aiService.callAI(prompt, LW_AI_TASK.DRAFT);
       
       // Cache the result
       this.cache.genreEnhancements[genreKey] = enhancement;

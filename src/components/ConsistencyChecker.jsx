@@ -4,10 +4,74 @@ import db from '../services/database';
 import aiService from '../services/aiService';
 import toastService from '../services/toastService';
 
+function findFirstActorMentionRange(books, actorName) {
+  const list = Array.isArray(books) ? books : Object.values(books || {});
+  const lower = (actorName || '').toLowerCase();
+  if (!lower) return null;
+  for (const book of list) {
+    if (!book?.chapters) continue;
+    for (const ch of book.chapters) {
+      const body = String(ch.script || ch.content || ch.desc || '');
+      const idx = body.toLowerCase().indexOf(lower);
+      if (idx >= 0) {
+        return {
+          bookId: book.id,
+          chapterId: ch.id,
+          range: [idx, idx + actorName.length],
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function findFirstChapterWithTitle(books, title) {
+  const list = Array.isArray(books) ? books : Object.values(books || {});
+  const t = (title || '').trim();
+  if (!t) return null;
+  for (const book of list) {
+    for (const ch of book.chapters || []) {
+      if ((ch.title || '').trim() === t) {
+        return { bookId: book.id, chapterId: ch.id };
+      }
+    }
+  }
+  return null;
+}
+
+function findFirstItemMentionRange(books, itemName) {
+  const list = Array.isArray(books) ? books : Object.values(books || {});
+  const lower = (itemName || '').toLowerCase();
+  if (!lower) return null;
+  for (const book of list) {
+    if (!book?.chapters) continue;
+    for (const ch of book.chapters) {
+      const body = String(ch.script || ch.content || ch.desc || '');
+      const idx = body.toLowerCase().indexOf(lower);
+      if (idx >= 0) {
+        return {
+          bookId: book.id,
+          chapterId: ch.id,
+          range: [idx, idx + itemName.length],
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function firstBookFirstChapter(books) {
+  const list = Array.isArray(books) ? books : Object.values(books || {});
+  const fb = list[0];
+  const fc = fb?.chapters?.[0];
+  if (fb && fc) return { bookId: fb.id, chapterId: fc.id };
+  return null;
+}
+
 /**
  * Consistency Checker - AI-powered system to detect inconsistencies across the story
  */
-const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => {
+const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose, onJumpToChapter }) => {
   const [issues, setIssues] = useState([]);
   const [isChecking, setIsChecking] = useState(false);
   const [filterType, setFilterType] = useState('all'); // 'all' | 'character' | 'timeline' | 'world' | 'plot'
@@ -51,24 +115,27 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
           // Check for stat inconsistencies across chapters
           const chapters = books?.flatMap(book => book.chapters || []) || [];
           const actorMentions = chapters.filter(chapter => {
-            const text = (chapter.script || chapter.desc || '').toLowerCase();
+            const text = (chapter.script || chapter.content || chapter.desc || '').toLowerCase();
             return text.includes(actor.name.toLowerCase());
           });
 
           if (actorMentions.length > 0) {
-            // Check for sudden stat changes without explanation
-            const statChanges = [];
-            // This would require comparing snapshots, simplified for now
+            const hit = findFirstActorMentionRange(books, actor.name);
             allIssues.push({
               id: `char_${actor.id}_stats`,
               type: 'character',
               severity: 'warning',
               title: `Character: ${actor.name}`,
               description: `Appears in ${actorMentions.length} chapters. Verify stat consistency.`,
-              location: `Character: ${actor.name}`,
+              location: hit
+                ? `Book ${hit.bookId}, chapter ${hit.chapterId}`
+                : `Character: ${actor.name}`,
               suggestion: 'Review character snapshots across chapters for stat consistency.',
               entityId: actor.id,
-              entityType: 'actor'
+              entityType: 'actor',
+              bookId: hit?.bookId,
+              chapterId: hit?.chapterId,
+              range: hit?.range,
             });
           }
         }
@@ -88,16 +155,19 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
         
         Object.entries(titleCounts).forEach(([title, count]) => {
           if (count > 1) {
+            const loc = findFirstChapterWithTitle(books, title);
             allIssues.push({
               id: `timeline_duplicate_${title}`,
               type: 'timeline',
               severity: 'warning',
               title: 'Duplicate Chapter Title',
               description: `Chapter title "${title}" appears ${count} times.`,
-              location: 'Series Bible',
+              location: loc ? `Book ${loc.bookId}, chapter ${loc.chapterId}` : 'Series Bible',
               suggestion: 'Consider renaming duplicate chapters for clarity.',
               entityId: null,
-              entityType: 'chapter'
+              entityType: 'chapter',
+              bookId: loc?.bookId,
+              chapterId: loc?.chapterId,
             });
           }
         });
@@ -108,16 +178,22 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
         // Check for items with missing descriptions
         itemBank.forEach(item => {
           if (!item.desc || item.desc.trim().length < 10) {
+            const hit = findFirstItemMentionRange(books, item.name);
             allIssues.push({
               id: `world_item_${item.id}`,
               type: 'world',
               severity: 'info',
               title: `Item: ${item.name}`,
               description: 'Item has minimal or missing description.',
-              location: 'Item Vault',
+              location: hit
+                ? `Book ${hit.bookId}, chapter ${hit.chapterId}`
+                : 'Item Vault',
               suggestion: 'Add detailed description for better world-building consistency.',
               entityId: item.id,
-              entityType: 'item'
+              entityType: 'item',
+              bookId: hit?.bookId,
+              chapterId: hit?.chapterId,
+              range: hit?.range,
             });
           }
         });
@@ -143,6 +219,7 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
         if (aiCheck && typeof aiCheck === 'string') {
           // Try to extract structured issues from AI response
           const lines = aiCheck.split('\n');
+          const fallbackLoc = firstBookFirstChapter(books);
           lines.forEach((line, index) => {
             if (line.toLowerCase().includes('inconsistency') || 
                 line.toLowerCase().includes('contradiction') ||
@@ -153,10 +230,14 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
                 severity: 'warning',
                 title: 'AI Detected Issue',
                 description: line,
-                location: 'Story-wide',
+                location: fallbackLoc
+                  ? `Book ${fallbackLoc.bookId}, chapter ${fallbackLoc.chapterId} (open to review)`
+                  : 'Story-wide',
                 suggestion: 'Review the identified inconsistency.',
                 entityId: null,
-                entityType: 'general'
+                entityType: 'general',
+                bookId: fallbackLoc?.bookId,
+                chapterId: fallbackLoc?.chapterId,
               });
             }
           });
@@ -394,6 +475,19 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
                 <div className="text-xs text-slate-400 mb-1">Suggestion</div>
                 <div className="text-slate-300 text-sm bg-slate-900 p-3 rounded">{selectedIssue.suggestion}</div>
               </div>
+              {onJumpToChapter && selectedIssue.bookId != null && selectedIssue.chapterId != null && (
+                <button
+                  type="button"
+                  onClick={() => onJumpToChapter(
+                    selectedIssue.bookId,
+                    selectedIssue.chapterId,
+                    selectedIssue.range,
+                  )}
+                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded flex items-center justify-center gap-2 mb-2"
+                >
+                  OPEN IN EDITOR
+                </button>
+              )}
               <button
                 onClick={() => markResolved(selectedIssue.id)}
                 className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded flex items-center justify-center gap-2"

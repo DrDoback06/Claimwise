@@ -64,7 +64,7 @@ export async function askActor(actor, question, worldState, transcript = []) {
     `Respond as ${actor.name || 'the character'}:`,
   ].join('\n');
   try {
-    const r = await aiService.callAI(prompt, 'creative', system);
+    const r = await aiService.callAI(prompt, 'interview', system);
     return String(r || '').trim();
   } catch {
     return '(Silence. The proxy is offline.)';
@@ -88,7 +88,7 @@ export async function askGroup(actors, question, worldState, transcript = [], di
     `Interviewer: ${question}`,
   ].join('\n');
   try {
-    const r = await aiService.callAI(prompt, 'creative', system);
+    const r = await aiService.callAI(prompt, 'interview', system);
     return String(r || '').trim();
   } catch {
     return '(Silence.)';

@@ -6,7 +6,7 @@ import PlotThreadTracker from './PlotThreadTracker';
 /**
  * StoryAnalysisHub - Combined view for Consistency Checker and Plot Threads
  */
-const StoryAnalysisHub = ({ actors, books, itemBank, skillBank, onClose }) => {
+const StoryAnalysisHub = ({ actors, books, itemBank, skillBank, onClose, onJumpToChapter }) => {
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'consistency' | 'plotthreads'
 
   const tabs = [
@@ -131,6 +131,7 @@ const StoryAnalysisHub = ({ actors, books, itemBank, skillBank, onClose }) => {
             itemBank={itemBank}
             skillBank={skillBank}
             onClose={onClose}
+            onJumpToChapter={onJumpToChapter}
           />
         )}
 

@@ -104,7 +104,7 @@ export async function suggestStarterInventory(actor, worldState, options = {}) {
   try {
     const response = await aiService.callAI(
       prompt,
-      'structured',
+      'inventory',
       'Return only valid JSON. Do not wrap in markdown.'
     );
     parsed = safeParseJSON(response);
@@ -254,7 +254,7 @@ export async function suggestItemProperties(item, worldState) {
   try {
     const response = await aiService.callAI(
       prompt,
-      'structured',
+      'inventory',
       'Return only valid JSON. Do not wrap in markdown.'
     );
     const parsed = safeParseJSON(response);
@@ -304,7 +304,7 @@ export async function suggestTransferOrStateChange(item, chapterText, currentCha
   try {
     const response = await aiService.callAI(
       prompt,
-      'analytical',
+      'inventory',
       'Return only valid JSON. Do not wrap in markdown.'
     );
     const parsed = safeParseJSON(response);

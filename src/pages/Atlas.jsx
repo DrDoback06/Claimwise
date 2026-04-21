@@ -114,7 +114,12 @@ export default function AtlasPage({ worldState, setWorldState, onNavigate }) {
         )}
         {tab === 'ai' && (
           <div style={{ height: '100%', minHeight: 540 }}>
-            <AtlasAI scoped worldState={worldState} setWorldState={setWorldState} />
+            <AtlasAI
+              scoped
+              worldState={worldState}
+              setWorldState={setWorldState}
+              onNavigate={onNavigate}
+            />
           </div>
         )}
         {tab === 'places' && <PlacesList worldState={worldState} />}

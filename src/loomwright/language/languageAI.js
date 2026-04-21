@@ -53,7 +53,7 @@ export async function lintManuscript(text) {
     `Limit to the 20 most important issues.`,
   ].join('\n');
   try {
-    const response = await aiService.callAI(prompt, 'analytical', 'Return only valid JSON.');
+    const response = await aiService.callAI(prompt, 'lint', 'Return only valid JSON.');
     const parsed = safeParseJSON(response);
     if (!parsed || !Array.isArray(parsed.issues)) return [];
     return parsed.issues
@@ -96,7 +96,7 @@ export async function thesaurus(word) {
     `{ "alternatives": [{ "word":"x", "register":"plain|elevated|archaic|modern|dark", "nuance":"short phrase" }] }`,
   ].join('\n');
   try {
-    const r = await aiService.callAI(prompt, 'analytical', 'Return only valid JSON.');
+    const r = await aiService.callAI(prompt, 'lint', 'Return only valid JSON.');
     const parsed = safeParseJSON(r);
     return parsed?.alternatives || [];
   } catch {

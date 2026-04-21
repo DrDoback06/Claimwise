@@ -14,9 +14,14 @@
  *
  * The Brain replaces raw `aiService.callAI(prompt, 'creative')` calls with
  * context-rich, craft-aware, story-intelligent calls.
+ *
+ * Context contract for in-book prose: use `buildStyleSystemForProse()` (or
+ * `generateProse()`) so every surface gets getContext + getCraftDirective +
+ * optional Voice Studio snippet — matching WritingCanvas / Writers Room.
  */
 
 import aiService from './aiService';
+import { LW_AI_TASK } from './aiTaskIds';
 import smartContextEngine from './smartContextEngine';
 import contextEngine from './contextEngine';
 import db from './database';
@@ -24,6 +29,7 @@ import writingCraftGuide from '../data/writingCraftGuide';
 import { getGenreGuide } from '../data/genreGuides';
 import chapterMemoryService from './chapterMemoryService';
 import narrativeArcService from './narrativeArcService';
+import { voiceSystemSnippet } from '../loomwright/voice/voiceContext';
 
 // ─── Token Budget ────────────────────────────────────────────
 // We cap context to leave room for the AI's response.
@@ -331,6 +337,38 @@ class StoryBrain {
     return directive;
   }
 
+  /**
+   * Same style stack as Continue Writing: compressed story context, craft
+   * directive, and optional Voice Studio profile for (worldState, book, chapter).
+   * Canon Weaver and other JSON/prose hybrids should use this for chapter prose.
+   */
+  async buildStyleSystemForProse(opts = {}) {
+    const {
+      text = '',
+      chapterNumber = null,
+      bookId = null,
+      chapterId = null,
+      action = 'continue',
+      moodPreset = null,
+      worldState = null,
+      includeVoice = true,
+    } = opts;
+
+    const { systemContext } = await this.getContext({
+      text,
+      chapterNumber,
+      bookId,
+      chapterId,
+      action,
+    });
+    const craft = this.getCraftDirective(action, moodPreset);
+    let voiceSnippet = '';
+    if (includeVoice && worldState != null && bookId != null && chapterId != null) {
+      voiceSnippet = voiceSystemSnippet(worldState, bookId, chapterId) || '';
+    }
+    return { systemContext, craft, voiceSnippet };
+  }
+
   // ─── Writing Actions ───────────────────────────────────────
   // Each method assembles the optimal prompt for a specific writing task.
   // The pattern: system = (story context + craft directive), user = (focused instruction + text)
@@ -361,7 +399,7 @@ Characters in this story: ${characterNames || 'Use characters from context above
 ${contextText}
 """`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -402,7 +440,7 @@ ${contextText}
 
 Write the scene. No explanation, no meta-commentary. Just vivid, engaging prose:`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -446,7 +484,7 @@ ${contextText}
 
 Write the dialogue. No explanation:`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -470,7 +508,7 @@ ${systemContext}`;
 
 "${selectedText}"`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -494,7 +532,7 @@ ${systemContext}`;
 
 "${selectedText}"`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -518,7 +556,7 @@ ${systemContext}`;
 
 "${selectedText}"`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -551,7 +589,7 @@ Text:
 ${textToAnalyze}
 """`;
 
-    return aiService.callAI(prompt, 'analytical', system);
+    return aiService.callAI(prompt, LW_AI_TASK.LINT, system);
   }
 
   /**
@@ -575,7 +613,7 @@ ${systemContext}`;
 
 "${selectedText}"`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -607,7 +645,7 @@ ${text.slice(-800)}
 
 Write the introduction. No explanation:`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -646,7 +684,7 @@ ${afterText.slice(0, 500)}
 
 Rewrite ONLY the middle section to flow naturally. Return just the rewritten text:`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -670,7 +708,7 @@ ${systemContext}`;
 
 "${selectedText}"`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   /**
@@ -694,7 +732,7 @@ ${systemContext}`;
 
 "${selectedText}"`;
 
-    return aiService.callAI(prompt, 'creative', system);
+    return aiService.callAI(prompt, LW_AI_TASK.DRAFT, system);
   }
 
   // ─── Forward Thinking / Story Planning ─────────────────────
@@ -765,7 +803,7 @@ Return a JSON object:
   "thematicNotes": "What themes are emerging and how to develop them"
 }`;
 
-    const response = await aiService.callAI(prompt, 'analytical', system);
+    const response = await aiService.callAI(prompt, LW_AI_TASK.SPARK, system);
 
     // Parse the JSON response
     try {
@@ -812,7 +850,7 @@ Return a JSON array of 3 suggestions:
   }
 ]`;
 
-    const response = await aiService.callAI(prompt, 'analytical', system);
+    const response = await aiService.callAI(prompt, LW_AI_TASK.SPARK, system);
 
     try {
       const jsonMatch = response.match(/\[[\s\S]*\]/);
@@ -854,7 +892,7 @@ Return a JSON array of 3 suggestions:
    * @param {number} [opts.chapterNumber]
    * @param {string} [opts.textUpToCursor]      - Text for context assembly when different from the whole chapter.
    * @param {string} [opts.moodPreset]
-   * @param {'creative'|'structured'|'analytical'} [opts.task='creative']
+   * @param {string} [opts.task] - Loomwright AI task id (default LW_AI_TASK.DRAFT).
    * @param {AbortController} [opts.abortController]
    * @returns {Promise<string>} The generated text.
    */
@@ -869,7 +907,7 @@ Return a JSON array of 3 suggestions:
       chapterNumber = null,
       textUpToCursor = '',
       moodPreset = null,
-      task = 'creative',
+      task = LW_AI_TASK.DRAFT,
       abortController = null,
     } = opts;
 

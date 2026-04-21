@@ -2,8 +2,8 @@
 
 // Service Worker for Loomwright PWA
 // Bump these when you want every installed client to purge its cache on next load.
-const CACHE_NAME = 'loomwright-shell-20260420225902';
-const RUNTIME_CACHE = 'loomwright-runtime-20260420225902';
+const CACHE_NAME = 'loomwright-shell-20260421080612';
+const RUNTIME_CACHE = 'loomwright-runtime-20260421080612';
 const DEPRECATED_CACHE_PREFIXES = ['claimwise-omniscience-', 'claimwise-runtime-'];
 
 // Only precache the shell - hashed assets are handled at runtime

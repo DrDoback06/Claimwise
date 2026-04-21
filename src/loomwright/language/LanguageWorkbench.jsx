@@ -405,19 +405,29 @@ function MetricsMode({ text }) {
   );
 }
 
-function WorkbenchBody({ worldState }) {
+function WorkbenchBody({ worldState, snippetSeed = '' }) {
   const t = useTheme();
   const bookIds = Object.keys(worldState?.books || {}).map(Number).sort((a, b) => a - b);
   const [bookId, setBookId] = useState(bookIds[bookIds.length - 1] || 1);
   const book = worldState?.books?.[bookId];
   const [chapterId, setChapterId] = useState(book?.chapters?.[0]?.id || 1);
   const chapter = book?.chapters?.find((c) => c.id === chapterId);
-  const chapterText = chapter?.text || chapter?.summary || '';
+  const chapterText = chapter?.content || chapter?.script || chapter?.text || chapter?.summary || '';
   const [mode, setMode] = useState('check');
   const [issues, setIssues] = useState([]);
   const [working, setWorking] = useState(false);
   const [enabledTypes, setEnabledTypes] = useState(() => new Set(ISSUE_TYPES.map((i) => i.id)));
   const [selected, setSelected] = useState(null);
+  /** Selection from Writer's Room textarea — prefer Rewrite tab for this text until cleared. */
+  const [snippetOverride, setSnippetOverride] = useState('');
+
+  useEffect(() => {
+    const s = String(snippetSeed || '').trim();
+    if (s.length >= 4) {
+      setSnippetOverride(s);
+      setMode('rewrite');
+    }
+  }, [snippetSeed]);
 
   const scan = async () => {
     if (!chapterText) return;
@@ -575,7 +585,43 @@ function WorkbenchBody({ worldState }) {
             />
           )}
           {mode === 'thesaurus' && <ThesaurusMode />}
-          {mode === 'rewrite'   && <RewriteMode text={chapterText} />}
+          {mode === 'rewrite' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {snippetOverride ? (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    background: t.paper2,
+                    border: `1px solid ${t.rule}`,
+                    borderRadius: t.radius,
+                    fontSize: 11,
+                    color: t.ink2,
+                  }}
+                >
+                  Using text selected in the Writer&rsquo;s Room.
+                  <button
+                    type="button"
+                    onClick={() => setSnippetOverride('')}
+                    style={{
+                      marginLeft: 10,
+                      padding: '2px 8px',
+                      fontFamily: t.mono,
+                      fontSize: 9,
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                      background: 'transparent',
+                      border: `1px solid ${t.rule}`,
+                      borderRadius: t.radius,
+                      color: t.accent,
+                    }}
+                  >
+                    Use full chapter instead
+                  </button>
+                </div>
+              ) : null}
+              <RewriteMode text={snippetOverride || chapterText} />
+            </div>
+          )}
           {mode === 'metrics'   && <MetricsMode text={chapterText} />}
         </div>
       </main>
@@ -585,10 +631,10 @@ function WorkbenchBody({ worldState }) {
 
 export { WorkbenchBody };
 
-export default function LanguageWorkbench({ scoped = false, ...props }) {
+export default function LanguageWorkbench({ scoped = false, snippetSeed, ...props }) {
   return (
     <LoomwrightShell scrollable={false} scoped={scoped}>
-      <WorkbenchBody {...props} />
+      <WorkbenchBody {...props} snippetSeed={snippetSeed} />
     </LoomwrightShell>
   );
 }

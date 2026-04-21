@@ -74,8 +74,13 @@ function ProvidersBody({ worldState, setWorldState, scoped = false }) {
   const [tab, setTab] = useState('routing');
   // Real usage from aiService's localStorage store. Refreshes every few seconds.
   const [realUsage, setRealUsage] = useState(() => readRealUsage());
+  const [callDebug, setCallDebug] = useState(() => aiService.getLastCallDebug?.() || null);
   useEffect(() => {
     const h = setInterval(() => setRealUsage(readRealUsage()), 3000);
+    return () => clearInterval(h);
+  }, []);
+  useEffect(() => {
+    const h = setInterval(() => setCallDebug(aiService.getLastCallDebug?.() || null), 2000);
     return () => clearInterval(h);
   }, []);
   const usage = realUsage;
@@ -193,6 +198,7 @@ function ProvidersBody({ worldState, setWorldState, scoped = false }) {
           { id: 'routing',   label: 'Task routing' },
           { id: 'providers', label: 'Providers'     },
           { id: 'usage',     label: 'Usage'         },
+          { id: 'router',    label: 'Last route'    },
         ].map((m) => (
           <button
             key={m.id}
@@ -470,6 +476,50 @@ function ProvidersBody({ worldState, setWorldState, scoped = false }) {
                     <div style={{ padding: '6px 10px', fontFamily: t.mono, fontSize: 11 }}>{formatUSD(u.costUSD)}</div>
                   </React.Fragment>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+        {tab === 'router' && (
+          <div>
+            <div style={{ fontFamily: t.mono, fontSize: 10, color: t.accent, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+              Intelligence router
+            </div>
+            <div style={{ fontFamily: t.display, fontSize: 22, fontWeight: 500, color: t.ink, marginBottom: 14 }}>
+              Last completed request
+            </div>
+            {!callDebug ? (
+              <div style={{ color: t.ink3, fontSize: 13 }}>No AI calls completed in this session yet.</div>
+            ) : (
+              <div
+                style={{
+                  padding: 16,
+                  background: t.paper,
+                  border: `1px solid ${t.rule}`,
+                  borderRadius: t.radius,
+                  fontFamily: t.mono,
+                  fontSize: 12,
+                  color: t.ink2,
+                  lineHeight: 1.6,
+                }}
+              >
+                {callDebug.cached && <div style={{ color: t.accent, marginBottom: 8 }}>Response served from cache (no routing).</div>}
+                <div><span style={{ color: t.ink3 }}>task</span> {callDebug.task}</div>
+                <div>
+                  <span style={{ color: t.ink3 }}>Loomwright task routing</span>{' '}
+                  {callDebug.lwTaskRoutingActive ? 'active (provider forced for this task)' : 'off / auto chain'}
+                </div>
+                {!callDebug.cached && (
+                  <>
+                    <div><span style={{ color: t.ink3 }}>complexity</span> {callDebug.complexityTier} ({typeof callDebug.complexityScore === 'number' ? callDebug.complexityScore.toFixed(2) : '—'})</div>
+                    <div><span style={{ color: t.ink3 }}>primary model</span> {callDebug.primaryModelId || '—'}</div>
+                    <div><span style={{ color: t.ink3 }}>provider</span> {callDebug.primaryProvider || '—'}</div>
+                    <div><span style={{ color: t.ink3 }}>fallbacks in chain</span> {callDebug.fallbackCount ?? 0}</div>
+                  </>
+                )}
+                <div style={{ marginTop: 8, fontSize: 10, color: t.ink3 }}>
+                  {callDebug.at ? new Date(callDebug.at).toLocaleString() : ''}
+                </div>
               </div>
             )}
           </div>

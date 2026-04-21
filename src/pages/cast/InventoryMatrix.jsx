@@ -57,16 +57,27 @@ function Cell({ record, colors, t, onClick }) {
   }
   const state = record.stateId || 'carried';
   const color = colors[state] || t.ink2;
+  const unr = !!record.unresolved;
+  const tip = [
+    `ch.${record.chapter} · ${state}`,
+    record.note || '',
+    record.quote ? `Quote: ${record.quote}` : '',
+    unr ? 'Unresolved / open thread' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <div
       onClick={onClick}
-      title={`ch.${record.chapter} · ${state}${record.note ? ` · ${record.note}` : ''}`}
+      title={tip}
       style={{
-        width: 16, height: 16,
+        width: 16,
+        height: 16,
         background: color,
-        border: `1px solid ${t.rule}`,
+        border: unr ? `2px solid ${t.warn}` : `1px solid ${t.rule}`,
         cursor: onClick ? 'pointer' : 'default',
         opacity: state === 'lost' || state === 'broken' ? 0.5 : 1,
+        boxSizing: 'border-box',
       }}
     />
   );
@@ -434,7 +445,17 @@ export default function InventoryMatrix({ worldState, setWorldState, filterOwner
                   <div style={{ color: t.ink }}>
                     {ev.actor ? ev.actor.name : 'Unknown owner'}
                     {ev.slotId && <span style={{ color: t.ink3 }}> &middot; {ev.slotId}</span>}
+                    {ev.unresolved && (
+                      <span style={{ marginLeft: 6, color: t.warn, fontFamily: t.mono, fontSize: 9 }}>
+                        Open thread
+                      </span>
+                    )}
                   </div>
+                  {ev.quote && (
+                    <div style={{ fontSize: 11, color: t.ink2, marginTop: 4, fontStyle: 'italic', lineHeight: 1.45 }}>
+                      &ldquo;{ev.quote}&rdquo;
+                    </div>
+                  )}
                   {ev.note && (
                     <div style={{ fontSize: 11, color: t.ink2, marginTop: 3, fontStyle: 'italic' }}>
                       {ev.note}

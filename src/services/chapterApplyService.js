@@ -227,11 +227,19 @@ export async function applyExtractionToActors({
       // show the pickup without another backfill pass.
       if (chapterId != null) {
         const ipatch = stageItem(item);
+        const rowState = (row.state || row.stateId || '').toLowerCase();
+        const unresolved = !!(
+          row.unresolved
+          || row.openThread
+          || /^(lost|broken|missing|stolen|vanished)\b/.test(rowState)
+        );
         ipatch.track[chapterId] = {
           ...(ipatch.track[chapterId] || {}),
           actorId: actor.id,
-          stateId: ipatch.track[chapterId]?.stateId || 'carried',
-          note: `Picked up by ${actor.name} (auto)`,
+          stateId: row.stateId || row.state || ipatch.track[chapterId]?.stateId || 'carried',
+          note: row.note || `Picked up by ${actor.name} (auto)`,
+          quote: row.quote || row.evidence || row.snippet || '',
+          unresolved,
           at: Date.now(),
         };
       }

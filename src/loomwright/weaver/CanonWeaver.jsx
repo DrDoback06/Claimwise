@@ -18,6 +18,8 @@ import undoRedoManager from '../../services/undoRedo';
 import ReviewBoard from './ReviewBoard';
 
 const HISTORY_KEY = 'lw-weaver-history';
+/** Ask for confirmation before applying when this many or more edits are accepted. */
+const WEAVER_APPLY_CONFIRM_THRESHOLD = 8;
 
 function loadHistory() {
   try {
@@ -951,6 +953,7 @@ function WeaverBody({
   const [selected, setSelected] = useState(null);
   const [history, setHistory] = useState(loadHistory());
   const [summary, setSummary] = useState({ accepted: 0, total: 0, systems: [] });
+  const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
   const currentChapter = useMemo(() => {
     const chs = book?.chapters || [];
     if (!chs.length) return 1;
@@ -1008,7 +1011,7 @@ function WeaverBody({
     setTimeout(() => setStage('review'), 600);
   };
 
-  const applyEdits = () => {
+  const runApplyEdits = () => {
     const accepted = edits.filter((e) => (decisions[e.id] || 'accept') === 'accept');
     const systems = Array.from(new Set(accepted.map((e) => e.system)));
 
@@ -1071,6 +1074,20 @@ function WeaverBody({
     saveHistory(next);
     setSummary({ accepted: accepted.length, total: edits.length, systems });
     setStage('applied');
+    setApplyConfirmOpen(false);
+  };
+
+  const requestApply = () => {
+    const accepted = edits.filter((e) => (decisions[e.id] || 'accept') === 'accept');
+    let always = false;
+    try {
+      always = localStorage.getItem('lw-weaver-always-confirm-apply') === '1';
+    } catch (_e) { /* noop */ }
+    if (always || accepted.length >= WEAVER_APPLY_CONFIRM_THRESHOLD) {
+      setApplyConfirmOpen(true);
+    } else {
+      runApplyEdits();
+    }
   };
 
   const loadExample = () => {
@@ -1080,8 +1097,125 @@ function WeaverBody({
     setStage('capture');
   };
 
+  const pendingAccepted = useMemo(
+    () => edits.filter((e) => (decisions[e.id] || 'accept') === 'accept'),
+    [edits, decisions],
+  );
+  const pendingSystems = useMemo(
+    () => Array.from(new Set(pendingAccepted.map((e) => e.system))),
+    [pendingAccepted],
+  );
+
   return (
     <>
+      {applyConfirmOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 520,
+              maxHeight: '85vh',
+              overflow: 'auto',
+              background: t.paper,
+              border: `1px solid ${t.rule}`,
+              borderRadius: t.radius,
+              padding: 22,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
+            }}
+          >
+            <div style={{ fontFamily: t.display, fontSize: 18, fontWeight: 600, color: t.ink, marginBottom: 8 }}>
+              Apply {pendingAccepted.length} edit{pendingAccepted.length === 1 ? '' : 's'}?
+            </div>
+            <div style={{ fontSize: 13, color: t.ink2, marginBottom: 14, lineHeight: 1.5 }}>
+              You are about to merge <strong>{pendingAccepted.length}</strong> accepted proposal
+              {pendingAccepted.length === 1 ? '' : 's'} into your world
+              {pendingSystems.length ? ` (${pendingSystems.join(', ')})` : ''}. This updates cast, plot, items, chapters, and other systems. You can undo with the app undo where supported.
+            </div>
+            <div
+              style={{
+                fontFamily: t.mono,
+                fontSize: 11,
+                color: t.ink3,
+                maxHeight: 220,
+                overflow: 'auto',
+                border: `1px solid ${t.rule}`,
+                borderRadius: t.radius,
+                padding: 10,
+                marginBottom: 14,
+              }}
+            >
+              {pendingAccepted.slice(0, 40).map((e) => (
+                <div key={e.id} style={{ marginBottom: 6 }}>
+                  <span style={{ color: t.accent }}>{e.system}</span>
+                  {' · '}
+                  {e.title || e.target || e.id}
+                </div>
+              ))}
+              {pendingAccepted.length > 40 && (
+                <div style={{ color: t.ink3 }}>… and {pendingAccepted.length - 40} more</div>
+              )}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: t.ink2, marginBottom: 16, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                defaultChecked={typeof localStorage !== 'undefined' && localStorage.getItem('lw-weaver-always-confirm-apply') === '1'}
+                onChange={(e) => {
+                  try {
+                    localStorage.setItem('lw-weaver-always-confirm-apply', e.target.checked ? '1' : '0');
+                  } catch (_err) { /* noop */ }
+                }}
+              />
+              Always confirm before applying weaves
+            </label>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setApplyConfirmOpen(false)}
+                style={{
+                  padding: '8px 14px',
+                  background: t.paper2,
+                  color: t.ink,
+                  border: `1px solid ${t.rule}`,
+                  borderRadius: t.radius,
+                  cursor: 'pointer',
+                  fontFamily: t.mono,
+                  fontSize: 11,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={runApplyEdits}
+                style={{
+                  padding: '8px 14px',
+                  background: t.accent,
+                  color: t.paper,
+                  border: 'none',
+                  borderRadius: t.radius,
+                  cursor: 'pointer',
+                  fontFamily: t.mono,
+                  fontSize: 11,
+                  fontWeight: 600,
+                }}
+              >
+                Apply now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <Stepper stage={stage} />
       {stage === 'hub' && (
         <Hub
@@ -1157,7 +1291,7 @@ function WeaverBody({
                 setDecisions={setDecisions}
                 selected={selected}
                 setSelected={setSelected}
-                onApply={applyEdits}
+                onApply={requestApply}
                 onCancel={() => setStage('hub')}
               />
             ) : (
@@ -1166,7 +1300,7 @@ function WeaverBody({
                 decisions={decisions}
                 onSetDecision={(id, d) => setDecisions((old) => ({ ...old, [id]: d }))}
                 onBatchDecide={(id, d) => setDecisions((old) => ({ ...old, [id]: d }))}
-                onApply={applyEdits}
+                onApply={requestApply}
                 onCancel={() => setStage('hub')}
               />
             )}

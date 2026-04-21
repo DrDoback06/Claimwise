@@ -28,8 +28,8 @@ export default function StoryAnalysisDrawer({ worldState, onJumpToChapter }) {
 
   // Intercept any navigation the legacy components do, route via the
   // shared navigation service so the editor jumps correctly.
-  const handleJump = (bookId, chapterId) => {
-    chapterNavigationService.navigateToChapter?.(bookId, chapterId);
+  const handleJump = (bookId, chapterId, range) => {
+    chapterNavigationService.navigateToChapter?.(bookId, chapterId, range ? { range } : {});
     onJumpToChapter?.(bookId, chapterId);
   };
 

@@ -380,7 +380,14 @@ export default function WritePage({
   const [rightPane, setRightPane] = useState('weaver'); // 'weaver' | 'analysis' | 'stash'
   const [openDrawer, setOpenDrawer] = useState(null);
   // openDrawer: null | 'reader' | 'language-full' | 'interview' | 'import' | 'voice' | 'book-reader'
+  const [languageSnippet, setLanguageSnippet] = useState('');
   const editorHostRef = useRef(null);
+
+  const onSelectionForLanguage = useCallback((text) => {
+    if (!text || String(text).trim().length < 4) return;
+    setLanguageSnippet(String(text).trim());
+    setOpenDrawer('language-full');
+  }, []);
 
   const onPatchWorldState = useCallback((patch) => {
     setWorldState?.((prev) => ({
@@ -476,7 +483,11 @@ export default function WritePage({
           }}
         >
           <div style={{ flex: 1, overflow: 'auto' }}>
-            <WritingCanvasPro onNavigate={onNavigate} onSave={() => {}} />
+            <WritingCanvasPro
+              onNavigate={onNavigate}
+              onSave={() => {}}
+              onSelectionForLanguage={onSelectionForLanguage}
+            />
           </div>
           <SelectionRewriteMenu scopeSelector=".lw-writer-surface" />
           <InlineSuggestions scopeSelector=".lw-writer-surface" worldState={worldState} />
@@ -534,7 +545,11 @@ export default function WritePage({
               }}
             >
               <div style={{ flex: 1, overflow: 'auto' }}>
-                <WritingCanvasPro onNavigate={onNavigate} onSave={() => {}} />
+                <WritingCanvasPro
+                  onNavigate={onNavigate}
+                  onSave={() => {}}
+                  onSelectionForLanguage={onSelectionForLanguage}
+                />
               </div>
               <SelectionRewriteMenu scopeSelector=".lw-writer-surface" />
               <InlineSuggestions scopeSelector=".lw-writer-surface" worldState={worldState} />
@@ -643,11 +658,11 @@ export default function WritePage({
       {/* Drawers */}
       <Drawer
         open={openDrawer === 'language-full'}
-        onClose={() => setOpenDrawer(null)}
+        onClose={() => { setOpenDrawer(null); setLanguageSnippet(''); }}
         title="Language workbench"
         width={780}
       >
-        <LanguageWorkbench scoped worldState={worldState} />
+        <LanguageWorkbench scoped worldState={worldState} snippetSeed={languageSnippet} />
       </Drawer>
 
       <Drawer

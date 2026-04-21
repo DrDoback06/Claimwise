@@ -54,7 +54,9 @@ const WritingCanvasPro = ({
   onNavigate,
   onSave,
   onEntityUpdate,
-  initialChapter = null 
+  initialChapter = null,
+  /** Called when the user selects 4+ chars in the chapter textarea (opens Language drawer, etc.). */
+  onSelectionForLanguage,
 }) => {
   // ============================================
   // STATE
@@ -881,7 +883,7 @@ ${options.additionalInstructions || ''}`;
         action: options.action || 'continue'
       });
 
-      const result = await aiService.callAI(user, 'creative', system);
+      const result = await aiService.callAI(user, 'draft', system);
       const cleanResult = result?.replace(/^["']|["']$/g, '').trim() || '';
       
       setPreviewPanel(prev => ({
@@ -1245,6 +1247,7 @@ Write 1-2 paragraphs introducing a new character:`;
           y: Math.max(120, Math.min(approxY, window.innerHeight - 200))
         });
         setShowSelectionTools(true);
+        onSelectionForLanguage?.(text);
       }, 300); // 300ms delay
     } else {
       setShowSelectionTools(false);
@@ -1474,7 +1477,7 @@ Return ONLY the JSON array:`;
         action: 'improve'
       });
 
-      const result = await aiService.callAI(user, 'analytical', system);
+      const result = await aiService.callAI(user, 'lint', system);
       
       // Parse suggestions
       let suggestions = [];
@@ -1544,7 +1547,7 @@ Original:
 
 Rewrite with the mood adjustments. Only return the rewritten text:`;
 
-      const result = await aiService.callAI(prompt, 'creative', system);
+      const result = await aiService.callAI(prompt, 'draft', system);
       const cleanResult = result?.replace(/^["']|["']$/g, '').trim() || '';
       
       setMoodRewritePanel(prev => ({

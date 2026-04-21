@@ -100,6 +100,30 @@ class AIService {
     this.preferredProvider = localStorage.getItem('ai_preferred_provider') || 'auto';
     this.loadApiKeys();
     this._assertNoHardcodedKeys();
+    /** @type {object|null} Last completed AI call (for AI Providers debug UI). */
+    this._lastCallDebug = null;
+  }
+
+  _snapshotLastAiCallDebug(task, lwTaskRoutingActive) {
+    try {
+      const r = this.router.getLastRouting();
+      this._lastCallDebug = {
+        task: task || 'general',
+        lwTaskRoutingActive: !!lwTaskRoutingActive,
+        complexityTier: r?.complexity?.tier,
+        complexityScore: r?.complexity?.score,
+        primaryModelId: r?.primary?.id,
+        primaryProvider: r?.primary?.provider,
+        fallbackCount: Array.isArray(r?.fallbacks) ? r.fallbacks.length : 0,
+        at: r?.timestamp || Date.now(),
+      };
+    } catch {
+      this._lastCallDebug = { task: task || 'general', at: Date.now() };
+    }
+  }
+
+  getLastCallDebug() {
+    return this._lastCallDebug;
   }
   
   /**
@@ -207,7 +231,7 @@ class AIService {
       const ctx = this._lwCtx();
       if (!ctx) return '';
       // Only inject for creative/rewrite-style tasks by default.
-      const creativeTasks = new Set(['creative', 'general', 'voice', 'dialogue', 'scene', 'draft']);
+      const creativeTasks = new Set(['creative', 'general', 'voice', 'dialogue', 'scene', 'draft', 'weave']);
       if (!creativeTasks.has(task)) return '';
       // Lazy require to avoid a circular import.
       // eslint-disable-next-line global-require
@@ -948,6 +972,7 @@ class AIService {
       const cached = this._getCachedResponse(cacheKey);
       if (cached !== null) {
         console.log('[AI Service] Returning cached response');
+        this._lastCallDebug = { task, cached: true, at: Date.now() };
         return cached;
       }
     }
@@ -965,6 +990,7 @@ class AIService {
         if (useCache && cacheKey) {
           this._cacheResponse(cacheKey, result);
         }
+        this._snapshotLastAiCallDebug(task, !!routedProvider);
         this._recordUsage(task, this.preferredProvider, this._approxTokens(prompt, systemContext, result), true);
         restorePreferred();
         return result;
@@ -981,6 +1007,7 @@ class AIService {
     // Otherwise, queue the request (still record usage through a wrapping promise)
     return new Promise((resolve, reject) => {
       const wrappedResolve = (result) => {
+        this._snapshotLastAiCallDebug(task, !!routedProvider);
         this._recordUsage(task, this.preferredProvider, this._approxTokens(prompt, systemContext, result), true);
         restorePreferred();
         resolve(result);

@@ -1,6 +1,9 @@
 /**
  * Background Notification Service
- * Handles browser notifications for background processing
+ * Handles browser notifications for background processing.
+ *
+ * Entry points: manuscriptProcessingService.js (progress toasts). No dedicated
+ * Loomwright page; legacy manuscript flows trigger this.
  */
 
 class BackgroundNotificationService {

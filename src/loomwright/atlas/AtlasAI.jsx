@@ -16,6 +16,8 @@ import Icon from '../primitives/Icon';
 import Button from '../primitives/Button';
 import Scrubber from '../primitives/Scrubber';
 import { extractPlaceProposals } from './atlasAI';
+import { proposePlacesForChapter, findMergeCandidates } from '../../services/atlasProposals';
+import FloorplanView from '../../pages/atlas/FloorplanView';
 
 const KIND_COLORS = {
   castle:  'oklch(70% 0.15 25)',
@@ -40,7 +42,20 @@ function uid(prefix = 'pl') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function Sidebar({ places, activeId, onPick, chapters, chapterFilter, setChapterFilter, onNewPlace, onPropose, proposing, tab, setTab }) {
+function Sidebar({
+  places,
+  activeId,
+  onPick,
+  chapters,
+  chapterFilter,
+  setChapterFilter,
+  onNewPlace,
+  onScanLocal,
+  onProposeAI,
+  proposingAI,
+  tab,
+  setTab,
+}) {
   const t = useTheme();
   const visible = chapterFilter == null
     ? places
@@ -99,12 +114,15 @@ function Sidebar({ places, activeId, onPick, chapters, chapterFilter, setChapter
           </button>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         <Button size="sm" onClick={onNewPlace} icon={<Icon name="plus" size={10} />}>
           Add place
         </Button>
-        <Button size="sm" variant="ghost" onClick={onPropose} disabled={proposing} icon={<Icon name="sparkle" size={10} />}>
-          {proposing ? '\u2026' : 'AI scan'}
+        <Button size="sm" variant="ghost" onClick={onScanLocal} icon={<Icon name="search" size={10} />} title="Scan chapter prose locally (no API)">
+          Scan prose
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onProposeAI} disabled={proposingAI} icon={<Icon name="sparkle" size={10} />} title="LLM extraction (requires provider)">
+          {proposingAI ? '\u2026' : 'AI scan'}
         </Button>
       </div>
       <div
@@ -419,13 +437,13 @@ function PlaceDetail({ place, chapters, onPatch, onDelete }) {
   );
 }
 
-function ProposalsPane({ proposals, onAccept, onReject, chapterId }) {
+function ProposalsPane({ proposals, onAccept, onReject, onMerge, chapterId }) {
   const t = useTheme();
   if (!proposals.length) {
     return (
       <div style={{ padding: 18, color: t.ink3, fontSize: 13 }}>
-        No fresh proposals. Click <strong>AI scan</strong> in the sidebar to extract places
-        from the chapter's prose.
+        No proposals for this chapter. Use <strong>Scan prose</strong> (local) or <strong>AI scan</strong> (provider)
+        in the sidebar. Chapter text must live in the chapter body (<code>content</code> / <code>script</code>).
       </div>
     );
   }
@@ -499,7 +517,36 @@ function ProposalsPane({ proposals, onAccept, onReject, chapterId }) {
           {p.note && (
             <div style={{ fontSize: 12, color: t.ink2, marginTop: 4 }}>{p.note}</div>
           )}
-          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          {(p.mergeCandidates || []).length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div
+                style={{
+                  fontFamily: t.mono,
+                  fontSize: 9,
+                  color: t.ink3,
+                  letterSpacing: 0.12,
+                  textTransform: 'uppercase',
+                  marginBottom: 4,
+                }}
+              >
+                Might be same as
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {p.mergeCandidates.map(({ place, score }) => (
+                  <Button
+                    key={place.id}
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onMerge(p, place.id)}
+                    title={`Merge "${p.name}" into existing place`}
+                  >
+                    {place.name} ({Math.round(score * 100)}%)
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
             <Button size="sm" variant="primary" onClick={() => onAccept(p)}>
               Pin on map
             </Button>
@@ -513,7 +560,7 @@ function ProposalsPane({ proposals, onAccept, onReject, chapterId }) {
   );
 }
 
-function AtlasBody({ worldState, setWorldState }) {
+function AtlasBody({ worldState, setWorldState, onNavigate }) {
   const t = useTheme();
   const bookIds = Object.keys(worldState?.books || {}).map(Number).sort((a, b) => a - b);
   const [bookId, setBookId] = useState(bookIds[bookIds.length - 1] || 1);
@@ -524,7 +571,7 @@ function AtlasBody({ worldState, setWorldState }) {
   const [tab, setTab] = useState('map');
   const [activeId, setActiveId] = useState(null);
   const [proposals, setProposals] = useState([]);
-  const [proposing, setProposing] = useState(false);
+  const [proposingAI, setProposingAI] = useState(false);
 
   const places = useMemo(() => worldState?.places || [], [worldState?.places]);
   const active = places.find((p) => p.id === activeId) || null;
@@ -568,18 +615,46 @@ function AtlasBody({ worldState, setWorldState }) {
     persistPlaces(places.map((p) => (p.id === id ? { ...p, x, y } : p)));
   };
 
-  const propose = async () => {
+  const scanLocal = () => {
     const ch = chapterFilter
       ? chapters.find((c) => c.id === chapterFilter)
       : chapters[chapters.length - 1];
     if (!ch) return;
-    setProposing(true);
-    const existing = places.map((p) => p.name);
-    const text = ch.text || ch.summary || '';
-    const out = await extractPlaceProposals(text, ch.id, existing);
-    setProposals(out);
+    const raw = proposePlacesForChapter(worldState, bookId, ch.id);
+    const mapped = raw.map((p) => ({
+      name: p.name,
+      kind: p.kind,
+      confidence: p.confidence,
+      whereInText: p.whereInText,
+      note:
+        p.mentions?.length > 1
+          ? `${p.mentions.length} mentions in manuscript (all books).`
+          : '',
+      source: 'heuristic',
+      mergeCandidates: findMergeCandidates(p.name, places),
+    }));
+    setProposals(mapped);
     setTab('propose');
-    setProposing(false);
+  };
+
+  const proposeAI = async () => {
+    const ch = chapterFilter
+      ? chapters.find((c) => c.id === chapterFilter)
+      : chapters[chapters.length - 1];
+    if (!ch) return;
+    setProposingAI(true);
+    const existing = places.map((p) => p.name);
+    const text = ch.content || ch.script || ch.text || ch.summary || '';
+    const out = await extractPlaceProposals(text, ch.id, existing);
+    setProposals(
+      out.map((p) => ({
+        ...p,
+        source: 'ai',
+        mergeCandidates: findMergeCandidates(p.name, places),
+      })),
+    );
+    setTab('propose');
+    setProposingAI(false);
   };
 
   const acceptProposal = (p) => {
@@ -604,6 +679,29 @@ function AtlasBody({ worldState, setWorldState }) {
     setProposals((old) => old.filter((x) => x.name !== p.name));
   };
 
+  const mergeProposal = (p, targetPlaceId) => {
+    const target = places.find((pl) => pl.id === targetPlaceId);
+    if (!target) return;
+    const chId = chapterFilter ?? chapters[chapters.length - 1]?.id;
+    persistPlaces(
+      places.map((pl) =>
+        pl.id === target.id
+          ? {
+              ...pl,
+              aliases: Array.from(new Set([...(pl.aliases || []), p.name])),
+              chapterIds: Array.from(
+                new Set([...(pl.chapterIds || []), chId].filter((x) => x != null)),
+              ),
+              mentions: (pl.mentions || 0) + 1,
+            }
+          : pl,
+      ),
+    );
+    setProposals((old) => old.filter((x) => x.name !== p.name));
+    setActiveId(target.id);
+    setTab('map');
+  };
+
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
       <Sidebar
@@ -614,8 +712,9 @@ function AtlasBody({ worldState, setWorldState }) {
         chapterFilter={chapterFilter}
         setChapterFilter={setChapterFilter}
         onNewPlace={addPlace}
-        onPropose={propose}
-        proposing={proposing}
+        onScanLocal={scanLocal}
+        onProposeAI={proposeAI}
+        proposingAI={proposingAI}
         tab={tab}
         setTab={setTab}
       />
@@ -675,8 +774,19 @@ function AtlasBody({ worldState, setWorldState }) {
             </>
           )}
           {tab === 'floor' && (
-            <div style={{ padding: 24, color: t.ink3, fontSize: 13 }}>
-              Floorplan editor coming soon \u2014 use Region tab to pin places for now.
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              {active ? (
+                <FloorplanView
+                  place={active}
+                  worldState={worldState}
+                  setWorldState={setWorldState}
+                  onNavigate={onNavigate}
+                />
+              ) : (
+                <div style={{ padding: 24, color: t.ink3, fontSize: 13 }}>
+                  Select a place in the sidebar to open its floorplan (create one in the main Atlas builder or here).
+                </div>
+              )}
             </div>
           )}
           {tab === 'propose' && (
@@ -684,6 +794,7 @@ function AtlasBody({ worldState, setWorldState }) {
               proposals={proposals}
               onAccept={acceptProposal}
               onReject={rejectProposal}
+              onMerge={mergeProposal}
               chapterId={chapterFilter ?? chapters[chapters.length - 1]?.id}
             />
           )}

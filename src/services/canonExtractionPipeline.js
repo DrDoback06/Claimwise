@@ -1,6 +1,9 @@
 /**
  * Canon Extraction Pipeline
  *
+ * Entry points: canonApiService.js (runExtraction). Reaches the narrative review
+ * queue; primary UI is legacy Manuscript / API flows, not the Loomwright redesign.
+ *
  * Enhanced extraction that produces unified review queue nodes
  * across all 10 domains:
  *   character, item, skill, relationship, plot, timeline,

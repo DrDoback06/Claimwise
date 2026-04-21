@@ -8,6 +8,7 @@ import aiService from './aiService';
 import db from './database';
 import smartContextEngine from './smartContextEngine';
 import styleReferenceService from './styleReferenceService';
+import { extractJsonValue } from './structuredAIJson';
 
 class CharacterEnhancementService {
   constructor() {
@@ -192,15 +193,21 @@ IMPORTANT: Match the writing style and tone from the style context. Be consisten
       // Try to parse JSON from response
       let parsed;
       if (typeof response === 'string') {
-        // Extract JSON from markdown code blocks if present
         const jsonMatch = response.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
         if (jsonMatch) {
           parsed = JSON.parse(jsonMatch[1]);
         } else {
-          parsed = JSON.parse(response);
+          try {
+            parsed = JSON.parse(response);
+          } catch {
+            parsed = extractJsonValue(response);
+          }
         }
       } else {
         parsed = response;
+      }
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('Enhancement response was not an object');
       }
 
       // Validate and enhance with world state

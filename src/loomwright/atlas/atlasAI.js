@@ -3,16 +3,9 @@
  */
 
 import aiService from '../../services/aiService';
+import { parseAIJson } from '../../services/structuredAIJson';
 
 const KINDS = ['castle', 'city', 'town', 'village', 'ruin', 'shrine', 'feature', 'inn', 'road', 'river', 'forest', 'mountain', 'sea', 'other'];
-
-function safeParseJSON(text) {
-  if (!text) return null;
-  let s = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  const m = s.match(/[\{\[][\s\S]*[\}\]]/);
-  if (!m) return null;
-  try { return JSON.parse(m[0]); } catch { return null; }
-}
 
 export async function extractPlaceProposals(chapterText, chapterId, existingNames = []) {
   if (!chapterText) return [];
@@ -38,10 +31,22 @@ export async function extractPlaceProposals(chapterText, chapterId, existingName
     `}`,
   ].join('\n');
   try {
-    const response = await aiService.callAI(prompt, 'analytical', 'Return only valid JSON.');
-    const parsed = safeParseJSON(response);
+    const response = await aiService.callAI(prompt, 'atlas', 'Return only valid JSON.');
+    const validate = (obj) => obj && Array.isArray(obj.places);
+    const repair = async (bad) => {
+      const fixPrompt = [
+        'The text below was meant to be JSON with a top-level "places" array.',
+        'Return ONLY valid JSON. No markdown fences.',
+        String(bad).slice(0, 12000),
+      ].join('\n');
+      return aiService.callAI(fixPrompt, 'atlas', 'Return only valid JSON.');
+    };
+    const parsed = await parseAIJson(response, validate, repair);
     if (!parsed || !Array.isArray(parsed.places)) return [];
-    return parsed.places.filter((p) => p.name && !existingNames.includes(p.name));
+    const existingLower = new Set(existingNames.map((n) => String(n).toLowerCase()));
+    return parsed.places.filter(
+      (p) => p?.name && !existingLower.has(String(p.name).toLowerCase()),
+    );
   } catch (_e) {
     return [];
   }

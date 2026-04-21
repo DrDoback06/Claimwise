@@ -3,6 +3,7 @@
  */
 
 import aiService from '../../services/aiService';
+import { extractJsonValue } from '../../services/structuredAIJson';
 
 export const KIND_META = {
   editor:        { label: 'Editor note',   color: 'oklch(78% 0.13 78)', icon: 'edit' },
@@ -18,14 +19,6 @@ export const SEVERITY_META = {
   high:   { label: 'High',   color: 'oklch(65% 0.18 25)' },
 };
 
-function safeParseJSON(text) {
-  if (!text) return null;
-  let s = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  const m = s.match(/[\{\[][\s\S]*[\}\]]/);
-  if (!m) return null;
-  try { return JSON.parse(m[0]); } catch { return null; }
-}
-
 export async function generateSparks(worldState, bookId, options = {}) {
   const book = worldState?.books?.[bookId];
   if (!book) return [];
@@ -40,7 +33,7 @@ export async function generateSparks(worldState, bookId, options = {}) {
     `Book: ${book.title || 'Untitled'}`,
     `Chapters so far: ${chapters.length}`,
     `Recent chapters:`,
-    recent.map((c) => `- Ch.${c.id} "${c.title || ''}": ${(c.summary || c.text || '').slice(0, 200)}`).join('\n'),
+    recent.map((c) => `- Ch.${c.id} "${c.title || ''}": ${(c.summary || c.content || c.script || c.text || '').slice(0, 200)}`).join('\n'),
     ``,
     `Cast sample:`,
     actors.slice(0, 8).map((a) => `- ${a.name}: ${a.role || ''}`).join('\n'),
@@ -54,8 +47,8 @@ export async function generateSparks(worldState, bookId, options = {}) {
   ].join('\n');
 
   try {
-    const r = await aiService.callAI(prompt, 'analytical', 'Return only valid JSON.');
-    const parsed = safeParseJSON(r);
+    const r = await aiService.callAI(prompt, 'spark', 'Return only valid JSON.');
+    const parsed = extractJsonValue(r);
     if (!parsed || !Array.isArray(parsed.sparks)) return [];
     return parsed.sparks.map((s, i) => ({ id: s.id || `spark_${Date.now()}_${i}`, ...s }));
   } catch (_e) {
@@ -75,7 +68,7 @@ export async function generateMorningBrief(worldState, bookId) {
     ``,
     `Book: ${book.title || 'Untitled'}`,
     `Recent chapters:`,
-    recent.map((c) => `- Ch.${c.id} "${c.title || ''}": ${(c.summary || c.text || '').slice(0, 220)}`).join('\n'),
+    recent.map((c) => `- Ch.${c.id} "${c.title || ''}": ${(c.summary || c.content || c.script || c.text || '').slice(0, 220)}`).join('\n'),
     ``,
     `Cast: ${actors.length} characters.`,
     ``,
@@ -93,8 +86,8 @@ export async function generateMorningBrief(worldState, bookId) {
   ].join('\n');
 
   try {
-    const r = await aiService.callAI(prompt, 'analytical', 'Return only valid JSON.');
-    return safeParseJSON(r);
+    const r = await aiService.callAI(prompt, 'brief', 'Return only valid JSON.');
+    return extractJsonValue(r);
   } catch {
     return null;
   }

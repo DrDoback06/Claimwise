@@ -176,6 +176,28 @@ const TASK_COMPLEXITY_BIAS = {
   general: 0
 };
 
+/**
+ * Loomwright Settings → AI Providers uses task ids (weave, brief, …).
+ * Map them to the router's taxonomy so complexity + strength scoring stay correct.
+ */
+const LOOMWRIGHT_TASK_ROUTER_ALIAS = {
+  weave: 'structured',
+  atlas: 'analytical',
+  brief: 'analytical',
+  spark: 'analytical',
+  lint: 'analytical',
+  voice: 'creative',
+  interview: 'creative',
+  draft: 'creative',
+  inventory: 'structured',
+  ping: 'general',
+};
+
+function resolveRoutingTaskType(taskType) {
+  if (!taskType) return 'general';
+  return LOOMWRIGHT_TASK_ROUTER_ALIAS[taskType] || taskType;
+}
+
 // --- Token Usage Tracker ---
 
 const TOKEN_STORAGE_KEY = 'claimwise_token_usage';
@@ -395,7 +417,8 @@ class IntelligenceRouter {
    * @returns {{ primary: object, fallbacks: object[], complexity: object }}
    */
   route(prompt, systemContext = '', taskType = 'general', availableProviders = [], preferredProvider = 'auto') {
-    const complexity = analyzeComplexity(prompt, systemContext, taskType);
+    const routingTask = resolveRoutingTaskType(taskType);
+    const complexity = analyzeComplexity(prompt, systemContext, routingTask);
     const available = this.getAvailableModels(availableProviders);
 
     if (available.length === 0) {
@@ -416,9 +439,9 @@ class IntelligenceRouter {
       else if (Math.abs(modelTierIdx - targetTierIdx) === 1) modelScore += 1;
       else modelScore -= 2; // Penalize using wildly wrong tier
 
-      // Bonus for strength match
+      // Bonus for strength match (Loomwright task id + resolved router type)
       const strengthMatch = model.strengths.filter(s =>
-        s === taskType || s === 'general' || s === 'reasoning'
+        s === routingTask || s === taskType || s === 'general' || s === 'reasoning'
       ).length;
       modelScore += strengthMatch * 0.5;
 

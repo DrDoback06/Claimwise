@@ -121,6 +121,43 @@ function classifyPhrase(phrase, precedingWord) {
   return null;
 }
 
+/**
+ * Rough string similarity for "might be the same place" hints (0..1).
+ */
+export function placeNameSimilarity(a, b) {
+  const x = (a || '').toLowerCase().trim();
+  const y = (b || '').toLowerCase().trim();
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  if (x.includes(y) || y.includes(x)) return 0.88;
+  const wa = new Set(x.split(/\s+/).filter((w) => w.length > 1));
+  const wb = new Set(y.split(/\s+/).filter((w) => w.length > 1));
+  let inter = 0;
+  wa.forEach((w) => {
+    if (wb.has(w)) inter += 1;
+  });
+  const union = wa.size + wb.size - inter;
+  return union ? inter / union : 0;
+}
+
+/**
+ * Existing places that might be duplicates of a proposed name (for merge UX).
+ */
+export function findMergeCandidates(proposalName, places, { limit = 3, minScore = 0.35 } = {}) {
+  if (!proposalName || !Array.isArray(places)) return [];
+  return places
+    .map((p) => ({
+      place: p,
+      score: Math.max(
+        placeNameSimilarity(proposalName, p.name),
+        ...(p.aliases || []).map((al) => placeNameSimilarity(proposalName, al)),
+      ),
+    }))
+    .filter((x) => x.score >= minScore)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 export function proposePlaces(worldState) {
   const books = worldState?.books || {};
   const existingNames = new Set(
@@ -177,4 +214,26 @@ export function proposePlaces(worldState) {
   });
   return Array.from(seen.values())
     .sort((a, b) => b.mentions.length - a.mentions.length);
+}
+
+/**
+ * Heuristic proposals that mention a specific book + chapter (for Atlas AI local scan).
+ */
+export function proposePlacesForChapter(worldState, bookId, chapterId) {
+  const bid = bookId != null ? Number(bookId) : null;
+  const cid = chapterId != null ? Number(chapterId) : null;
+  if (bid == null || cid == null || Number.isNaN(bid) || Number.isNaN(cid)) return [];
+  return proposePlaces(worldState)
+    .filter((p) => p.mentions?.some(
+      (m) => Number(m.bookId) === bid && Number(m.chapterId) === cid,
+    ))
+    .map((p) => {
+      const m0 = p.mentions.find(
+        (m) => Number(m.bookId) === bid && Number(m.chapterId) === cid,
+      ) || p.mentions[0];
+      const whereInText = m0
+        ? `ch.${m0.chapterId} ¶${m0.paragraph}: "${String(m0.excerpt || '').slice(0, 140)}"`
+        : '';
+      return { ...p, source: 'heuristic', whereInText };
+    });
 }

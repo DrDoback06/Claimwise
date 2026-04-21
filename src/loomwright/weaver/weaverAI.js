@@ -22,6 +22,7 @@
 
 import aiService from '../../services/aiService';
 import storyBrain from '../../services/storyBrain';
+import { parseAIJson } from '../../services/structuredAIJson';
 
 export const SYSTEM_COLORS = {
   World:    'oklch(72% 0.10 200)',
@@ -48,14 +49,6 @@ export const SYSTEM_ICON = {
   Wiki: 'book',
   Faction: 'shield',
 };
-
-function safeParseJSON(text) {
-  if (!text) return null;
-  const s = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-  const m = s.match(/[{[][\s\S]*[}\]]/);
-  if (!m) return null;
-  try { return JSON.parse(m[0]); } catch { return null; }
-}
 
 function pickChaptersFor(worldState, bookId) {
   const book = worldState?.books?.[bookId];
@@ -258,34 +251,47 @@ export async function proposeWeave(idea, worldState, bookId, options = {}) {
     '- 5 to 14 edits total.',
   ].join('\n');
 
-  // Pull the author's full voice/style stack (style reference, chapter
-  // memories, genre guide, writer preferences) and layer it into the system
-  // prompt so any Chapter `before/after` prose inside the proposal matches the
-  // book's actual voice — not generic AI filler.
+  // Same stack as WritingCanvas / Writers Room: getContext + getCraftDirective
+  // + Voice Studio snippet so Chapter before/after prose matches the book.
   let styleSystem = 'Return only valid JSON. Do not wrap in markdown.';
   try {
     const textForBrain = excerptForBrain
       ? excerptForBrain.slice(-2000)
       : '';
-    const { systemContext } = await storyBrain.getContext({
+    const chId = activeChapterRow?.id ?? currentChapter;
+    const { systemContext, craft } = await storyBrain.buildStyleSystemForProse({
       text: textForBrain,
       chapterNumber: typeof chapterNumberForBrain === 'number' ? chapterNumberForBrain : null,
       bookId,
-      chapterId: activeChapterRow?.id ?? currentChapter,
+      chapterId: chId,
       action: 'continue',
+      worldState,
+      // Voice Studio: injected once via aiService for task `weave` (see _getLoomwrightVoiceSnippet).
+      includeVoice: false,
     });
     if (systemContext) {
-      styleSystem = `You are the Canon Weaver. Match the book's voice EXACTLY when writing any chapter prose (same stack as Continue Writing).
-
-${systemContext}
-
-Return only valid JSON. Do not wrap in markdown.`;
+      const head = `You are the Canon Weaver. Match the book's voice EXACTLY when writing any chapter prose (same stack as Continue Writing).`;
+      const blocks = [
+        head,
+        craft,
+        systemContext,
+        'Return only valid JSON. Do not wrap in markdown.',
+      ].filter(Boolean);
+      styleSystem = blocks.join('\n\n');
     }
   } catch (_err) { /* fall back to the bare JSON instruction */ }
 
   try {
-    const response = await aiService.callAI(prompt, 'structured', styleSystem);
-    const parsed = safeParseJSON(response);
+    const response = await aiService.callAI(prompt, 'weave', styleSystem);
+    const validate = (obj) => obj && Array.isArray(obj.edits);
+    const repair = async (bad) => {
+      const fixPrompt = [
+        'Repair into a single JSON object with keys: confidence, rationale, edits (array of edit objects). No markdown.',
+        String(bad).slice(0, 14000),
+      ].join('\n');
+      return aiService.callAI(fixPrompt, 'weave', 'Return only valid JSON.');
+    };
+    const parsed = await parseAIJson(response, validate, repair);
     if (!parsed || !Array.isArray(parsed.edits)) return fallbackProposal(idea, mode);
     parsed.edits.forEach((e, i) => {
       if (!e.id) e.id = `e_${Date.now()}_${i}`;

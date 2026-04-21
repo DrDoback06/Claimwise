@@ -7,6 +7,8 @@
 import aiService from './aiService';
 import smartContextEngine from './smartContextEngine';
 import db from './database';
+import storyBrain from './storyBrain';
+import { LW_AI_TASK } from './aiTaskIds';
 
 class EntityInterjectionService {
   constructor() {
@@ -48,17 +50,29 @@ class EntityInterjectionService {
         styleContext
       );
 
-      // Generate interjection
-      const response = await aiService.callAI(prompt, 'creative');
+      let proseSystem = '';
+      try {
+        const { systemContext } = await storyBrain.getContext({
+          text: chapterContext || '',
+          bookId,
+          chapterId,
+          action: 'integrate',
+        });
+        const craft = storyBrain.getCraftDirective('integrate');
+        proseSystem = [craft, systemContext].filter(Boolean).join('\n\n');
+      } catch (_) { /* optional */ }
 
-      // Generate multiple placement options
+      const response = await aiService.callAI(prompt, LW_AI_TASK.DRAFT, proseSystem);
+
       const options = await this.generateInterjectionOptions(
         selectedText,
         entities,
         chapterContext,
         moodSettings,
         styleContext,
-        response
+        response,
+        bookId,
+        chapterId
       );
 
       return {
@@ -322,9 +336,11 @@ CRITICAL: Return ONLY the new interjected text. Do NOT repeat or include the ori
    * @param {Object} moodSettings - Mood settings
    * @param {string} styleContext - Style context
    * @param {string} generatedText - AI-generated text
+   * @param {number|string|null} bookId
+   * @param {number|string|null} chapterId
    * @returns {Promise<Array>} Array of placement options
    */
-  async generateInterjectionOptions(selectedText, entityData, chapterContext, moodSettings, styleContext, generatedText) {
+  async generateInterjectionOptions(selectedText, entityData, chapterContext, moodSettings, styleContext, generatedText, bookId = null, chapterId = null) {
     // Handle both single entity (legacy) and multi-entity (new)
     const entities = Array.isArray(entityData) ? entityData : [entityData];
     const entityNames = entities.map(e => (e.entity || e).name || e.name || 'entity').join(', ');
@@ -389,7 +405,20 @@ CRITICAL REQUIREMENTS:
 
 Return ONLY the modified paragraph with ${entityNames} naturally integrated (no explanations, no JSON):`;
 
-      const blendedText = await aiService.callAI(blendPrompt, 'creative');
+      let blendSystem = '';
+      if (bookId != null && chapterId != null) {
+        try {
+          const { systemContext } = await storyBrain.getContext({
+            text: chapterContext || '',
+            bookId,
+            chapterId,
+            action: 'integrate',
+          });
+          blendSystem = [storyBrain.getCraftDirective('integrate'), systemContext].filter(Boolean).join('\n\n');
+        } catch (_) { /* optional */ }
+      }
+
+      const blendedText = await aiService.callAI(blendPrompt, LW_AI_TASK.DRAFT, blendSystem);
       
       // Clean the blended text
       let cleanBlendedText = blendedText.trim();

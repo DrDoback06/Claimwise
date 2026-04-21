@@ -58,7 +58,7 @@ export async function rewriteInVoice(source, sliders) {
     `- Return ONLY the rewritten passage, no commentary.`,
   ].join('\n');
   try {
-    const response = await aiService.callAI(prompt, 'creative', 'Return prose only. No markdown. No commentary.');
+    const response = await aiService.callAI(prompt, 'voice', 'Return prose only. No markdown. No commentary.');
     return String(response || '').trim();
   } catch (_e) {
     return '(Voice preview unavailable \u2014 AI proxy offline.)';
@@ -79,7 +79,7 @@ export async function deriveSlidersFromSample(sample) {
     String(sample || ''),
   ].join('\n');
   try {
-    const response = await aiService.callAI(prompt, 'analytical', 'Return only valid JSON.');
+    const response = await aiService.callAI(prompt, 'voice', 'Return only valid JSON.');
     const m = String(response || '').match(/\{[\s\S]*\}/);
     if (!m) return { ...DEFAULT_SLIDERS };
     const obj = JSON.parse(m[0]);
