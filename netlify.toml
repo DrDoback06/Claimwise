@@ -1,16 +1,40 @@
+# ═══════════════════════════════════════════════════════════════════════
+# BRANCH-SPECIFIC CONFIG — this netlify.toml is the loomwright-integration
+# branch's override. Netlify reads netlify.toml from whichever branch it's
+# deploying, so main's own netlify.toml (which builds the CRA app) is
+# UNAFFECTED by this file.
+#
+# DO NOT MERGE this file into main as-is — it would break the main deploy.
+# ═══════════════════════════════════════════════════════════════════════
+
 [build]
-  publish = "build"
-  command = "CI=false npm run build"
+  base    = "redesign/writers-room"
+  publish = "redesign/writers-room"
+  command = ""
 
-[build.environment]
-  NODE_VERSION = "18"
+# Babel Standalone fetches .jsx files at runtime. Netlify's default
+# Content-Type for .jsx is application/octet-stream which browsers refuse
+# to execute as script. Force a text MIME.
+[[headers]]
+  for = "/*.jsx"
+  [headers.values]
+    Content-Type  = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
 
+# Services bundle — stable between rebuilds, cache for an hour
+[[headers]]
+  for = "/claimwise-services.bundle.js"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+# Vendor React/Babel are pinned, treat as immutable
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# SPA fallback for any client-side routing
 [[redirects]]
-  from = "/api/ai/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from   = "/*"
+  to     = "/index.html"
   status = 200
