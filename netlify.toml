@@ -9,8 +9,10 @@
 
 [build]
   base    = "redesign/writers-room"
-  publish = "redesign/writers-room"
+  publish = "."
   command = ""
+  # Note: `publish` is relative to `base`, so "." means redesign/writers-room
+  # (NOT redesign/writers-room/redesign/writers-room). Netlify quirk.
 
 # Babel Standalone fetches .jsx files at runtime. Netlify's default
 # Content-Type for .jsx is application/octet-stream which browsers refuse
