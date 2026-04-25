@@ -85,6 +85,15 @@ export default function InlineWeaver({ onClose, onWalkThrough }) {
                 fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
                 textTransform: 'uppercase', cursor: 'pointer', fontWeight: 600,
               }}>Walk me through</button>
+              <button onClick={() => {
+                store.recordFeedback(s.kind, 'dismiss', { suggestionId: s.id });
+                setItems(prev => prev.filter(x => x.id !== s.id));
+              }} style={{
+                padding: '5px 10px', background: 'transparent', color: t.ink3,
+                border: `1px solid ${t.rule}`, borderRadius: 1,
+                fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
+                textTransform: 'uppercase', cursor: 'pointer',
+              }}>Dismiss</button>
             </div>
           </div>
         ))}

@@ -81,5 +81,25 @@
 .lw-slide { animation: lw-slide-in 240ms ease; }
 .lw-breathe { animation: lw-breathe 2.4s ease-in-out infinite; }
 
+[data-paragraph-id].lw-tts-active {
+  background: rgba(212, 146, 82, 0.10);
+  transition: background 200ms;
+}
+[data-lw-theme="day"] [data-paragraph-id].lw-tts-active {
+  background: rgba(139, 43, 31, 0.06);
+}
+
+[data-paragraph-id] [data-lw-entity-id]:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+[data-lw-theme="night"] [data-paragraph-id] [data-lw-entity-id]:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lw-drag-over {
+  outline: 2px dashed currentColor;
+  outline-offset: -4px;
+}
+
 [data-lw-theme="day"] .lw-rail-btn:hover { background: rgba(43, 29, 14, 0.06); }
 [data-lw-theme="night"] .lw-rail-btn:hover { background: rgba(234, 224, 208, 0.06); }

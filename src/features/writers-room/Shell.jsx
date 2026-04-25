@@ -2,20 +2,24 @@
 
 import React from 'react';
 import './shell.css';
-import { useTheme, PANEL_WIDTHS_FALLBACK, PANEL_ACCENT } from './theme';
+import { useTheme } from './theme';
 import { useStore, createChapter } from './store';
 import { useSelection } from './selection';
-import LeftRail, { PANELS } from './LeftRail';
+import LeftRail from './LeftRail';
 import TopBar from './TopBar';
 import RitualBar from './RitualBar';
 import Editor from './prose/Editor';
 import MarginNoticings from './prose/MarginNoticings';
+import Tethers from './prose/Tethers';
 import CommandPalette from './CommandPalette';
 import InlineWeaver from './InlineWeaver';
 import SummoningRing from './radial/SummoningRing';
 import WalkThroughWizard from './wizard/WalkThroughWizard';
 import Onboarding from './onboarding';
-import ReadAloud from './utilities/ReadAloud';
+import Settings from './Settings';
+import KeyboardHelp from './KeyboardHelp';
+import VersionHistory from './utilities/VersionHistory';
+import { shouldAutoSnapshot, makeSnapshot, pushSnapshot } from './utilities/snapshots';
 
 import CastPanel from './panels/cast';
 import AtlasPanel from './panels/atlas';
@@ -24,25 +28,32 @@ import VoicePanel from './panels/voice';
 import ItemsPanel from './panels/items';
 import LanguagePanel from './panels/language';
 import TanglePanel from './panels/tangle';
+import GroupChatPanel from './panels/groupchat';
 import SeriesBible from './panels/series-bible';
-import { PANEL_WIDTHS } from './store/schema';
 
 const PANEL_COMPONENTS = {
   cast: CastPanel, atlas: AtlasPanel, threads: ThreadsPanel,
   voice: VoicePanel, items: ItemsPanel, language: LanguagePanel,
-  tangle: TanglePanel,
+  tangle: TanglePanel, groupchat: GroupChatPanel,
 };
 
 export default function Shell() {
   const t = useTheme();
   const store = useStore();
-  const { sel } = useSelection();
+  const { sel, select } = useSelection();
 
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [weaverOpen, setWeaverOpen] = React.useState(false);
   const [ring, setRing] = React.useState(null);
   const [wizard, setWizard] = React.useState(null);
   const [seriesOpen, setSeriesOpen] = React.useState(false);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [helpOpen, setHelpOpen] = React.useState(false);
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [tethers, setTethers] = React.useState([]);
+
+  const proseColumnRef = React.useRef(null);
+  const marginRef = React.useRef(null);
 
   const openPanels = store.ui?.panels || [];
   const focusMode = store.ui?.focusMode || false;
@@ -55,11 +66,35 @@ export default function Shell() {
     if (order.length === 0) createChapter(store, { title: 'Chapter 1', text: '' });
   }, [store._loading, store.profile?.onboarded]);
 
+  // Auto-snapshot on chapter save. We hook into chapter changes via lastEdit.
+  const lastSnapshotMs = React.useRef({});
+  React.useEffect(() => {
+    const id = store.ui?.activeChapterId || store.book?.currentChapterId;
+    const ch = id ? store.chapters?.[id] : null;
+    if (!ch?.lastEdit) return;
+    if (lastSnapshotMs.current[id] === ch.lastEdit) return;
+    lastSnapshotMs.current[id] = ch.lastEdit;
+    if (shouldAutoSnapshot(id, store.snapshots)) {
+      pushSnapshot(store, makeSnapshot(ch, 'auto'));
+    }
+  }, [store.chapters, store.ui?.activeChapterId, store.book?.currentChapterId, store.snapshots, store]);
+
+  // Reset wordsToday at midnight (user local).
+  React.useEffect(() => {
+    const last = store.book?.wordsTodayDate;
+    const today = new Date().toDateString();
+    if (last !== today && store.book?.id) {
+      store.transaction(({ setPath }) => {
+        setPath('book.wordsToday', 0);
+        setPath('book.wordsTodayDate', today);
+      });
+    }
+  }, [store.book?.id, store.book?.wordsTodayDate, store]);
+
   const togglePanel = (id) => {
     const list = openPanels.includes(id)
       ? openPanels.filter(x => x !== id)
       : [...openPanels, id];
-    // Auto-collapse oldest if 4+ open.
     while (list.length > 3) list.shift();
     store.setPath('ui.panels', list);
   };
@@ -74,18 +109,22 @@ export default function Shell() {
 
   const onAction = (actionId) => {
     if (actionId.startsWith('panel.')) {
-      const panel = actionId.replace('panel.', '');
-      ensurePanelOpen(panel);
+      ensurePanelOpen(actionId.replace('panel.', ''));
       return;
     }
     if (actionId === 'open.weaver') setWeaverOpen(true);
+    if (actionId === 'open.settings') setSettingsOpen(true);
+    if (actionId === 'open.bible') setSeriesOpen(true);
+    if (actionId === 'open.history') setHistoryOpen(true);
+    if (actionId === 'open.help') setHelpOpen(true);
+    if (actionId === 'open.groupchat') ensurePanelOpen('groupchat');
     if (actionId === 'focus.toggle') store.setPath('ui.focusMode', !focusMode);
     if (actionId === 'theme.toggle') t.toggle();
   };
 
   const onWalkThrough = (suggestion) => {
-    const kindMap = { character: 'character', place: 'place', thread: 'thread', item: 'item' };
-    const kind = kindMap[suggestion.kind] || 'character';
+    const kind = suggestion.kind === 'character' || suggestion.kind === 'place' || suggestion.kind === 'thread' || suggestion.kind === 'item'
+      ? suggestion.kind : 'character';
     setWizard({ kind, proposal: suggestion.proposal });
   };
 
@@ -97,10 +136,6 @@ export default function Shell() {
       if (spokeId === 'threads') ensurePanelOpen('threads');
       if (spokeId === 'tangle') ensurePanelOpen('tangle');
       if (spokeId === 'weave') setWeaverOpen(true);
-    } else if (context === 'atlas') {
-      if (spokeId === 'newPlace') {
-        // sub-radial handles template; here we no-op.
-      }
     } else if (context === 'placeTemplates' && ring?.mapPoint) {
       const { x, y } = ring.mapPoint;
       const id = `pl_${Date.now()}`;
@@ -109,6 +144,7 @@ export default function Shell() {
         x, y, visits: [], children: [], parentId: null, proposed: false,
         hasFloorplan: false, createdAt: Date.now(),
       }]);
+      select('place', id);
     }
   };
 
@@ -117,20 +153,22 @@ export default function Shell() {
     const onKey = (e) => {
       const inField = e.target?.matches('input, textarea, [contenteditable="true"]');
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen(true);
-        return;
+        e.preventDefault(); setPaletteOpen(true); return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
-        e.preventDefault();
-        setWeaverOpen(true);
-        return;
+        e.preventDefault(); setWeaverOpen(true); return;
       }
       if (!inField && e.key === 'F9') {
         e.preventDefault();
         store.setPath('ui.focusMode', !focusMode);
       }
+      if (!inField && e.key === '?' ) {
+        e.preventDefault(); setHelpOpen(true);
+      }
       if (e.key === 'Escape') {
+        if (helpOpen) { setHelpOpen(false); return; }
+        if (historyOpen) { setHistoryOpen(false); return; }
+        if (settingsOpen) { setSettingsOpen(false); return; }
         if (ring) { setRing(null); return; }
         if (wizard) { setWizard(null); return; }
         if (paletteOpen) { setPaletteOpen(false); return; }
@@ -141,7 +179,7 @@ export default function Shell() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [focusMode, ring, wizard, paletteOpen, weaverOpen, seriesOpen, openPanels.join(',')]);
+  }, [focusMode, ring, wizard, paletteOpen, weaverOpen, seriesOpen, settingsOpen, helpOpen, historyOpen, openPanels, store]);
 
   if (store._loading) {
     return (
@@ -174,15 +212,26 @@ export default function Shell() {
             onOpenPalette={() => setPaletteOpen(true)}
             onToggleFocus={() => store.setPath('ui.focusMode', !focusMode)}
             focusMode={focusMode}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenBible={() => setSeriesOpen(true)}
+            onOpenHistory={() => setHistoryOpen(true)}
           />
         )}
-        <div className="lw-prose-wrap" style={{ display: 'flex' }}>
+        <div className="lw-prose-wrap" ref={proseColumnRef} style={{ display: 'flex', position: 'relative' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <Editor
               onContextMenu={({ x, y }) => setRing({ x, y, context: 'editor' })}
+              onParagraphMeasure={() => { /* triggers tether redraw via state below */ }}
             />
           </div>
-          {!focusMode && <MarginNoticings onWalkThrough={onWalkThrough} />}
+          {!focusMode && (
+            <MarginNoticings
+              ref={marginRef}
+              onWalkThrough={onWalkThrough}
+              onTethersChange={setTethers}
+            />
+          )}
+          {!focusMode && tethers.length > 0 && <Tethers tethers={tethers} hostRef={proseColumnRef} />}
         </div>
         {!focusMode && <RitualBar />}
       </div>
@@ -195,7 +244,7 @@ export default function Shell() {
               onClose={() => closePanel(id)}
               onSummonRing={(args) => setRing({ ...args })}
               onWeave={() => setWeaverOpen(true)}
-              onInterview={() => {}}
+              onInterview={() => ensurePanelOpen('groupchat')}
             />;
           })}
         </div>
@@ -206,6 +255,9 @@ export default function Shell() {
       {ring && <SummoningRing {...ring} onAction={onRingAction} onClose={() => setRing(null)} />}
       {wizard && <WalkThroughWizard kind={wizard.kind} proposal={wizard.proposal} onClose={() => setWizard(null)} />}
       {seriesOpen && <SeriesBible onClose={() => setSeriesOpen(false)} />}
+      {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
+      {helpOpen && <KeyboardHelp onClose={() => setHelpOpen(false)} />}
+      {historyOpen && <VersionHistory onClose={() => setHistoryOpen(false)} />}
     </div>
   );
 }

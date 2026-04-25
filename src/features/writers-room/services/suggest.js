@@ -3,10 +3,10 @@
 // One facade — `suggest(text, ctx, opts)` — every panel calls. Returns
 // scored, threshold-gated suggestions sorted by combined_score, max 12.
 
-import entityMatchingService from '../../../services/entityMatchingService';
-import worldConsistencyService from '../../../services/worldConsistencyService';
-import writingEnhancementServices from '../../../services/writingEnhancementServices';
-import suggestionLearningService from '../../../services/suggestionLearningService';
+import {
+  findCandidateNames, findCandidatePlaces,
+  findEchoes, findAdverbHotspots, findLongSentences,
+} from './detectors';
 
 export const MODE_THRESHOLDS = {
   idle: 0.62,
@@ -24,10 +24,10 @@ const KIND_GENRE_WEIGHTS = {
 };
 
 const INTRUSION_BUDGET = {
-  quiet:   { perChapter: 4, perKind: 2, base: 0.85 },
-  medium:  { perChapter: 8, perKind: 3, base: 1.0 },
-  helpful: { perChapter: 14, perKind: 5, base: 1.1 },
-  eager:   { perChapter: 24, perKind: 8, base: 1.2 },
+  quiet:   { perKind: 2, base: 0.85 },
+  medium:  { perKind: 3, base: 1.0 },
+  helpful: { perKind: 5, base: 1.1 },
+  eager:   { perKind: 8, base: 1.2 },
 };
 
 function genreFactor(kind, genre) {
@@ -35,95 +35,37 @@ function genreFactor(kind, genre) {
   return map[kind] ?? 1.0;
 }
 
-function intrusionBudget(kind, kindCount, wordCount, intrusion = 'medium') {
+function intrusionBudget(kindCount, intrusion = 'medium') {
   const cfg = INTRUSION_BUDGET[intrusion] || INTRUSION_BUDGET.medium;
   if (kindCount > cfg.perKind) return Math.max(0.4, 1 - 0.12 * (kindCount - cfg.perKind));
   return cfg.base;
 }
 
 function getBias(kind, profile) {
-  // Soft bias from accept/dismiss counts. Range [0.3, 1.5].
   const accepts = profile?.acceptCounts?.[kind] || 0;
   const dismisses = profile?.dismissRates?.[kind] || 0;
   const total = accepts + dismisses;
   if (total < 3) return 1.0;
   const ratio = accepts / total;
-  // Soft mapping: more accepts → higher bias.
   return Math.max(0.3, Math.min(1.5, 0.6 + 1.0 * ratio));
 }
 
-function countByKind(arr) {
-  const out = {};
-  for (const s of arr) out[s.kind] = (out[s.kind] || 0) + 1;
-  return out;
-}
+function rid(prefix = 's') { return `${prefix}_${Math.random().toString(36).slice(2, 8)}`; }
 
-function safeCall(fn, fallback) {
-  return fn().catch(err => {
-    console.warn('[lw-suggest] detector failed:', err?.message || err);
-    return fallback;
-  });
-}
+// Map suggestion kind → bias-tracking key matching profile.acceptCounts.
+const KIND_TO_PROFILE_KEY = {
+  character: 'cast',
+  place: 'atlas',
+  thread: 'thread',
+  item: 'cast',
+  grammar: 'lang',
+  continuity: 'entity',
+  voice: 'voice',
+  spark: 'spark',
+};
 
-// ─── Detectors (adapters over legacy services) ───────────────────────
-async function detectEntities(text, ctx) {
-  if (!entityMatchingService?.detectMentions) return [];
-  try {
-    const known = (ctx.cast || []).map(c => ({ id: c.id, name: c.name, aliases: c.aliases || [] }));
-    const knownPlaces = (ctx.places || []).map(p => ({ id: p.id, name: p.name }));
-    // detectMentions varies by version; try several method names.
-    let raw = [];
-    if (entityMatchingService.detectMentions) {
-      raw = await entityMatchingService.detectMentions(text, { characters: known, places: knownPlaces });
-    } else if (entityMatchingService.scanText) {
-      raw = await entityMatchingService.scanText(text, { characters: known, places: knownPlaces });
-    }
-    raw = Array.isArray(raw) ? raw : [];
-    return raw.map(r => ({
-      id: r.id || `s_${Math.random().toString(36).slice(2, 8)}`,
-      kind: r.kind || (r.type === 'place' ? 'place' : 'character'),
-      span: r.span || { paragraphId: null, start: 0, end: 0 },
-      proposal: r.proposal || { name: r.name },
-      confidence: r.confidence ?? 0.7,
-      rationale: r.rationale || `Mentioned: ${r.name || r.text}`,
-      actions: ['walk-through', 'dismiss'],
-    }));
-  } catch { return []; }
-}
+function biasKey(kind) { return KIND_TO_PROFILE_KEY[kind] || kind; }
 
-async function detectContinuity(text, ctx) {
-  if (!worldConsistencyService?.detectContradictions) return [];
-  try {
-    const raw = await worldConsistencyService.detectContradictions(text, ctx) || [];
-    return raw.map(r => ({
-      id: r.id || `s_${Math.random().toString(36).slice(2, 8)}`,
-      kind: 'continuity',
-      span: r.span || { paragraphId: null, start: 0, end: 0 },
-      proposal: r.proposal || {},
-      confidence: r.confidence ?? 0.5,
-      rationale: r.rationale || r.message || 'Possible contradiction',
-      actions: ['investigate', 'dismiss'],
-    }));
-  } catch { return []; }
-}
-
-async function detectLanguage(text, ctx) {
-  if (!writingEnhancementServices?.detectIssues) return [];
-  try {
-    const raw = await writingEnhancementServices.detectIssues(text, ctx) || [];
-    return raw.map(r => ({
-      id: r.id || `s_${Math.random().toString(36).slice(2, 8)}`,
-      kind: 'grammar',
-      span: r.span || { paragraphId: null, start: 0, end: 0 },
-      proposal: { fix: r.fix, quote: r.quote },
-      confidence: r.confidence ?? 0.6,
-      rationale: r.rule || r.label || 'Language issue',
-      actions: ['apply', 'dismiss'],
-    }));
-  } catch { return []; }
-}
-
-// ─── The orchestrator ───────────────────────────────────────────────
 export async function suggest(text, ctx = {}, opts = {}) {
   const mode = opts.mode || 'idle';
   const threshold = MODE_THRESHOLDS[mode] ?? MODE_THRESHOLDS.idle;
@@ -131,22 +73,91 @@ export async function suggest(text, ctx = {}, opts = {}) {
   const intrusion = profile.intrusion || 'medium';
   const genre = profile.genre || 'default';
 
-  const [entities, continuity, language] = await Promise.all([
-    safeCall(() => detectEntities(text, ctx), []),
-    opts.skipContinuity ? Promise.resolve([]) : safeCall(() => detectContinuity(text, ctx), []),
-    opts.skipLanguage ? Promise.resolve([]) : safeCall(() => detectLanguage(text, ctx), []),
-  ]);
+  const raw = [];
 
-  const raw = [...entities, ...continuity, ...language];
-  const counts = countByKind(raw);
-  const wordCount = (text || '').split(/\s+/).filter(Boolean).length;
+  // 1. Character candidates.
+  if (!opts.skipEntities) {
+    const candidates = findCandidateNames(text, ctx.cast || [], ctx.places || []);
+    for (const c of candidates) {
+      // Confidence: more mentions ⇒ higher confidence; novel-only candidates start lower.
+      const conf = Math.min(0.95, 0.45 + 0.15 * c.count);
+      raw.push({
+        id: rid('s'),
+        kind: 'character',
+        span: { start: c.position, end: c.position + c.name.length },
+        proposal: { name: c.name, role: 'support' },
+        confidence: conf,
+        rationale: `Mentioned ${c.count} time${c.count > 1 ? 's' : ''} — add to cast?`,
+        actions: ['walk-through', 'dismiss'],
+      });
+    }
+
+    // 2. Place candidates.
+    const places = findCandidatePlaces(text, ctx.places || []);
+    for (const p of places) {
+      const conf = Math.min(0.92, 0.4 + 0.15 * p.count);
+      raw.push({
+        id: rid('s'),
+        kind: 'place',
+        span: { start: 0, end: 0 },
+        proposal: { name: p.name, kind: 'settlement' },
+        confidence: conf,
+        rationale: `Referenced ${p.count} time${p.count > 1 ? 's' : ''} as a location.`,
+        actions: ['walk-through', 'dismiss'],
+      });
+    }
+  }
+
+  // 3. Language issues.
+  if (!opts.skipLanguage) {
+    const echoes = findEchoes(text).slice(0, 3);
+    for (const e of echoes) {
+      raw.push({
+        id: rid('s'),
+        kind: 'grammar',
+        span: { start: e.position, end: e.position + e.word.length * 2 + 1 },
+        proposal: { word: e.word },
+        confidence: 0.9,
+        rationale: `"${e.word} ${e.word}" — same word twice in a row.`,
+        actions: ['dismiss'],
+      });
+    }
+    const adverbs = findAdverbHotspots(text);
+    if (adverbs.length > 6) {
+      raw.push({
+        id: rid('s'),
+        kind: 'grammar',
+        span: { start: 0, end: 0 },
+        proposal: { count: adverbs.length },
+        confidence: Math.min(0.92, 0.55 + 0.04 * adverbs.length),
+        rationale: `${adverbs.length} -ly adverbs — consider stronger verbs.`,
+        actions: ['dismiss'],
+      });
+    }
+    const longs = findLongSentences(text, 35);
+    if (longs.length) {
+      raw.push({
+        id: rid('s'),
+        kind: 'grammar',
+        span: { start: 0, end: 0 },
+        proposal: { sample: longs[0].slice(0, 80) },
+        confidence: Math.min(0.85, 0.5 + 0.07 * longs.length),
+        rationale: `${longs.length} sentence${longs.length > 1 ? 's' : ''} over 35 words.`,
+        actions: ['dismiss'],
+      });
+    }
+  }
+
+  // Score.
+  const counts = {};
+  for (const s of raw) counts[s.kind] = (counts[s.kind] || 0) + 1;
 
   const scored = raw.map(s => ({
     ...s,
     combined_score:
       (s.confidence ?? 0.5)
-      * getBias(s.kind, profile)
-      * intrusionBudget(s.kind, counts[s.kind], wordCount, intrusion)
+      * getBias(biasKey(s.kind), profile)
+      * intrusionBudget(counts[s.kind], intrusion)
       * genreFactor(s.kind, genre),
   }));
 

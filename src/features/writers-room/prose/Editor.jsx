@@ -6,21 +6,27 @@ import { useTheme } from '../theme';
 import { useStore, rid, wordCount } from '../store';
 import { useSelection } from '../selection';
 import { MIME, dragProseSnippet, readDrop } from '../drag';
+import { decorateText, buildKnownEntities } from './highlights';
 
 function parseParagraphsFromDOM(root) {
   if (!root) return [];
   const out = [];
   for (const node of root.children) {
     const id = node.dataset.paragraphId || rid('p');
+    if (!node.dataset.paragraphId) node.dataset.paragraphId = id;
     const text = node.textContent || '';
     out.push({ id, text, state: 'written' });
   }
   return out;
 }
 
-function renderParagraphsToHTML(paragraphs) {
+function renderParagraphsToHTML(paragraphs, knownEntities) {
   if (!paragraphs?.length) return '';
-  return paragraphs.map(p => `<p data-paragraph-id="${p.id}">${escapeHtml(p.text)}</p>`).join('');
+  return paragraphs.map(p => {
+    const decorated = knownEntities?.length ? decorateText(p.text, knownEntities) : null;
+    const inner = decorated || escapeHtml(p.text);
+    return `<p data-paragraph-id="${p.id}">${inner}</p>`;
+  }).join('');
 }
 
 function escapeHtml(s) {
@@ -34,15 +40,12 @@ function saveSelection(root) {
   if (!sel?.rangeCount) return null;
   const range = sel.getRangeAt(0);
   if (!root.contains(range.startContainer)) return null;
-  // Preserve as { paragraphIndex, offset } so we survive re-render.
-  let pIdx = -1, offset = 0;
   let cur = range.startContainer;
   while (cur && cur.parentNode !== root) cur = cur.parentNode;
   if (!cur) return null;
-  pIdx = Array.prototype.indexOf.call(root.children, cur);
-  // Compute offset within the paragraph's text.
+  const pIdx = Array.prototype.indexOf.call(root.children, cur);
   const walker = document.createTreeWalker(cur, NodeFilter.SHOW_TEXT, null);
-  let node, pos = 0;
+  let node, pos = 0, offset = 0;
   while ((node = walker.nextNode())) {
     if (node === range.startContainer) { offset = pos + range.startOffset; break; }
     pos += node.textContent.length;
@@ -63,46 +66,57 @@ function restoreSelection(root, saved) {
       const r = document.createRange();
       r.setStart(node, Math.max(0, saved.offset - pos));
       r.collapse(true);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(r);
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
       return;
     }
     pos += len;
   }
-  // Fallback: place at end of paragraph.
   const r = document.createRange();
   r.selectNodeContents(p);
   r.collapse(false);
-  const sel = window.getSelection();
-  sel.removeAllRanges(); sel.addRange(r);
+  const s = window.getSelection();
+  s.removeAllRanges(); s.addRange(r);
 }
 
-export default function Editor({ onContextMenu }) {
+export default function Editor({ onContextMenu, onParagraphMeasure }) {
   const t = useTheme();
   const store = useStore();
-  const { sel } = useSelection();
+  const { select } = useSelection();
   const ref = React.useRef(null);
   const savedRange = React.useRef(null);
   const debouncedSave = React.useRef(null);
+  const isUserTyping = React.useRef(false);
 
   const activeId = store.ui?.activeChapterId || store.book?.currentChapterId;
   const chapter = activeId ? store.chapters?.[activeId] : null;
+  const known = React.useMemo(() => buildKnownEntities(store, t), [store.cast, store.places, store.items, t.mode]);
+
   const paragraphs = chapter?.paragraphs || (chapter?.text
     ? chapter.text.split(/\n\n+/).map(text => ({ id: rid('p'), text, state: 'written' }))
     : [{ id: rid('p'), text: '', state: 'draft' }]);
 
-  // Render HTML on chapter change.
+  // Render HTML on chapter change OR when known entities change AND user not actively typing.
   const lastChapterId = React.useRef(null);
+  const lastKnownHash = React.useRef('');
   React.useLayoutEffect(() => {
     if (!ref.current) return;
-    if (lastChapterId.current === activeId) return;
-    ref.current.innerHTML = renderParagraphsToHTML(paragraphs);
+    const knownHash = known.map(e => `${e._kind}:${e.id}:${e.name}`).join('|');
+    const chapterChanged = lastChapterId.current !== activeId;
+    const knownChanged = lastKnownHash.current !== knownHash;
+    if (!chapterChanged && !knownChanged) return;
+    if (isUserTyping.current && !chapterChanged) return; // don't blow away cursor mid-keystroke
+    savedRange.current = saveSelection(ref.current);
+    ref.current.innerHTML = renderParagraphsToHTML(paragraphs, known);
+    if (savedRange.current) restoreSelection(ref.current, savedRange.current);
     lastChapterId.current = activeId;
-  }, [activeId, paragraphs.length]);
+    lastKnownHash.current = knownHash;
+    onParagraphMeasure?.();
+  }, [activeId, paragraphs.length, known, onParagraphMeasure]);
 
-  // Save selection before each potential re-render, restore after.
   const onInput = React.useCallback(() => {
+    isUserTyping.current = true;
     savedRange.current = saveSelection(ref.current);
     clearTimeout(debouncedSave.current);
     debouncedSave.current = setTimeout(() => {
@@ -120,12 +134,10 @@ export default function Editor({ onContextMenu }) {
       if (delta > 0) {
         store.setSlice('book', b => ({ ...b, wordsToday: (b.wordsToday || 0) + delta }));
       }
+      isUserTyping.current = false;
+      onParagraphMeasure?.();
     }, 1200);
-  }, [activeId, chapter?.text, store]);
-
-  React.useLayoutEffect(() => {
-    if (savedRange.current && ref.current) restoreSelection(ref.current, savedRange.current);
-  });
+  }, [activeId, chapter?.text, store, onParagraphMeasure]);
 
   const onCtxMenu = (e) => {
     e.preventDefault();
@@ -162,8 +174,19 @@ export default function Editor({ onContextMenu }) {
     }
     onInput();
   };
+
   const onDragOver = (e) => {
     if (e.dataTransfer.types.includes(MIME.ENTITY)) e.preventDefault();
+  };
+
+  // Click on entity span → spotlight.
+  const onClick = (e) => {
+    const span = e.target.closest('[data-lw-entity-id]');
+    if (!span) return;
+    e.preventDefault();
+    const kind = span.getAttribute('data-lw-entity-kind');
+    const id = span.getAttribute('data-lw-entity-id');
+    if (kind && id) select(kind, id);
   };
 
   return (
@@ -171,7 +194,9 @@ export default function Editor({ onContextMenu }) {
       ref={ref}
       contentEditable
       suppressContentEditableWarning
+      spellCheck={true}
       onInput={onInput}
+      onClick={onClick}
       onContextMenu={onCtxMenu}
       onDragStart={onDragStart}
       onDrop={onDrop}

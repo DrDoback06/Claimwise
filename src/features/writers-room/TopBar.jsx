@@ -4,8 +4,9 @@ import React from 'react';
 import { useTheme } from './theme';
 import { useStore } from './store';
 import Icon from './entities/Icon';
+import ReadAloud from './utilities/ReadAloud';
 
-export default function TopBar({ onOpenPalette, onToggleFocus, focusMode }) {
+export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpenSettings, onOpenBible, onOpenHistory }) {
   const t = useTheme();
   const store = useStore();
   const { book } = store;
@@ -81,6 +82,26 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode }) {
         Ask the Loom… <span style={{ fontFamily: t.mono, fontSize: 9 }}>⌘K</span>
       </button>
 
+      <ReadAloud />
+
+      {onOpenHistory && (
+        <button title="Version history" onClick={onOpenHistory} className="lw-rail-btn"
+          style={{ width: 32, height: 32, borderColor: 'transparent', color: t.ink2 }}>
+          <Icon name="book" size={14} color={t.ink2} />
+        </button>
+      )}
+      {onOpenBible && (
+        <button title="Series bible" onClick={onOpenBible} className="lw-rail-btn"
+          style={{ width: 32, height: 32, borderColor: 'transparent', color: t.ink2 }}>
+          <Icon name="building" size={14} color={t.ink2} />
+        </button>
+      )}
+      {onOpenSettings && (
+        <button title="Settings" onClick={onOpenSettings} className="lw-rail-btn"
+          style={{ width: 32, height: 32, borderColor: 'transparent', color: t.ink2 }}>
+          <Icon name="cog" size={14} color={t.ink2} />
+        </button>
+      )}
       <button title="Focus mode (F9)" onClick={onToggleFocus} className="lw-rail-btn"
         style={{ width: 32, height: 32, borderColor: focusMode ? t.accent : 'transparent', color: focusMode ? t.accent : t.ink2 }}>
         <Icon name="focus" size={14} color={focusMode ? t.accent : t.ink2} />

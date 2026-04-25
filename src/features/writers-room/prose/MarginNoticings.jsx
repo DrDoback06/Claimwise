@@ -1,4 +1,4 @@
-// Loomwright — margin noticings (plan §7, §8). Cards stacked alongside prose.
+// Loomwright — margin noticings (plan §7, §8).
 
 import React from 'react';
 import { useTheme, PANEL_ACCENT } from '../theme';
@@ -16,7 +16,11 @@ const KIND_ACCENT = {
   spark: PANEL_ACCENT.loom,
 };
 
-export default function MarginNoticings({ onWalkThrough }) {
+function kindToVisibilityKey(kind) {
+  return kind === 'character' ? 'cast' : kind === 'place' ? 'atlas' : kind;
+}
+
+const MarginNoticings = React.forwardRef(function MarginNoticings({ onWalkThrough, onTethersChange }, ref) {
   const t = useTheme();
   const store = useStore();
   const activeId = store.ui?.activeChapterId || store.book?.currentChapterId;
@@ -26,8 +30,13 @@ export default function MarginNoticings({ onWalkThrough }) {
 
   const [items, setItems] = React.useState([]);
   const [running, setRunning] = React.useState(false);
+  const [hovered, setHovered] = React.useState(null);
+  const cardRefs = React.useRef({});
+  const containerRef = React.useRef(null);
 
-  // Run suggest() on chapter text changes (debounced via chapter save's own 1.2s).
+  React.useImperativeHandle(ref, () => ({ container: containerRef.current }));
+
+  // Run suggest() on chapter text changes.
   React.useEffect(() => {
     if (!chapter?.text) { setItems([]); return; }
     let cancelled = false;
@@ -45,43 +54,79 @@ export default function MarginNoticings({ onWalkThrough }) {
       if (!cancelled) setRunning(false);
     });
     return () => { cancelled = true; };
-  }, [chapter?.text, chapter?.id, store.cast, store.places, store.threads, store.items, store.profile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapter?.text, chapter?.id]);
+
+  const visible = React.useMemo(() => items.filter(s => visibility[kindToVisibilityKey(s.kind)] !== false), [items, visibility]);
+
+  // Publish tethers up to the shell so it can draw curved paths.
+  React.useEffect(() => {
+    if (!onTethersChange) return;
+    const tethers = visible.map(s => {
+      const span = s.span || {};
+      // Find the paragraph containing the start offset by scanning chapter paragraphs.
+      const paragraphs = chapter?.paragraphs || [];
+      let cumulative = 0, paragraphId = null;
+      for (const p of paragraphs) {
+        const len = (p.text || '').length + 2; // approx for the \n\n joiner
+        if (span.start != null && span.start <= cumulative + len) { paragraphId = p.id; break; }
+        cumulative += len;
+      }
+      const paragraphEl = paragraphId
+        ? document.querySelector(`[data-paragraph-id="${paragraphId}"]`)
+        : null;
+      const cardEl = cardRefs.current[s.id];
+      return {
+        id: s.id, paragraphEl, cardEl,
+        color: KIND_ACCENT[s.kind] || t.accent,
+        hover: hovered === s.id,
+      };
+    });
+    onTethersChange(tethers);
+  }, [visible, hovered, chapter, onTethersChange, t.accent]);
 
   if (!tweaks.showMargin) return null;
 
-  const visible = items.filter(s => {
-    const kind = ['character', 'place'].includes(s.kind) ? (s.kind === 'character' ? 'cast' : 'atlas') : s.kind;
-    return visibility[kind] !== false;
-  });
+  const dismiss = (s) => {
+    store.recordFeedback(s.kind, 'dismiss', { suggestionId: s.id });
+    setItems(prev => prev.filter(x => x.id !== s.id));
+  };
 
   return (
-    <aside style={{
+    <aside ref={containerRef} style={{
       width: 280, padding: '40px 16px',
       borderLeft: `1px solid ${t.rule}`, background: t.paper,
-      overflowY: 'auto', flexShrink: 0,
+      overflowY: 'auto', flexShrink: 0, position: 'relative',
     }}>
       <div style={{
         fontFamily: t.mono, fontSize: 9, color: t.ink3,
         letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 12,
       }}>
-        Margin · {running ? 'listening…' : `${visible.length} noticings`}
+        Margin · {running ? 'listening…' : `${visible.length} noticing${visible.length === 1 ? '' : 's'}`}
       </div>
       {visible.length === 0 && !running && (
         <div style={{
           fontFamily: t.display, fontSize: 13, color: t.ink3, fontStyle: 'italic',
           lineHeight: 1.5, padding: '20px 0',
-        }}>The Loom is listening. Keep writing — I'll mark anything worth a second look.</div>
+        }}>The Loom is listening. Keep writing — anything worth marking will surface here.</div>
       )}
       {visible.map(s => (
-        <div key={s.id} className="lw-noticing" style={{
-          marginBottom: 10, padding: 10,
-          background: t.paper2, borderLeft: `2px solid ${KIND_ACCENT[s.kind] || t.accent}`,
-          borderRadius: 1,
-        }}>
+        <div key={s.id}
+          ref={el => { if (el) cardRefs.current[s.id] = el; }}
+          className="lw-noticing"
+          onMouseEnter={() => setHovered(s.id)}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            marginBottom: 10, padding: 10,
+            background: hovered === s.id ? t.paper3 : t.paper2,
+            borderLeft: `2px solid ${KIND_ACCENT[s.kind] || t.accent}`,
+            borderRadius: 1,
+            transition: 'background 120ms',
+          }}>
           <div style={{
             fontFamily: t.mono, fontSize: 9, color: t.ink3,
             letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 4,
-          }}>{s.kind}</div>
+          }}>{s.kind} · {Math.round((s.combined_score || s.confidence || 0) * 100)}%</div>
           <div style={{
             fontFamily: t.display, fontSize: 13, color: t.ink, lineHeight: 1.5,
           }}>{s.proposal?.name || s.rationale}</div>
@@ -95,18 +140,13 @@ export default function MarginNoticings({ onWalkThrough }) {
             {(s.actions || []).includes('walk-through') && (
               <button onClick={() => onWalkThrough?.(s)} style={btnStyle(t)}>Walk me through it</button>
             )}
-            <button
-              onClick={() => {
-                store.recordFeedback(s.kind, 'dismiss', { suggestionId: s.id });
-                setItems(prev => prev.filter(x => x.id !== s.id));
-              }}
-              style={btnStyle(t, true)}>Dismiss</button>
+            <button onClick={() => dismiss(s)} style={btnStyle(t, true)}>Dismiss</button>
           </div>
         </div>
       ))}
     </aside>
   );
-}
+});
 
 function btnStyle(t, ghost) {
   return {
@@ -120,3 +160,5 @@ function btnStyle(t, ghost) {
     cursor: 'pointer',
   };
 }
+
+export default MarginNoticings;

@@ -24,3 +24,18 @@ One-line entries per checkpoint.
 - Step 20 (Series Bible): Right-rail drawer with Chapters / Plot / Cast / Places / Threads / Items / Lore audit tabs. Lore audit surfaces duplicate names, ownerless items, beat-less threads.
 - Step 21 (Utilities): `utilities/ReadAloud.jsx` plays current chapter via SpeechSynthesis. Command palette has prose search + entity search + actions.
 - Step 22 (Wiring + verification): `Shell.jsx` composes everything. `index.jsx` wraps in providers. `AppRouter.jsx` routes `#/writers` (or `?writers=1`) to the new room while preserving the legacy app at `/`. Build verified — `npm run build` succeeds with only pre-existing legacy warnings; the new code compiles cleanly.
+
+## Polish pass
+
+- Real entity detector (`services/detectors.js`) — capitalised-name heuristic with stopword filter, place-trigger phrases, dedupe vs known cast/places. Replaces broken legacy-method calls. Echo / adverb / long-sentence detectors added.
+- Inline entity highlighting in prose. `prose/highlights.js` decorates paragraphs with `<span data-lw-entity-id>` styled with the entity's accent. Click → spotlight.
+- Curved SVG tethers between margin noticings and source paragraphs (`prose/Tethers.jsx`). Hover a card → its tether brightens.
+- Settings panel (`Settings.jsx`) — theme, intrusion, atlas auto-track, AI provider, per-tweak toggles, export/import backup, double-confirm clear-all with auto-backup.
+- Snapshots (`utilities/snapshots.js`) — auto on chapter save, throttled 10 min/chapter, capped 25/chapter. Version history modal (`utilities/VersionHistory.jsx`) with slider + restore-with-pre-snapshot.
+- Group chat panel (`panels/groupchat/`) — multi-character round-table over `aiService.callAI`. Optional auto-chain ("let them question each other").
+- Read-aloud upgrade — sentence-by-sentence with `lw-tts-active` paragraph highlight + speed dial.
+- Keyboard help overlay (`KeyboardHelp.jsx`) bound to `?`.
+- TopBar gains Read / History / Bible / Settings buttons.
+- LeftRail adds Group Chat toggle.
+- AppRouter flips: WritersRoom is now the default; legacy app available at `#/legacy`.
+- Words-today resets at user-local midnight via `book.wordsTodayDate`.
