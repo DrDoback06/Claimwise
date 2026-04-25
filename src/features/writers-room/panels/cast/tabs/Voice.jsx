@@ -3,6 +3,7 @@
 import React from 'react';
 import { useTheme } from '../../../theme';
 import { useStore } from '../../../store';
+import { chapterList } from '../../../store/selectors';
 
 const AXES = [
   { key: 'lyric', label: 'Lyric ⇄ Plain' },
@@ -61,6 +62,68 @@ export default function VoiceTab({ character: c, update }) {
           }}
         />
       </div>
+
+      <DialogueExtract character={c} />
     </div>
   );
+}
+
+function DialogueExtract({ character }) {
+  const t = useTheme();
+  const store = useStore();
+  const lines = React.useMemo(() => extractDialogue(store, character), [store.chapters, store.book?.chapterOrder, character?.name, character?.aliases]);
+  if (!lines.length) return null;
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{
+        fontFamily: t.mono, fontSize: 9, color: t.ink3,
+        letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 6,
+      }}>What they have said · {lines.length} line{lines.length !== 1 ? 's' : ''}</div>
+      <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+        {lines.slice(0, 30).map((ln, i) => (
+          <div key={i} style={{
+            padding: '6px 8px', marginBottom: 4,
+            background: t.paper2, borderLeft: `2px solid ${character.color || t.accent}`, borderRadius: 1,
+          }}>
+            <div style={{ fontFamily: t.display, fontSize: 13, color: t.ink, fontStyle: 'italic', lineHeight: 1.5 }}>
+              "{ln.text}"
+            </div>
+            <div style={{
+              fontFamily: t.mono, fontSize: 9, color: t.ink3,
+              letterSpacing: 0.12, textTransform: 'uppercase', marginTop: 2,
+            }}>ch.{ln.chapterN}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function extractDialogue(store, character) {
+  if (!character?.name) return [];
+  const names = [character.name, ...(character.aliases || [])].filter(Boolean);
+  const namePattern = `(?:${names.map(escapeRegExp).join('|')})`;
+  // Quoted line + (said/asked/whispered/etc.) + name, in either order, allowing for tags before or after.
+  const verbs = '(?:said|asked|replied|whispered|shouted|murmured|cried|growled|gasped|breathed|hissed|added|continued|murmured)';
+  const out = [];
+  for (const ch of chapterList(store)) {
+    const text = ch.text || '';
+    if (!text) continue;
+    // Pattern A: "Line," NAME said.
+    const reA = new RegExp(`["“]([^"”]+?)["”][,.\\s]*(?:${verbs}\\s+)?${namePattern}`, 'gi');
+    let m;
+    while ((m = reA.exec(text)) !== null) out.push({ text: m[1].trim(), chapterN: ch.n });
+    // Pattern B: NAME said, "Line."
+    const reB = new RegExp(`${namePattern}[,\\s]+(?:${verbs}\\s+)?["“]([^"”]+?)["”]`, 'gi');
+    while ((m = reB.exec(text)) !== null) out.push({ text: m[1].trim(), chapterN: ch.n });
+  }
+  // Dedupe by text.
+  const seen = new Set();
+  return out.filter(l => {
+    const k = l.text.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
 }

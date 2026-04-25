@@ -106,6 +106,7 @@ export default function Settings({ onClose }) {
 
         <Section t={t} title="Auto-track movement on the Atlas">
           <Chips t={t} items={ATLAS_AUTO} selected={[tweaks.atlasAuto || 'conservative']} onChange={v => set('ui.tweaks.atlasAuto', v[0])} />
+          <Toggle t={t} label="Show every character's journey at once" value={tweaks.atlasShowAll === true} onChange={v => set('ui.tweaks.atlasShowAll', v)} />
         </Section>
 
         <Section t={t} title="AI provider">

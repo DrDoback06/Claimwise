@@ -13,7 +13,8 @@ const PANELS = [
   { id: 'items',     label: 'Items',      icon: 'bag',     accent: PANEL_ACCENT.items },
   { id: 'language',  label: 'Language',   icon: 'pen',     accent: PANEL_ACCENT.language },
   { id: 'tangle',    label: 'Tangle',     icon: 'tangle',  accent: PANEL_ACCENT.tangle },
-  { id: 'groupchat', label: 'Group chat', icon: 'chat',    accent: PANEL_ACCENT.cast },
+  { id: 'interview', label: 'Interview',  icon: 'chat',    accent: PANEL_ACCENT.cast },
+  { id: 'groupchat', label: 'Round table', icon: 'users',  accent: PANEL_ACCENT.cast },
 ];
 
 export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onOpenWeaver }) {

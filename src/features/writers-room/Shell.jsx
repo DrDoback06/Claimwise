@@ -29,12 +29,13 @@ import ItemsPanel from './panels/items';
 import LanguagePanel from './panels/language';
 import TanglePanel from './panels/tangle';
 import GroupChatPanel from './panels/groupchat';
+import InterviewPanel from './panels/interview';
 import SeriesBible from './panels/series-bible';
 
 const PANEL_COMPONENTS = {
   cast: CastPanel, atlas: AtlasPanel, threads: ThreadsPanel,
   voice: VoicePanel, items: ItemsPanel, language: LanguagePanel,
-  tangle: TanglePanel, groupchat: GroupChatPanel,
+  tangle: TanglePanel, groupchat: GroupChatPanel, interview: InterviewPanel,
 };
 
 export default function Shell() {
@@ -244,7 +245,7 @@ export default function Shell() {
               onClose={() => closePanel(id)}
               onSummonRing={(args) => setRing({ ...args })}
               onWeave={() => setWeaverOpen(true)}
-              onInterview={() => ensurePanelOpen('groupchat')}
+              onInterview={() => ensurePanelOpen('interview')}
             />;
           })}
         </div>
