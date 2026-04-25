@@ -12,6 +12,7 @@ import {
   createChapter, removeChapter, reorderChapters,
   rid, wordCount, pickColor, clearDraftFlag,
 } from './mutators';
+import suggestionFeedbackService from '../../../services/suggestionFeedbackService';
 
 const StoreCtx = React.createContext(null);
 
@@ -154,14 +155,12 @@ export function StoreProvider({ children }) {
     }));
     // Best-effort write to legacy feedback service.
     try {
-      // eslint-disable-next-line global-require
-      const svc = require('../../../services/suggestionFeedbackService').default;
-      const fn = svc?.recordAcceptance || svc?.recordFeedback;
+      const fn = suggestionFeedbackService?.recordAcceptance || suggestionFeedbackService?.recordFeedback;
       if (fn) {
         const sid = extra.suggestionId || `${kind}_${Date.now()}`;
-        const p = svc.recordAcceptance
-          ? svc.recordAcceptance(sid, action, { suggestionType: kind, ...extra })
-          : svc.recordFeedback({ suggestionType: kind, action, timestamp: Date.now(), ...extra });
+        const p = suggestionFeedbackService.recordAcceptance
+          ? suggestionFeedbackService.recordAcceptance(sid, action, { suggestionType: kind, ...extra })
+          : suggestionFeedbackService.recordFeedback({ suggestionType: kind, action, timestamp: Date.now(), ...extra });
         p?.catch?.(() => {});
       }
     } catch {}

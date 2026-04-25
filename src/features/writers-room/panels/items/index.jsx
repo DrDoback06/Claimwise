@@ -125,6 +125,8 @@ function ItemDetail({ item }) {
           style={{ width: '100%', fontFamily: t.display, fontSize: 12, color: t.ink, background: 'transparent', border: 'none', outline: 'none', fontStyle: 'italic' }} />
       </div>
 
+      <OwnershipTimeline item={item} />
+
       <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.16, textTransform: 'uppercase', marginTop: 10, marginBottom: 6 }}>Across the book</div>
       {track.length === 0 ? (
         <div style={{ fontFamily: t.display, fontSize: 12, color: t.ink3, fontStyle: 'italic' }}>No chapter mentions yet.</div>
@@ -139,6 +141,71 @@ function ItemDetail({ item }) {
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+function OwnershipTimeline({ item }) {
+  const t = useTheme();
+  const store = useStore();
+  // Track is the canonical ownership history if present.
+  // Each entry shape: { ch, owner: charId, act, detail, warning }.
+  const track = item.track || [];
+  // Synthesise from cast if track empty: chapters where the current owner is mentioned with the item.
+  const synthetic = React.useMemo(() => {
+    if (track.length || !item.owner || !item.name) return [];
+    const owner = (store.cast || []).find(c => c.id === item.owner);
+    if (!owner?.name) return [];
+    const out = [];
+    const order = store.book?.chapterOrder || [];
+    for (const id of order) {
+      const ch = store.chapters?.[id];
+      if (!ch) continue;
+      const text = ch.text || '';
+      const both = text.includes(item.name) && text.includes(owner.name);
+      if (both) out.push({ ch: ch.n, owner: owner.id, act: 'carries' });
+    }
+    return out;
+  }, [item.track, item.owner, item.name, store.book?.chapterOrder, store.chapters, store.cast]);
+
+  const entries = track.length ? track : synthetic;
+
+  if (entries.length === 0) {
+    return (
+      <div style={{ marginBottom: 10, padding: '8px 10px', background: t.paper2, borderLeft: `2px solid ${t.rule}`, borderRadius: 1 }}>
+        <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 4 }}>Ownership timeline</div>
+        <div style={{ fontFamily: t.display, fontSize: 12, color: t.ink3, fontStyle: 'italic' }}>
+          No ownership history yet. Set an owner above and the Loom will track them through the chapters.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 6 }}>
+        Ownership timeline
+      </div>
+      <div>
+        {entries.map((e, i) => {
+          const owner = (store.cast || []).find(c => c.id === e.owner);
+          return (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '46px 8px 1fr', gap: 8, alignItems: 'center',
+              padding: '4px 0',
+              borderTop: i > 0 ? `1px solid ${t.rule}` : 'none',
+            }}>
+              <span style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.1, textTransform: 'uppercase' }}>CH.{String(e.ch).padStart(2, '0')}</span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: owner?.color || t.accent }} />
+              <div style={{ fontSize: 12, color: t.ink2 }}>
+                <span style={{ fontWeight: 500, color: t.ink }}>{owner?.name || '?'}</span> {e.act || 'has it'}
+                {e.detail && <span style={{ fontStyle: 'italic' }}> — {e.detail}</span>}
+                {e.warning && <span style={{ color: t.warn }}> ⚠ {e.warning}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

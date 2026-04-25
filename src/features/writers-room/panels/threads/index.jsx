@@ -87,6 +87,23 @@ export default function ThreadsPanel({ onClose, onWeave }) {
 
 function ThreadCard({ thread: th, active, onSelect, dormant }) {
   const t = useTheme();
+  const store = useStore();
+  const beats = th.beats || [];
+  const totalCh = store.book?.chapterOrder?.length || 1;
+  const currentN = (() => {
+    const id = store.ui?.activeChapterId || store.book?.currentChapterId;
+    return id ? (store.chapters?.[id]?.n || 1) : 1;
+  })();
+  const lastBeat = beats.reduce((a, b) => (b.chapterN > (a?.chapterN || -1) ? b : a), null);
+  const lastN = lastBeat?.chapterN ?? 0;
+  const gap = currentN - lastN;
+  // Status colour: green if last beat in this chapter or last 2 chapters,
+  // amber if 3-5 ago, red if dangling 6+ or zero beats.
+  let status = t.good;
+  if (beats.length === 0) status = t.bad;
+  else if (gap > 5) status = t.bad;
+  else if (gap > 2) status = t.warn;
+
   return (
     <div onClick={onSelect}
       draggable
@@ -100,12 +117,26 @@ function ThreadCard({ thread: th, active, onSelect, dormant }) {
         borderRadius: 1, cursor: 'grab',
         opacity: dormant ? 0.6 : 1,
       }}>
+      <div style={{
+        width: 4, alignSelf: 'stretch', background: status, borderRadius: 1,
+      }} title={beats.length === 0 ? 'No beats yet — possibly dangling.' : `Last beat: ch.${lastN || '—'}`} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: t.display, fontSize: 13, color: t.ink, fontWeight: 500 }}>{th.name}</div>
         <div style={{
           fontFamily: t.mono, fontSize: 9, color: t.ink3,
           letterSpacing: 0.12, textTransform: 'uppercase',
-        }}>{th.severity || 'medium'} · {(th.beats || []).length} beats</div>
+        }}>{th.severity || 'medium'} · {beats.length} beat{beats.length === 1 ? '' : 's'} · last ch.{lastN || '—'}</div>
+        {/* Mini-timeline */}
+        <div style={{ display: 'flex', gap: 1, marginTop: 4, height: 4 }}>
+          {Array.from({ length: totalCh }, (_, i) => {
+            const beatHere = beats.find(b => (b.chapterN || 0) === (i + 1));
+            return <div key={i} title={`ch.${i + 1}${beatHere ? ': ' + beatHere.text : ''}`} style={{
+              flex: 1, height: '100%',
+              background: beatHere ? (th.color || t.accent) : t.rule,
+              opacity: beatHere ? 1 : 0.35,
+            }} />;
+          })}
+        </div>
       </div>
     </div>
   );

@@ -50,8 +50,16 @@ export default function TanglePanel({ onClose }) {
     const edges = tg.edges || [];
     const idx = edges.findIndex(e => (e.from === a && e.to === b) || (e.from === b && e.to === a));
     if (idx >= 0) return { nodes: tg.nodes, edges: edges.filter((_, j) => j !== idx), layout: tg.layout };
-    return { nodes: tg.nodes, edges: [...edges, { id: rid('me'), from: a, to: b }], layout: tg.layout };
+    return { nodes: tg.nodes, edges: [...edges, { id: rid('me'), from: a, to: b, kind: 'tied to', strength: 0.5 }], layout: tg.layout };
   });
+
+  const updateEdge = (id, patch) => setTangle(tg => ({
+    nodes: tg.nodes,
+    edges: (tg.edges || []).map(e => e.id === id ? { ...e, ...patch } : e),
+    layout: tg.layout,
+  }));
+
+  const [edgeInspector, setEdgeInspector] = React.useState(null);
 
   const [dragOver, setDragOver] = React.useState(false);
   const onDrop = (e) => {
@@ -147,15 +155,48 @@ export default function TanglePanel({ onClose }) {
           outline: dragOver ? `2px dashed ${PANEL_ACCENT.tangle}` : 'none',
           outlineOffset: -4,
         }}>
-        <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
           {(tangle.edges || []).map(e => {
             const a = tangle.nodes.find(n => n.id === e.from);
             const b = tangle.nodes.find(n => n.id === e.to);
             if (!a || !b) return null;
             const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - 30;
-            return <path key={e.id} d={`M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`} stroke={t.rule} strokeWidth="1" fill="none" />;
+            const strength = e.strength ?? 0.5;
+            return (
+              <g key={e.id}>
+                <path
+                  d={`M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`}
+                  stroke={t.rule} strokeWidth={1 + strength * 2} fill="none"
+                  opacity={0.4 + strength * 0.6}
+                />
+                <path
+                  d={`M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`}
+                  stroke="transparent" strokeWidth={14} fill="none"
+                  style={{ cursor: 'pointer' }}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    const rect = ev.currentTarget.ownerSVGElement.getBoundingClientRect();
+                    setEdgeInspector({ edge: e, x: rect.left + mx, y: rect.top + my });
+                  }}
+                />
+                {e.kind && (
+                  <text x={mx} y={my} fontSize="9" fontFamily={t.mono}
+                    fill={t.ink3} textAnchor="middle"
+                    style={{ pointerEvents: 'none', letterSpacing: 0.12 }}>{e.kind}</text>
+                )}
+              </g>
+            );
           })}
         </svg>
+        {edgeInspector && (
+          <EdgeInspector
+            edge={edgeInspector.edge}
+            x={edgeInspector.x} y={edgeInspector.y}
+            onClose={() => setEdgeInspector(null)}
+            onChange={(patch) => updateEdge(edgeInspector.edge.id, patch)}
+            onDelete={() => { toggleEdge(edgeInspector.edge.from, edgeInspector.edge.to); setEdgeInspector(null); }}
+          />
+        )}
         {tangle.nodes.map(n => (
           <NodeView key={n.id} node={n}
             onMouseDown={(e) => onMouseDown(e, n)}
@@ -227,4 +268,58 @@ function btnStyle(t, primary) {
     fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
     textTransform: 'uppercase', cursor: 'pointer',
   };
+}
+
+function EdgeInspector({ edge, x, y, onClose, onChange, onDelete }) {
+  const t = useTheme();
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onOutside = (e) => { if (!e.target.closest('[data-lw-edge-inspector]')) onClose(); };
+    const id = setTimeout(() => {
+      window.addEventListener('keydown', onKey);
+      window.addEventListener('click', onOutside);
+    }, 0);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('click', onOutside);
+    };
+  }, [onClose]);
+  return (
+    <div data-lw-edge-inspector style={{
+      position: 'fixed', left: x, top: y, transform: 'translate(-50%, -100%)',
+      width: 220, padding: 10,
+      background: t.paper, border: `1px solid ${t.rule}`, borderRadius: 2,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.16)',
+      zIndex: 50, pointerEvents: 'auto',
+    }}>
+      <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 4 }}>
+        Connection
+      </div>
+      <input
+        autoFocus
+        value={edge.kind || ''}
+        onChange={(e) => onChange({ kind: e.target.value })}
+        placeholder="kind (tied to / opposes / loves)"
+        style={{
+          width: '100%', padding: '5px 8px', marginBottom: 6,
+          background: t.paper2, border: `1px solid ${t.rule}`, borderRadius: 1, outline: 'none',
+          fontFamily: t.display, fontSize: 12, color: t.ink,
+        }}
+      />
+      <div style={{
+        fontFamily: t.mono, fontSize: 9, color: t.ink3,
+        letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 4,
+      }}>Strength · {(edge.strength ?? 0.5).toFixed(2)}</div>
+      <input type="range" min={0} max={1} step={0.05}
+        value={edge.strength ?? 0.5}
+        onChange={(e) => onChange({ strength: Number(e.target.value) })}
+        style={{ width: '100%', accentColor: t.accent }} />
+      <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+        <button onClick={onClose} style={btnStyle(t)}>Close</button>
+        <div style={{ flex: 1 }} />
+        <button onClick={onDelete} style={{ ...btnStyle(t), borderColor: t.bad, color: t.bad }}>Cut</button>
+      </div>
+    </div>
+  );
 }

@@ -1,17 +1,39 @@
-// Loomwright — collapsible panel section.
+// Loomwright — collapsible panel section. Persists open/closed state per
+// title in localStorage so the writer's chosen layout survives reload.
 
 import React from 'react';
 import { useTheme } from '../theme';
 
+const KEY = 'lw.collapse';
+function readCollapse() {
+  try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; }
+}
+function writeCollapse(map) {
+  try { localStorage.setItem(KEY, JSON.stringify(map)); } catch {}
+}
+
 export default function CollapseSection({ title, count, accent, defaultOpen = true, children }) {
   const t = useTheme();
-  const [open, setOpen] = React.useState(defaultOpen);
+  const [open, setOpen] = React.useState(() => {
+    const map = readCollapse();
+    if (title in map) return map[title];
+    return defaultOpen;
+  });
+  const toggle = () => {
+    setOpen(prev => {
+      const next = !prev;
+      const map = readCollapse();
+      map[title] = next;
+      writeCollapse(map);
+      return next;
+    });
+  };
   return (
     <section style={{
       borderTop: `1px solid ${t.rule}`,
       padding: '10px 16px 12px',
     }}>
-      <button onClick={() => setOpen(o => !o)} style={{
+      <button onClick={toggle} style={{
         display: 'flex', alignItems: 'center', gap: 8, width: '100%',
         background: 'transparent', border: 'none', cursor: 'pointer',
         padding: 0, marginBottom: open ? 8 : 0, color: t.ink2,

@@ -142,17 +142,29 @@ export default function MapCanvas({ onSummonRing }) {
         {places.map(p => {
           const isSel = sel.place === p.id;
           const color = PLACE_COLORS[p.kind] || t.ink3;
+          const visits = (p.visits || []).length;
+          // 7-base; +1 per visit (capped at +12).
+          const r = (isSel ? 9 : 7) + Math.min(12, visits);
           return (
             <g key={p.id} onClick={(e) => { e.stopPropagation(); select('place', p.id); }} style={{ cursor: 'pointer' }}>
+              {visits > 0 && (
+                <circle cx={p.x ?? 0} cy={p.y ?? 0} r={r + 6}
+                  fill={color} opacity={0.10} />
+              )}
               <circle
-                cx={p.x ?? 0} cy={p.y ?? 0} r={isSel ? 9 : 7}
+                cx={p.x ?? 0} cy={p.y ?? 0} r={r}
                 fill={p.proposed ? 'none' : color}
                 stroke={color} strokeWidth={isSel ? 2 : 1}
                 strokeDasharray={p.proposed ? '3 2' : ''}
               />
-              <text x={p.x ?? 0} y={(p.y ?? 0) + 18}
+              <text x={p.x ?? 0} y={(p.y ?? 0) + r + 12}
                 fontSize={11} fontFamily={t.display} fill={t.ink}
                 textAnchor="middle">{p.name}</text>
+              {visits > 0 && (
+                <text x={p.x ?? 0} y={(p.y ?? 0) + 4}
+                  fontSize={9} fontFamily={t.mono} fill={t.onAccent}
+                  textAnchor="middle" fontWeight="600" pointerEvents="none">{visits}</text>
+              )}
             </g>
           );
         })}

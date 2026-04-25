@@ -53,8 +53,7 @@ export default function Dossier({ charId, onInterview, onWeave }) {
   };
 
   const updateChar = (patch) => {
-    store.setSlice('cast', xs => xs.map(x => x.id === c.id ? { ...x, ...patch } : x));
-    if (c.draftedByLoom) clearDraftFlag(store, 'character', c.id);
+    store.setSlice('cast', xs => xs.map(x => x.id === c.id ? { ...x, ...patch, draftedByLoom: false } : x));
   };
 
   const TabCmp = TABS.find(x => x.id === tab)?.cmp || IdentityTab;

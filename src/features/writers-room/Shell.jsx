@@ -18,6 +18,7 @@ import WalkThroughWizard from './wizard/WalkThroughWizard';
 import Onboarding from './onboarding';
 import Settings from './Settings';
 import KeyboardHelp from './KeyboardHelp';
+import WritingAid from './WritingAid';
 import VersionHistory from './utilities/VersionHistory';
 import { shouldAutoSnapshot, makeSnapshot, pushSnapshot } from './utilities/snapshots';
 
@@ -45,6 +46,7 @@ export default function Shell() {
 
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [weaverOpen, setWeaverOpen] = React.useState(false);
+  const [aidOpen, setAidOpen] = React.useState(false);
   const [ring, setRing] = React.useState(null);
   const [wizard, setWizard] = React.useState(null);
   const [seriesOpen, setSeriesOpen] = React.useState(false);
@@ -114,6 +116,7 @@ export default function Shell() {
       return;
     }
     if (actionId === 'open.weaver') setWeaverOpen(true);
+    if (actionId === 'open.aid') setAidOpen(true);
     if (actionId === 'open.settings') setSettingsOpen(true);
     if (actionId === 'open.bible') setSeriesOpen(true);
     if (actionId === 'open.history') setHistoryOpen(true);
@@ -159,6 +162,9 @@ export default function Shell() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
         e.preventDefault(); setWeaverOpen(true); return;
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault(); setAidOpen(true); return;
+      }
       if (!inField && e.key === 'F9') {
         e.preventDefault();
         store.setPath('ui.focusMode', !focusMode);
@@ -173,6 +179,7 @@ export default function Shell() {
         if (ring) { setRing(null); return; }
         if (wizard) { setWizard(null); return; }
         if (paletteOpen) { setPaletteOpen(false); return; }
+        if (aidOpen) { setAidOpen(false); return; }
         if (weaverOpen) { setWeaverOpen(false); return; }
         if (seriesOpen) { setSeriesOpen(false); return; }
         if (openPanels.length) { store.setPath('ui.panels', openPanels.slice(0, -1)); return; }
@@ -180,7 +187,7 @@ export default function Shell() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [focusMode, ring, wizard, paletteOpen, weaverOpen, seriesOpen, settingsOpen, helpOpen, historyOpen, openPanels, store]);
+  }, [focusMode, ring, wizard, paletteOpen, weaverOpen, aidOpen, seriesOpen, settingsOpen, helpOpen, historyOpen, openPanels, store]);
 
   if (store._loading) {
     return (
@@ -205,6 +212,7 @@ export default function Shell() {
           onTogglePanel={togglePanel}
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenWeaver={() => setWeaverOpen(true)}
+          onOpenAid={() => setAidOpen(true)}
         />
       )}
       <div className="lw-center">
@@ -253,6 +261,7 @@ export default function Shell() {
 
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onAction={onAction} />}
       {weaverOpen && <InlineWeaver onClose={() => setWeaverOpen(false)} onWalkThrough={onWalkThrough} />}
+      {aidOpen && <WritingAid onClose={() => setAidOpen(false)} />}
       {ring && <SummoningRing {...ring} onAction={onRingAction} onClose={() => setRing(null)} />}
       {wizard && <WalkThroughWizard kind={wizard.kind} proposal={wizard.proposal} onClose={() => setWizard(null)} />}
       {seriesOpen && <SeriesBible onClose={() => setSeriesOpen(false)} />}

@@ -6,6 +6,7 @@ import { useStore, createCharacter } from '../../store';
 import { useSelection } from '../../selection';
 import { dragEntity } from '../../drag';
 import { castOnPage, castOffPage } from '../../store/selectors';
+import { characterMetrics } from './appearances';
 
 export default function Roster({ activeId, onSelect }) {
   const t = useTheme();
@@ -25,6 +26,8 @@ export default function Roster({ activeId, onSelect }) {
   const activeCh = store.ui?.activeChapterId
     ? store.chapters?.[store.ui.activeChapterId]
     : null;
+  const totalChapters = store.book?.chapterOrder?.length || 1;
+  const activeChIdx = activeCh ? (store.book?.chapterOrder || []).indexOf(activeCh.id) : -1;
 
   return (
     <div style={{ padding: '12px 16px', borderBottom: `1px solid ${t.rule}` }}>
@@ -90,6 +93,60 @@ export default function Roster({ activeId, onSelect }) {
           fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
           textTransform: 'uppercase', cursor: 'pointer', borderRadius: 1,
         }}>+ new</button>
+      </div>
+
+      {activeId && (
+        <ChapterStrip
+          characterId={activeId}
+          totalChapters={totalChapters}
+          activeChIdx={activeChIdx}
+        />
+      )}
+    </div>
+  );
+}
+
+function ChapterStrip({ characterId, totalChapters, activeChIdx }) {
+  const t = useTheme();
+  const store = useStore();
+  const character = (store.cast || []).find(c => c.id === characterId);
+  const metrics = React.useMemo(() => characterMetrics(store, character), [store.chapters, store.book?.chapterOrder, character]);
+  if (!character) return null;
+  const peak = metrics.perChapter.reduce((a, b) => Math.max(a, b.mentions), 1);
+  const order = store.book?.chapterOrder || [];
+
+  const jumpTo = (id) => {
+    store.setPath('ui.activeChapterId', id);
+    store.setPath('book.currentChapterId', id);
+  };
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{
+        fontFamily: t.mono, fontSize: 9, color: t.ink3,
+        letterSpacing: 0.14, textTransform: 'uppercase', marginBottom: 4,
+      }}>Across {totalChapters} chapter{totalChapters === 1 ? '' : 's'}</div>
+      <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 24 }}>
+        {order.map((id, i) => {
+          const cell = metrics.perChapter.find(c => c.id === id) || { mentions: 0 };
+          const intensity = peak > 0 ? cell.mentions / peak : 0;
+          const isActive = i === activeChIdx;
+          return (
+            <button key={id}
+              onClick={() => jumpTo(id)}
+              title={`ch.${i + 1}: ${cell.mentions} mention${cell.mentions === 1 ? '' : 's'}`}
+              style={{
+                flex: 1, height: '100%', minWidth: 4, padding: 0,
+                border: `1px solid ${isActive ? t.accent : 'transparent'}`,
+                background: cell.mentions > 0
+                  ? (character.color || t.accent)
+                  : t.rule,
+                opacity: cell.mentions > 0 ? Math.max(0.25, intensity) : 0.25,
+                cursor: 'pointer',
+                borderRadius: 1,
+              }} />
+          );
+        })}
       </div>
     </div>
   );

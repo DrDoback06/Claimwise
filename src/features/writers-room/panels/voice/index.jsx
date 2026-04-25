@@ -5,7 +5,8 @@ import PanelFrame from '../PanelFrame';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore } from '../../store';
 import { useSelection } from '../../selection';
-import { characterById, chapterList } from '../../store/selectors';
+import { characterById, activeChapter } from '../../store/selectors';
+import { profileFromSamples, scoreParagraph } from './scoring';
 
 export default function VoicePanel({ onClose }) {
   const t = useTheme();
@@ -74,6 +75,8 @@ export default function VoicePanel({ onClose }) {
         </div>
       </div>
 
+      {character && <ParagraphMatchList character={character} profile={profile} />}
+
       {character && (
         <div style={{ padding: '12px 16px', borderTop: `1px solid ${t.rule}` }}>
           <div style={{
@@ -124,5 +127,63 @@ export default function VoicePanel({ onClose }) {
         </div>
       )}
     </PanelFrame>
+  );
+}
+
+function ParagraphMatchList({ character, profile }) {
+  const t = useTheme();
+  const store = useStore();
+  const ch = activeChapter(store);
+
+  const heuristicProfile = React.useMemo(() => {
+    if (profile?.dials || profile?.samples?.length) {
+      const samples = (profile?.samples || []).map(s => s.text).filter(Boolean);
+      const text = [character?.voice, character?.dossier?.voice, ...samples].filter(Boolean).join('\n');
+      return profileFromSamples(text);
+    }
+    return profileFromSamples([character?.voice, character?.dossier?.voice].filter(Boolean).join('\n'));
+  }, [profile, character]);
+
+  if (!heuristicProfile || !ch?.paragraphs?.length) return null;
+
+  const scores = ch.paragraphs.map(p => ({
+    id: p.id,
+    text: p.text,
+    score: scoreParagraph(p.text, heuristicProfile),
+  })).filter(s => s.score != null);
+
+  if (!scores.length) return null;
+
+  const jumpTo = (pid) => {
+    const el = document.querySelector(`[data-paragraph-id="${pid}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  return (
+    <div style={{ padding: '12px 16px', borderTop: `1px solid ${t.rule}` }}>
+      <div style={{
+        fontFamily: t.mono, fontSize: 9, color: t.ink3,
+        letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 6,
+      }}>Per-paragraph match · this chapter</div>
+      {scores.map(s => {
+        const colour = s.score > 0.85 ? t.good : s.score > 0.7 ? t.warn : t.bad;
+        return (
+          <div key={s.id}
+            onClick={() => jumpTo(s.id)}
+            style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0', cursor: 'pointer' }}>
+            <span style={{ fontFamily: t.mono, fontSize: 10, color: colour, width: 30, textAlign: 'right' }}>
+              {Math.round(s.score * 100)}
+            </span>
+            <span style={{ width: 80, height: 3, background: t.rule, borderRadius: 1, overflow: 'hidden' }}>
+              <span style={{ display: 'block', width: `${s.score * 100}%`, height: '100%', background: colour }} />
+            </span>
+            <span style={{
+              flex: 1, fontFamily: t.display, fontSize: 11, color: t.ink2, fontStyle: 'italic',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{(s.text || '').slice(0, 60)}{s.text?.length > 60 ? '…' : ''}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }

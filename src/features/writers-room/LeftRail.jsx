@@ -17,7 +17,7 @@ const PANELS = [
   { id: 'groupchat', label: 'Round table', icon: 'users',  accent: PANEL_ACCENT.cast },
 ];
 
-export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onOpenWeaver }) {
+export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onOpenWeaver, onOpenAid }) {
   const t = useTheme();
   return (
     <div className="lw-leftrail" style={{
@@ -30,14 +30,21 @@ export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onO
       }}>L</div>
 
       <button
-        title="Weave (⌘J)"
-        onClick={onOpenWeaver}
+        title="Writing aid (⌘\\)"
+        onClick={onOpenAid}
         className="lw-rail-btn"
         style={{
           background: PANEL_ACCENT.loom, color: t.onAccent,
           border: 'none', borderRadius: 2, marginBottom: 4,
         }}>
         <Icon name="sparkle" size={16} color={t.onAccent} />
+      </button>
+      <button
+        title="Weave noticings (⌘J)"
+        onClick={onOpenWeaver}
+        className="lw-rail-btn"
+        style={{ borderColor: t.rule, color: t.ink2, marginBottom: 4 }}>
+        <Icon name="seed" size={16} color={t.ink2} />
       </button>
 
       <button

@@ -5,7 +5,8 @@ import { useTheme } from './theme';
 
 const SHORTCUTS = [
   { keys: ['⌘ K', 'Ctrl K'], label: 'Command palette' },
-  { keys: ['⌘ J', 'Ctrl J'], label: 'Open the Weaver' },
+  { keys: ['⌘ \\', 'Ctrl \\'], label: 'Writing aid (continue / brainstorm / what-if / show)' },
+  { keys: ['⌘ J', 'Ctrl J'], label: 'Weave margin noticings' },
   { keys: ['F9'],             label: 'Toggle focus mode' },
   { keys: ['['],              label: 'Previous chapter' },
   { keys: [']'],              label: 'Next chapter' },

@@ -32,6 +32,20 @@ export default function InlineWeaver({ onClose, onWalkThrough }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const insertAtCursor = (text) => {
+    const editor = document.querySelector('.lw-prose-wrap [contenteditable="true"]');
+    if (!editor || !text) return;
+    editor.focus();
+    const sel = window.getSelection();
+    if (sel?.rangeCount) {
+      const r = sel.getRangeAt(0);
+      r.deleteContents();
+      r.insertNode(document.createTextNode(text));
+      r.collapse(false);
+      editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }
+  };
+
   return (
     <aside style={{
       position: 'fixed', top: 0, right: 0, bottom: 0, width: 380,
@@ -78,13 +92,21 @@ export default function InlineWeaver({ onClose, onWalkThrough }) {
                 marginTop: 4, lineHeight: 1.5,
               }}>{s.rationale}</div>
             )}
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
               <button onClick={() => onWalkThrough?.(s)} style={{
                 padding: '5px 10px', background: PANEL_ACCENT.loom, color: t.onAccent,
                 border: 'none', borderRadius: 1,
                 fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
                 textTransform: 'uppercase', cursor: 'pointer', fontWeight: 600,
               }}>Walk me through</button>
+              {s.proposal?.name && (
+                <button onClick={() => insertAtCursor(s.proposal.name)} style={{
+                  padding: '5px 10px', background: 'transparent', color: t.accent,
+                  border: `1px solid ${t.accent}`, borderRadius: 1,
+                  fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
+                  textTransform: 'uppercase', cursor: 'pointer',
+                }}>Insert "{s.proposal.name}"</button>
+              )}
               <button onClick={() => {
                 store.recordFeedback(s.kind, 'dismiss', { suggestionId: s.id });
                 setItems(prev => prev.filter(x => x.id !== s.id));
