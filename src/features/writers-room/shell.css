@@ -96,6 +96,17 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+[data-paragraph-id][data-lw-spotlight="true"] [data-lw-entity-id="lw-target"] {
+  background: rgba(212, 146, 82, 0.20);
+  border-radius: 1px;
+}
+[data-paragraph-id][data-lw-voice-color] {
+  border-left: 3px solid var(--lw-voice-color, transparent);
+  padding-left: 12px;
+  margin-left: -15px;
+  transition: border-color 200ms;
+}
+
 .lw-drag-over {
   outline: 2px dashed currentColor;
   outline-offset: -4px;

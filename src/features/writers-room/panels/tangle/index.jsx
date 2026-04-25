@@ -53,8 +53,10 @@ export default function TanglePanel({ onClose }) {
     return { nodes: tg.nodes, edges: [...edges, { id: rid('me'), from: a, to: b }], layout: tg.layout };
   });
 
+  const [dragOver, setDragOver] = React.useState(false);
   const onDrop = (e) => {
     e.preventDefault();
+    setDragOver(false);
     const rect = e.currentTarget.getBoundingClientRect();
     const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     const ent = readDrop(e, MIME.ENTITY);
@@ -133,6 +135,8 @@ export default function TanglePanel({ onClose }) {
 
       <div
         onDrop={onDrop}
+        onDragEnter={e => { if (e.dataTransfer.types.includes(MIME.ENTITY) || e.dataTransfer.types.includes(MIME.PROSE)) setDragOver(true); }}
+        onDragLeave={e => { if (e.target === e.currentTarget) setDragOver(false); }}
         onDragOver={e => { if (e.dataTransfer.types.includes(MIME.ENTITY) || e.dataTransfer.types.includes(MIME.PROSE)) e.preventDefault(); }}
         style={{
           position: 'relative', height: 560,
@@ -140,6 +144,8 @@ export default function TanglePanel({ onClose }) {
           backgroundImage: `linear-gradient(${t.rule} 1px, transparent 1px), linear-gradient(90deg, ${t.rule} 1px, transparent 1px)`,
           backgroundSize: '40px 40px',
           overflow: 'hidden',
+          outline: dragOver ? `2px dashed ${PANEL_ACCENT.tangle}` : 'none',
+          outlineOffset: -4,
         }}>
         <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
           {(tangle.edges || []).map(e => {

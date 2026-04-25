@@ -7,6 +7,7 @@ import { useStore, rid, wordCount } from '../store';
 import { useSelection } from '../selection';
 import { MIME, dragProseSnippet, readDrop } from '../drag';
 import { decorateText, buildKnownEntities } from './highlights';
+import { characterById } from '../store/selectors';
 
 function parseParagraphsFromDOM(root) {
   if (!root) return [];
@@ -83,7 +84,9 @@ function restoreSelection(root, saved) {
 export default function Editor({ onContextMenu, onParagraphMeasure }) {
   const t = useTheme();
   const store = useStore();
-  const { select } = useSelection();
+  const { sel, select } = useSelection();
+  const tweaks = store.ui?.tweaks || {};
+  const focusChar = sel.character ? characterById(store, sel.character) : null;
   const ref = React.useRef(null);
   const savedRange = React.useRef(null);
   const debouncedSave = React.useRef(null);
@@ -114,6 +117,38 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     lastKnownHash.current = knownHash;
     onParagraphMeasure?.();
   }, [activeId, paragraphs.length, known, onParagraphMeasure]);
+
+  // Per-paragraph voice / spotlight ribbon. Runs after every render that
+  // matters (selection changes, chapter changes). Decorates the host
+  // paragraphs without touching their text content.
+  React.useEffect(() => {
+    if (!ref.current) return;
+    const showVoice = tweaks.showVoiceRibbon === true;
+    const showSpotlight = tweaks.highlightMargin !== false;
+    const focusName = focusChar?.name?.toLowerCase();
+    const focusAliases = (focusChar?.aliases || []).map(a => a.toLowerCase());
+    const focusColor = focusChar?.color;
+
+    for (const p of ref.current.children) {
+      const text = (p.textContent || '').toLowerCase();
+      let mark = false;
+      if (focusName && text.includes(focusName)) mark = true;
+      if (!mark) for (const a of focusAliases) if (a && text.includes(a)) { mark = true; break; }
+
+      if (showSpotlight && mark) {
+        p.dataset.lwSpotlight = 'true';
+      } else {
+        delete p.dataset.lwSpotlight;
+      }
+      if (showVoice && focusColor && mark) {
+        p.dataset.lwVoiceColor = '1';
+        p.style.setProperty('--lw-voice-color', focusColor);
+      } else {
+        delete p.dataset.lwVoiceColor;
+        p.style.removeProperty('--lw-voice-color');
+      }
+    }
+  });
 
   const onInput = React.useCallback(() => {
     isUserTyping.current = true;
