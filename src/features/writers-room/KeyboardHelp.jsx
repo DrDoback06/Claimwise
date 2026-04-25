@@ -6,6 +6,7 @@ import { useTheme } from './theme';
 const SHORTCUTS = [
   { keys: ['⌘ K', 'Ctrl K'], label: 'Command palette' },
   { keys: ['⌘ \\', 'Ctrl \\'], label: 'Writing aid (continue / brainstorm / what-if / show)' },
+  { keys: ["⌘ '", "Ctrl '"], label: 'Proofreader (spelling + grammar of this chapter)' },
   { keys: ['⌘ J', 'Ctrl J'], label: 'Weave margin noticings' },
   { keys: ['F9'],             label: 'Toggle focus mode' },
   { keys: ['['],              label: 'Previous chapter' },
@@ -13,7 +14,8 @@ const SHORTCUTS = [
   { keys: ['Esc'],            label: 'Close topmost panel / overlay' },
   { keys: ['?'],              label: 'This help' },
   { keys: ['1 – 8'],          label: 'Pick a SummoningRing spoke' },
-  { keys: ['right-click'],    label: 'Open the SummoningRing' },
+  { keys: ['right-click'],    label: 'Native menu (spelling, copy, paste)' },
+  { keys: ['Ctrl + right'],   label: 'Open the SummoningRing radial' },
   { keys: ['drag chip'],      label: 'Move entity into Tangle / Atlas / prose' },
   { keys: ['shift-click'],    label: 'Connect two Tangle nodes' },
   { keys: ['double-click'],   label: 'Spotlight an entity from Tangle' },

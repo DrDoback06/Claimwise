@@ -8,6 +8,7 @@ import { useSelection } from '../selection';
 import { MIME, dragProseSnippet, readDrop } from '../drag';
 import { decorateText, buildKnownEntities } from './highlights';
 import { characterById } from '../store/selectors';
+import { localProofread } from '../utilities/proofread';
 
 function parseParagraphsFromDOM(root) {
   if (!root) return [];
@@ -34,6 +35,59 @@ function escapeHtml(s) {
   return (s || '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   })[c]);
+}
+
+// In-place squiggle wrapping: walk text nodes inside `paragraph`, replace
+// the first occurrence of each known proofread `quote` with a span. We do
+// not nest into existing wrappers (so entity spans stay clean).
+function wrapProofIssuesInPlace(paragraph, proofMap) {
+  // First strip any stale squiggle spans we previously placed.
+  unwrapProofIssues(paragraph);
+  const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      // Skip text inside an entity span or an existing proof span.
+      if (n.parentElement?.closest('[data-lw-proof-issue], [data-lw-entity-id]')) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+  for (const node of nodes) {
+    let text = node.nodeValue;
+    for (const [quote, info] of proofMap) {
+      const idx = text.indexOf(quote);
+      if (idx < 0) continue;
+      const before = text.slice(0, idx);
+      const after = text.slice(idx + quote.length);
+      const span = document.createElement('span');
+      span.setAttribute('data-lw-proof-issue', '1');
+      span.setAttribute('data-lw-proof-kind', info.kind || 'spelling');
+      span.setAttribute('title', info.label || 'Issue');
+      span.textContent = quote;
+      const beforeNode = document.createTextNode(before);
+      const afterNode = document.createTextNode(after);
+      const parent = node.parentNode;
+      parent.insertBefore(beforeNode, node);
+      parent.insertBefore(span, node);
+      parent.insertBefore(afterNode, node);
+      parent.removeChild(node);
+      // Restart with the trailing text node so we don't infinite-loop.
+      return wrapProofIssuesInPlace(paragraph, proofMap);
+    }
+  }
+}
+
+function unwrapProofIssues(paragraph) {
+  const spans = paragraph.querySelectorAll('[data-lw-proof-issue]');
+  for (const s of spans) {
+    const parent = s.parentNode;
+    while (s.firstChild) parent.insertBefore(s.firstChild, s);
+    parent.removeChild(s);
+    parent.normalize();
+  }
 }
 
 function saveSelection(root) {
@@ -118,16 +172,30 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     onParagraphMeasure?.();
   }, [activeId, paragraphs.length, known, onParagraphMeasure]);
 
-  // Per-paragraph voice / spotlight ribbon. Runs after every render that
-  // matters (selection changes, chapter changes). Decorates the host
-  // paragraphs without touching their text content.
+  // Per-paragraph voice / spotlight ribbon + inline proofread squiggles.
+  // Runs after every render that matters (selection changes, chapter changes).
+  // Decorates the host paragraphs without disturbing the cursor.
   React.useEffect(() => {
     if (!ref.current) return;
     const showVoice = tweaks.showVoiceRibbon === true;
     const showSpotlight = tweaks.highlightMargin !== false;
+    const showProof = tweaks.showProofIssues !== false;
     const focusName = focusChar?.name?.toLowerCase();
     const focusAliases = (focusChar?.aliases || []).map(a => a.toLowerCase());
     const focusColor = focusChar?.color;
+
+    // Quote → kind (for proofread squiggles).
+    let proofMap = null;
+    if (showProof && !isUserTyping.current) {
+      const text = paragraphs.map(p => p.text).join('\n\n');
+      const issues = localProofread(text);
+      if (issues.length) {
+        proofMap = new Map();
+        for (const i of issues) {
+          if (!proofMap.has(i.quote)) proofMap.set(i.quote, { kind: i.kind, label: i.label });
+        }
+      }
+    }
 
     for (const p of ref.current.children) {
       const text = (p.textContent || '').toLowerCase();
@@ -135,17 +203,22 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
       if (focusName && text.includes(focusName)) mark = true;
       if (!mark) for (const a of focusAliases) if (a && text.includes(a)) { mark = true; break; }
 
-      if (showSpotlight && mark) {
-        p.dataset.lwSpotlight = 'true';
-      } else {
-        delete p.dataset.lwSpotlight;
-      }
+      if (showSpotlight && mark) p.dataset.lwSpotlight = 'true';
+      else delete p.dataset.lwSpotlight;
+
       if (showVoice && focusColor && mark) {
         p.dataset.lwVoiceColor = '1';
         p.style.setProperty('--lw-voice-color', focusColor);
       } else {
         delete p.dataset.lwVoiceColor;
         p.style.removeProperty('--lw-voice-color');
+      }
+
+      if (proofMap && proofMap.size) {
+        wrapProofIssuesInPlace(p, proofMap);
+      } else {
+        // Strip stale squiggles only if user toggled off / nothing matched.
+        unwrapProofIssues(p);
       }
     }
   });
@@ -175,6 +248,10 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
   }, [activeId, chapter?.text, store, onParagraphMeasure]);
 
   const onCtxMenu = (e) => {
+    // Plain right-click: let the browser show its native context menu so
+    // the writer can fix spelling, copy/paste, look up, etc.
+    // Ctrl / Cmd / Shift + right-click summons the Loomwright radial.
+    if (!(e.ctrlKey || e.metaKey || e.shiftKey)) return;
     e.preventDefault();
     const sel = window.getSelection();
     const text = sel?.toString() || '';

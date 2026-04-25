@@ -107,6 +107,17 @@
   transition: border-color 200ms;
 }
 
+[data-lw-proof-issue] {
+  text-decoration: underline wavy;
+  text-decoration-color: rgba(168, 56, 36, 0.7);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+[data-lw-proof-issue][data-lw-proof-kind="grammar"] {
+  text-decoration-color: rgba(184, 115, 28, 0.7);
+}
+
 .lw-drag-over {
   outline: 2px dashed currentColor;
   outline-offset: -4px;

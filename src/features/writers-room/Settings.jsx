@@ -120,6 +120,7 @@ export default function Settings({ onClose }) {
           <Toggle t={t} label="Show readability badges" value={tweaks.showReadability === true} onChange={v => set('ui.tweaks.showReadability', v)} />
           <Toggle t={t} label="Highlight named entities inline" value={tweaks.highlightMargin !== false} onChange={v => set('ui.tweaks.highlightMargin', v)} />
           <Toggle t={t} label="Show per-paragraph voice ribbon" value={tweaks.showVoiceRibbon === true} onChange={v => set('ui.tweaks.showVoiceRibbon', v)} />
+          <Toggle t={t} label="Underline proofread issues inline" value={tweaks.showProofIssues !== false} onChange={v => set('ui.tweaks.showProofIssues', v)} />
         </Section>
 
         <Section t={t} title="Backup">

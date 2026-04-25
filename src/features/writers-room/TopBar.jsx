@@ -6,7 +6,7 @@ import { useStore } from './store';
 import Icon from './entities/Icon';
 import ReadAloud from './utilities/ReadAloud';
 
-export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpenSettings, onOpenBible, onOpenHistory }) {
+export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpenSettings, onOpenBible, onOpenHistory, onOpenProof, onOpenAid }) {
   const t = useTheme();
   const store = useStore();
   const { book } = store;
@@ -67,6 +67,28 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
 
       <ReadAloud />
 
+      {onOpenAid && (
+        <button title="Writing aid (⌘\\)" onClick={onOpenAid}
+          style={{
+            padding: '5px 10px', background: 'transparent',
+            color: t.ink2, border: `1px solid ${t.rule}`, borderRadius: 14,
+            fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
+            textTransform: 'uppercase', cursor: 'pointer',
+          }}>
+          ✦ Aid
+        </button>
+      )}
+      {onOpenProof && (
+        <button title="Proofreader (⌘')" onClick={onOpenProof}
+          style={{
+            padding: '5px 10px', background: 'transparent',
+            color: t.ink2, border: `1px solid ${t.rule}`, borderRadius: 14,
+            fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
+            textTransform: 'uppercase', cursor: 'pointer',
+          }}>
+          ✓ Proof
+        </button>
+      )}
       {onOpenHistory && (
         <button title="Version history" onClick={onOpenHistory} className="lw-rail-btn"
           style={{ width: 32, height: 32, borderColor: 'transparent', color: t.ink2 }}>

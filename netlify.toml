@@ -1,41 +1,30 @@
 # ═══════════════════════════════════════════════════════════════════════
-# BRANCH-SPECIFIC CONFIG — this netlify.toml is the loomwright-integration
-# branch's override. Netlify reads netlify.toml from whichever branch it's
-# deploying, so main's own netlify.toml (which builds the CRA app) is
-# UNAFFECTED by this file.
+# Loomwright unified Writers Room — Netlify build config.
 #
-# DO NOT MERGE this file into main as-is — it would break the main deploy.
+# This branch publishes the compiled Create-React-App build (the new
+# `src/features/writers-room/` shell mounted at /), not the old static
+# prototype under redesign/writers-room/.
 # ═══════════════════════════════════════════════════════════════════════
 
 [build]
-  base    = "redesign/writers-room"
-  publish = "."
-  command = ""
-  # Note: `publish` is relative to `base`, so "." means redesign/writers-room
-  # (NOT redesign/writers-room/redesign/writers-room). Netlify quirk.
+  base    = ""
+  publish = "build"
+  command = "npm run build"
 
-# Babel Standalone fetches .jsx files at runtime. Netlify's default
-# Content-Type for .jsx is application/octet-stream which browsers refuse
-# to execute as script. Force a text MIME.
+# CRA output is fingerprinted; treat the static folder as immutable.
 [[headers]]
-  for = "/*.jsx"
-  [headers.values]
-    Content-Type  = "text/plain; charset=utf-8"
-    Cache-Control = "public, max-age=0, must-revalidate"
-
-# Services bundle — stable between rebuilds, cache for an hour
-[[headers]]
-  for = "/claimwise-services.bundle.js"
-  [headers.values]
-    Cache-Control = "public, max-age=3600"
-
-# Vendor React/Babel are pinned, treat as immutable
-[[headers]]
-  for = "/vendor/*"
+  for = "/static/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# SPA fallback for any client-side routing
+# Service worker should never be cached — we want updates to apply on
+# next load.
+[[headers]]
+  for = "/service-worker.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# SPA fallback for hash-routed paths (e.g. /#/legacy).
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
