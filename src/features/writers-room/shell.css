@@ -1,0 +1,85 @@
+/* Loomwright — global CSS keyframes (plan §3.4). */
+
+@keyframes lw-slide-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes lw-pop-in {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes lw-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.18); opacity: 0.85; }
+}
+
+@keyframes lw-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lw-tab-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.lw-app {
+  position: fixed; inset: 0;
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  font-family: 'Fraunces', Georgia, serif;
+  overflow: hidden;
+}
+
+.lw-app.focus-mode {
+  grid-template-columns: 1fr;
+}
+.lw-app.focus-mode .lw-leftrail,
+.lw-app.focus-mode .lw-topbar,
+.lw-app.focus-mode .lw-ritualbar,
+.lw-app.focus-mode .lw-panel-stack { display: none; }
+
+.lw-leftrail {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 6px; padding: 10px 0;
+}
+
+.lw-center {
+  display: flex; flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+.lw-prose-wrap {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.lw-panel-stack {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  max-width: 1200px;
+}
+
+.lw-rail-btn {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  background: transparent; border: 1px solid transparent;
+  cursor: pointer; border-radius: 2px;
+  transition: background 120ms, border-color 120ms;
+}
+.lw-rail-btn:hover { background: rgba(0,0,0,0.04); }
+.lw-rail-btn.active { background: rgba(0,0,0,0.06); }
+
+.lw-noticing {
+  animation: lw-fade-in 600ms ease;
+}
+.lw-pop { animation: lw-pop-in 260ms ease; }
+.lw-slide { animation: lw-slide-in 240ms ease; }
+.lw-breathe { animation: lw-breathe 2.4s ease-in-out infinite; }
+
+[data-lw-theme="day"] .lw-rail-btn:hover { background: rgba(43, 29, 14, 0.06); }
+[data-lw-theme="night"] .lw-rail-btn:hover { background: rgba(234, 224, 208, 0.06); }
