@@ -58,19 +58,21 @@ export default function SelectionPill() {
 
   const multi = sel.multi || [];
   const primary = primaryRef(sel);
+  const entity = primary && multi.length <= 1 ? refLookup(store, primary) : null;
+  const stale = !!(primary && multi.length <= 1 && !entity);
 
-  // Hidden when nothing selected.
-  if (!primary) return null;
+  // Stale entity (selection points at a deleted record): clear it on the next
+  // tick to avoid setState-during-render warnings.
+  React.useEffect(() => {
+    if (stale) clear();
+  }, [stale, clear]);
+
+  // Hidden when nothing selected, or when the selected entity is gone.
+  if (!primary || stale) return null;
 
   // Single-selection pill
   if (multi.length <= 1) {
-    const entity = refLookup(store, primary);
-    if (!entity) {
-      // Stale entity: clear immediately, don't render.
-      // Defer to avoid setState during render.
-      Promise.resolve().then(() => clear());
-      return null;
-    }
+    if (!entity) return null;
     return (
       <div role="status" aria-label="Current selection" style={{
         display: 'inline-flex', alignItems: 'center', gap: 8,

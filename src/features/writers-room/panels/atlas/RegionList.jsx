@@ -5,6 +5,14 @@ import React from 'react';
 import { useTheme } from '../../theme';
 import { useStore } from '../../store';
 
+// `<input type="color">` only accepts #rrggbb. Existing entities may carry
+// oklch() values from the palette generator; fall back to the default in
+// that case so the swatch renders without a console warning.
+function hexOrDefault(value, fallback) {
+  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return value;
+  return fallback;
+}
+
 export default function RegionList() {
   const t = useTheme();
   const store = useStore();
@@ -27,7 +35,7 @@ export default function RegionList() {
             padding: '8px 10px', background: t.paper2, border: `1px solid ${t.rule}`,
             borderRadius: 2, display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            <input type="color" value={r.color || '#b8492e'}
+            <input type="color" value={hexOrDefault(r.color, '#b8492e')}
               onChange={e => update(r.id, { color: e.target.value })}
               style={{ width: 22, height: 22, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }} />
             <input value={r.name || ''} onChange={e => update(r.id, { name: e.target.value })}

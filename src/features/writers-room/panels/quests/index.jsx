@@ -14,10 +14,18 @@ import { detectQuestProgress } from '../../quests/service';
 
 const KINDS = ['main-quest', 'side-quest', 'rivalry', 'thread'];
 const SEVERITIES = ['low', 'medium', 'high'];
+// Hex (not oklch) so they feed `<input type="color">` cleanly.
 const SIDE_COLORS = [
-  'oklch(60% 0.13 25)', 'oklch(60% 0.13 220)', 'oklch(60% 0.13 145)',
-  'oklch(70% 0.13 80)', 'oklch(60% 0.13 300)', 'oklch(60% 0.13 50)',
+  '#a33a2b', '#3367b2', '#4a8b53',
+  '#c79945', '#7a5dab', '#b8731c',
 ];
+
+// `<input type="color">` only accepts #rrggbb. Older characters / quests may
+// carry oklch() colours; fall back to a default so the swatch renders.
+function hexOrDefault(value, fallback) {
+  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return value;
+  return fallback;
+}
 
 function rid(prefix) { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
 
@@ -198,7 +206,7 @@ function QuestEditor({ quest }) {
   return (
     <div style={{ padding: '12px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <input type="color" value={quest.color || '#b8492e'}
+        <input type="color" value={hexOrDefault(quest.color, '#b8492e')}
           onChange={e => update({ color: e.target.value })}
           style={{ width: 28, height: 28, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }} />
         <input value={quest.name || ''} onChange={e => update({ name: e.target.value })}
@@ -238,7 +246,7 @@ function QuestEditor({ quest }) {
           border: `1px solid ${t.rule}`, borderLeft: `3px solid ${side.color}`, borderRadius: 2,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="color" value={side.color || '#b8492e'}
+            <input type="color" value={hexOrDefault(side.color, '#b8492e')}
               onChange={e => updateSide(side.id, { color: e.target.value })}
               style={{ width: 22, height: 22, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }} />
             <input value={side.name} onChange={e => updateSide(side.id, { name: e.target.value })}

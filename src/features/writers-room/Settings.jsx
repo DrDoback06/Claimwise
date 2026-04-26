@@ -250,7 +250,10 @@ function ApiKeys({ t, store }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <form
+      onSubmit={e => e.preventDefault()}
+      autoComplete="off"
+      style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <p style={{ ...pStyle(t), marginTop: 0 }}>
         Keys are kept in your browser only. Click "Get key →" to grab a fresh one
         from each provider's console.
@@ -260,8 +263,9 @@ function ApiKeys({ t, store }) {
         const isRevealed = !!revealed[p.id];
         const wasSaved = !!saved[p.id];
         return (
-          <div key={p.id} style={{
+          <fieldset key={p.id} style={{
             padding: 10, background: t.paper2, border: `1px solid ${t.rule}`, borderRadius: 2,
+            margin: 0,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <span style={{
@@ -320,7 +324,7 @@ function ApiKeys({ t, store }) {
                 }}>×</button>
               )}
             </div>
-          </div>
+          </fieldset>
         );
       })}
       <a href="/#/legacy" target="_blank" rel="noopener noreferrer" style={{
@@ -331,6 +335,6 @@ function ApiKeys({ t, store }) {
         textTransform: 'uppercase', textAlign: 'center',
         textDecoration: 'none',
       }}>Open legacy settings (backup, TTS, canon control) →</a>
-    </div>
+    </form>
   );
 }
