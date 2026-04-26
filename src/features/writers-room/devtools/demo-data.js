@@ -1,0 +1,375 @@
+// Loomwright — demo manuscript seed.
+//
+// Data definitions only. None of these records exist until the user
+// explicitly clicks "Load demo manuscript" in Settings. Every record is
+// tagged with `_demo: true` so the matching "Clear demo" button can
+// purge them without touching real user data.
+//
+// IMPORTANT: the app code never reads from this file at runtime. It is
+// only invoked from the demo button in Settings.
+
+const NS = '__lw_demo__';
+
+function id(suffix) { return `${NS}_${suffix}`; }
+
+export const DEMO_CHARACTERS = [
+  {
+    id: id('ch_mira'),
+    name: 'Mira Adwyn',
+    aliases: ['Mira'],
+    role: 'protagonist',
+    pronouns: 'she/her',
+    age: '32',
+    color: 'oklch(62% 0.16 25)',
+    status: 'on-page',
+    oneliner: 'A compliance auditor with too sharp an eye and not enough sleep.',
+    traits: ['perceptive', 'guarded', 'dry humour'],
+    stats: { Body: 55, Mind: 82, Heart: 64, Resolve: 78, Cunning: 70, Voice: 60 },
+    skills: [
+      { id: id('sk_audit'), k: 'Forensic accounting', lvl: 4, origin: 'Trained at HMRC', detail: 'Reads ledgers like sentences.' },
+      { id: id('sk_lock'), k: 'Locks (mechanical)', lvl: 2, origin: 'Self-taught', detail: 'Slow but reliable.' },
+    ],
+    inventory: [id('it_ledger'), id('it_pendant')],
+    relationships: [
+      { to: id('ch_bryn'), kind: 'partnered with', strength: 0.7, note: 'Field partner. Trust earned, not assumed.' },
+      { to: id('ch_holden'), kind: 'investigates', strength: 0.85, note: 'Suspects him of running the books off.' },
+    ],
+    knows: ['The Black Hare ledger has two columns', 'Holden lied about Tuesday'],
+    hides: ['Her sister works for Holden\'s solicitor'],
+    fears: ['Being wrong about Holden'],
+    wants: { surface: 'Close the audit cleanly', true: 'Prove the system can be honest' },
+    arc: [
+      { ch: 1, beat: 'Arrives in Copenhagen for the audit', projected: false },
+      { ch: 2, beat: 'Finds the second ledger', projected: false },
+      { ch: 4, beat: 'Confronts Holden', projected: true },
+    ],
+    voice: 'Clipped, observational, prefers facts to feelings.',
+    dossier: { bio: 'Twelve years auditing financial-services firms. Married once. Reads at lunch.', quirks: ['Always carries a fountain pen', 'Counts steps when nervous'], voice: 'Clipped, observational.', notes: '' },
+    notes: 'Avoids first names with strangers.',
+    _demo: true,
+    createdAt: Date.now(),
+  },
+  {
+    id: id('ch_bryn'),
+    name: 'Bryn Olafsson',
+    aliases: [],
+    role: 'ally',
+    pronouns: 'they/them',
+    age: '40',
+    color: 'oklch(55% 0.10 220)',
+    status: 'on-page',
+    oneliner: 'Ex-tax-investigator who switched sides for the money and stayed for the chaos.',
+    traits: ['loyal', 'sardonic', 'bottomless coffee'],
+    stats: { Body: 65, Mind: 75, Heart: 60, Resolve: 82, Cunning: 78, Voice: 55 },
+    skills: [
+      { id: id('sk_negotiate'), k: 'Negotiation', lvl: 3, origin: 'Customs years', detail: 'Bores people into compliance.' },
+    ],
+    inventory: [],
+    relationships: [
+      { to: id('ch_mira'), kind: 'partnered with', strength: 0.7, note: 'Asks the questions Mira will not.' },
+    ],
+    knows: ['Holden has a brother in Aarhus'],
+    hides: [],
+    fears: ['Being made redundant again'],
+    wants: { surface: 'Survive the audit', true: 'Pull off one clean win' },
+    arc: [
+      { ch: 1, beat: 'Briefs Mira at the airport', projected: false },
+      { ch: 3, beat: 'Spots the courier pattern', projected: true },
+    ],
+    voice: 'Warm, deadpan, three coffees deep.',
+    dossier: { bio: 'Twenty years at Customs. Two grown kids.', quirks: ['Always offers food'], voice: 'Warm, deadpan.', notes: '' },
+    _demo: true,
+    createdAt: Date.now(),
+  },
+  {
+    id: id('ch_holden'),
+    name: 'Sarah Holden',
+    aliases: ['Holden', 'Ms Holden'],
+    role: 'antagonist',
+    pronouns: 'she/her',
+    age: '47',
+    color: 'oklch(58% 0.12 300)',
+    status: 'on-page',
+    oneliner: 'CFO who has rehearsed every sentence she has spoken for years.',
+    traits: ['composed', 'rehearsed', 'dangerous when relaxed'],
+    stats: { Body: 50, Mind: 88, Heart: 40, Resolve: 85, Cunning: 90, Voice: 75 },
+    skills: [],
+    inventory: [],
+    relationships: [
+      { to: id('ch_mira'), kind: 'opposes', strength: 0.85, note: 'Smiles for the camera. Watches the door.' },
+    ],
+    knows: ['The audit window closes Friday'],
+    hides: ['The second ledger'],
+    fears: ['Her brother going to prison'],
+    wants: { surface: 'A clean audit report', true: 'Two more weeks' },
+    arc: [
+      { ch: 1, beat: 'Greets Mira at the Black Hare', projected: false },
+      { ch: 4, beat: 'Confronted', projected: true },
+    ],
+    voice: 'Polished, faintly amused, two beats too slow on the obvious answers.',
+    dossier: { bio: 'CFO since 2018. Wine collector. Three legal pads on her desk, all blank.', quirks: ['Always offers tea before bad news'], voice: 'Polished, faintly amused.', notes: '' },
+    _demo: true,
+    createdAt: Date.now(),
+  },
+  {
+    id: id('ch_dave'),
+    name: 'Dave Nilsen',
+    aliases: ['Dave'],
+    role: 'minor',
+    pronouns: 'he/him',
+    age: '28',
+    color: 'oklch(60% 0.10 145)',
+    status: 'off-page',
+    oneliner: 'A courier who knows more than he is paid for.',
+    traits: ['nervous', 'observant'],
+    stats: {},
+    relationships: [
+      { to: id('ch_holden'), kind: 'employed by', strength: 0.6, note: '' },
+    ],
+    voice: 'Clipped sentences, swallows the ends.',
+    _demo: true,
+    createdAt: Date.now(),
+  },
+];
+
+export const DEMO_PLACES = [
+  {
+    id: id('pl_copenhagen'), name: 'Copenhagen', kind: 'city', realm: 'Denmark',
+    description: 'A pale grey morning in late autumn. The harbour smells of diesel and rain.',
+    x: 400, y: 240, parentId: null, children: [], visits: [],
+    proposed: false, hasFloorplan: false,
+    _demo: true, createdAt: Date.now(),
+  },
+  {
+    id: id('pl_blackhare'), name: 'The Black Hare', kind: 'tavern', realm: 'Copenhagen',
+    description: 'A timber-fronted tavern off the canal. Brass fittings, bad lighting, good cheese.',
+    x: 480, y: 280, parentId: null, children: [id('pl_blackhare_room1'), id('pl_blackhare_room2')], visits: [],
+    proposed: false, hasFloorplan: true,
+    _demo: true, createdAt: Date.now(),
+  },
+  {
+    id: id('pl_blackhare_room1'), name: 'Common room', kind: 'room', realm: 'Copenhagen',
+    description: 'Twelve tables. Three of them watch the door.',
+    x: 50, y: 50, parentId: id('pl_blackhare'), children: [], visits: [],
+    proposed: false, hasFloorplan: false,
+    _demo: true, createdAt: Date.now(),
+  },
+  {
+    id: id('pl_blackhare_room2'), name: 'Cellar', kind: 'room', realm: 'Copenhagen',
+    description: 'Cold stone, two ledgers locked behind a brass grille.',
+    x: 50, y: 150, parentId: id('pl_blackhare'), children: [], visits: [],
+    proposed: false, hasFloorplan: false,
+    _demo: true, createdAt: Date.now(),
+  },
+  {
+    id: id('pl_office'), name: 'Holden & Reach', kind: 'manor', realm: 'Copenhagen',
+    description: 'A sandstone office with one too many security cameras for a finance firm.',
+    x: 360, y: 320, parentId: null, children: [], visits: [],
+    proposed: false, hasFloorplan: false,
+    _demo: true, createdAt: Date.now(),
+  },
+];
+
+export const DEMO_THREADS = [
+  {
+    id: id('th_audit'), name: 'The compliance audit', severity: 'high', active: true,
+    color: 'oklch(55% 0.14 50)',
+    description: 'Mira and Bryn have one week to verify Holden & Reach. The clock is the antagonist.',
+    opens: 1,
+    beats: [
+      { id: id('be_a1'), text: 'Mira lands. Briefing.', chapterN: 1 },
+      { id: id('be_a2'), text: 'First ledger checks out. Bryn smells something off.', chapterN: 2 },
+      { id: id('be_a3'), text: 'Second ledger surfaces.', chapterN: 3 },
+    ],
+    characters: [id('ch_mira'), id('ch_bryn'), id('ch_holden')],
+    places: [id('pl_office'), id('pl_blackhare')],
+    items: [id('it_ledger')],
+    _demo: true, createdAt: Date.now(),
+  },
+  {
+    id: id('th_brother'), name: 'Holden\'s brother', severity: 'medium', active: true,
+    color: 'oklch(58% 0.12 300)',
+    description: 'A name in the courier records that should not be there.',
+    beats: [
+      { id: id('be_b1'), text: 'Bryn finds the Aarhus address.', chapterN: 2 },
+    ],
+    characters: [id('ch_holden'), id('ch_dave')],
+    _demo: true, createdAt: Date.now(),
+  },
+];
+
+export const DEMO_ITEMS = [
+  {
+    id: id('it_ledger'), name: 'The black ledger', kind: 'document', icon: '📓',
+    status: 'on-page',
+    owner: id('ch_holden'),
+    description: 'A leather-bound second book of accounts. Black cover, no title.',
+    symbolism: 'The audit incarnate — every secret kept, all in one place.',
+    track: [
+      { ch: 1, owner: id('ch_holden'), act: 'kept hidden', detail: 'In the cellar safe.' },
+      { ch: 2, owner: id('ch_holden'), act: 'briefly seen', detail: 'During the cellar inspection.' },
+      { ch: 3, owner: id('ch_mira'),   act: 'photographs', detail: 'Two pages, on her phone.' },
+    ],
+    _demo: true, createdAt: Date.now(),
+  },
+  {
+    id: id('it_pendant'), name: 'Mira\'s pendant', kind: 'token', icon: '◈',
+    status: 'on-page',
+    owner: id('ch_mira'),
+    description: 'A small silver disc her sister made. She turns it when she is uncertain.',
+    symbolism: 'A reminder she has someone to lose.',
+    track: [
+      { ch: 1, owner: id('ch_mira'), act: 'turns absently', detail: 'On the train from the airport.' },
+    ],
+    _demo: true, createdAt: Date.now(),
+  },
+];
+
+export const DEMO_CHAPTERS = [
+  {
+    id: id('chp_1'), n: 1, title: 'Arrival',
+    text: [
+      'The train pulled into Copenhagen at half past seven, and Mira Adwyn already had a headache.',
+      'Bryn was waiting at the platform with two coffees and a folder. They looked at her over the rim of a paper cup. "You look like a woman who has not slept," they said.',
+      '"That is because I have not." Mira accepted the coffee. The cardboard sleeve was warm in her gloved hand. "Tell me about Holden."',
+      'They walked the canal toward The Black Hare. The harbour smelled of diesel and rain and, faintly, the iron tang of cold weather. Bryn talked as they walked — about the firm, Holden & Reach, eight years on the books, three audits passed without a flag. About Sarah Holden, the CFO, who had been there for all three. "She is the audit," Bryn said. "Not the firm. Her."',
+      'Mira watched the boats. She had a habit, when she was new to a city, of counting the things that were the same as everywhere else. Here it was lampposts, and the way men in coats walked very fast and looked at no-one. The pendant in her pocket — a thin silver disc her sister had hammered out one bored Sunday — was cold against her thumb.',
+      '"What kind of woman?" she said.',
+      '"Polite. Composed. Smiles before you have asked anything." Bryn shrugged. "The kind of CFO who has rehearsed every sentence she has ever said in this room."',
+      'Inside the tavern Holden was already at a corner table, smiling at the door before they reached it. She poured tea, not coffee. Three of the twelve tables in the common room had men at them in matching dark coats, and two of those men stopped talking when Mira walked in.',
+      '"Ms Adwyn." Holden\'s handshake was dry and exactly the right pressure. "Welcome to Copenhagen."',
+      'Mira sat. She set her notebook square on the table, fountain pen on top. "Let us start with Tuesday," she said.',
+      'Holden poured a third cup of tea before answering. "Tuesday."',
+      '"The wire transfer to Aarhus."',
+      '"Of course." Holden\'s smile did not change. "That was a refund."',
+      '"For what?"',
+      '"For an order that did not ship."',
+      'Bryn was watching the door. Mira was watching Holden\'s left hand, which was very still on the saucer. She had audited thirty-eight firms in twelve years and she had a personal rule about hands at saucers, which was that the still ones meant the most.',
+      '"Could we see the ledger?" Mira said.',
+      '"All four volumes," Holden said, and waved at the bartender, and the bartender brought a stack of leather books. Mira opened the first. The handwriting was beautiful. The columns added correctly. Every signature was crisp.',
+      'Outside the rain had thickened into something close to sleet. Mira turned the pendant once, twice, and went on reading.',
+    ].join('\n\n'),
+    paragraphs: null, scenes: [],
+    lastEdit: Date.now(), _demo: true,
+  },
+  {
+    id: id('chp_2'), n: 2, title: 'The first ledger',
+    text: [
+      'Holden walked them through the books for two hours and never stopped pouring tea.',
+      'Bryn asked the dull questions, the ones that bored Holden into honesty about small things while she lied about the larger ones. Mira watched the door. The three men in the matching dark coats had not moved, but their drinks had not gone down either.',
+      '"And this entry, in March," Bryn said. "The supplier in Malmö."',
+      '"A consignment of crates," Holden said. "Wooden crates. We were testing a new packaging line."',
+      '"The crates cost eighty thousand kroner."',
+      '"They were very good crates."',
+      'Bryn made the tiny sound at the back of their throat that, in twenty years of customs work, had been the prelude to every single arrest they had made. Mira flipped two pages in the ledger and underlined a date with her thumbnail.',
+      '"We would like to see the cellar inventory," she said.',
+      'Holden\'s smile widened by a measured amount. "Of course."',
+      'The cellar of The Black Hare was older than the rest of the building. The stairs were stone and worn into a hollow at the centre by three centuries of feet. Mira put her hand on the wall as she went down because the wall was cold and she liked to remember she was not weightless.',
+      'There was a brass grille at the bottom of the stairs. Behind the brass grille there were two leather books. Two.',
+      'Mira looked at Bryn. Bryn looked at the floor.',
+      '"What is the second book?" Mira said.',
+      'Holden, behind them, said, "Personal notes."',
+      '"Personal notes."',
+      '"My father kept this firm thirty-two years," Holden said. Her voice had become softer in the cellar, the way voices always softened in cold stone rooms. "Some of those years are not for the auditors."',
+      'Mira said nothing. She put one gloved hand on the brass grille and felt how loose the lock was. She had a personal rule about loose locks, which was that they were either invitations or traps, and you did not always know which until afterward.',
+      'Bryn said, "Could we have access to the second book? Just the audit window. Not the personal years."',
+      'Holden took a long time to answer. The cellar was very quiet. Somewhere above them the bartender was rinsing glasses, and the sound of it came down the stairwell in soft chimes.',
+      '"Friday," Holden said at last. "You have until Friday."',
+      'They climbed the stairs in silence. At the top, where the corridor turned, Mira looked back. Holden was still at the brass grille, very still, her left hand flat against the iron.',
+      'Outside, in the wet street, Bryn said, "She is going to move it."',
+      '"She is going to try."',
+      '"Friday."',
+      '"Friday," Mira said. She turned the pendant in her pocket and started walking back toward the canal.',
+    ].join('\n\n'),
+    paragraphs: null, scenes: [],
+    lastEdit: Date.now(), _demo: true,
+  },
+  {
+    id: id('chp_3'), n: 3, title: 'The second ledger',
+    text: [
+      'It took Bryn forty minutes the next morning to negotiate access to the second book. They did it the way they did everything — slowly, with apologies, until the answer was yes.',
+      'Mira photographed the two pages that mattered. Then a third, because she always took one more. The light in the cellar was bad, and her phone took six tries before she had a clean shot of the date column.',
+      'The columns ran in two parallel streams. The left was tidy. The right was tidier. Both of them balanced. Both of them were lying. The trick, the second-ledger trick, was old enough to have a name in three languages, and the name in this language was simply doubling.',
+      '"Holden," Mira said, when she was back upstairs and Holden was waiting with a fresh pot of tea.',
+      '"Yes, Ms Adwyn."',
+      '"Who keeps the second book?"',
+      '"I do."',
+      '"And the entries — they are in your hand."',
+      '"My hand, yes."',
+      'Mira closed her notebook. "The signatures in March. On the Malmö invoices."',
+      '"My signatures."',
+      '"Look at the loops on the M, Ms Holden. They are not yours."',
+      'Holden\'s smile did not change for a measured five seconds. Then it changed.',
+      '"My brother visits sometimes," she said quietly. "He helps with the books."',
+      '"Your brother in Aarhus."',
+      'Holden looked at Bryn. Bryn was making a careful study of the wallpaper. Bryn was good at this; it was a thing Bryn had been doing for twenty years and they were patient as weather.',
+      '"My brother in Aarhus, yes."',
+      '"His name."',
+      '"You do not need his name for the audit."',
+      'Mira opened her notebook again. Her fountain pen was dry; she shook it once, started writing in pencil. "I have until Friday, Ms Holden. I will be needing his name before Friday."',
+      'Holden stood. "If you have any questions," she said, "you have my number." And then she was gone, through the back of the tavern, leaving the tea cooling in three matching cups.',
+      'Bryn looked up from the wallpaper. "Well."',
+      '"Well."',
+      '"She knew."',
+      '"She has known for years," Mira said. "We have until Friday."',
+      'Outside the rain had turned to ice. Mira turned the pendant in her pocket and counted lampposts on the walk back to the hotel, which was a thing she did when she was nervous and did not like to admit she was nervous.',
+      'In the hotel room she taped the photographs of the second-ledger pages to the wall. She labelled them with a felt-tip pen. She made tea. She did not sleep.',
+    ].join('\n\n'),
+    paragraphs: null, scenes: [],
+    lastEdit: Date.now(), _demo: true,
+  },
+  {
+    id: id('chp_4'), n: 4, title: 'Friday',
+    text: [
+      'On Friday morning the office at Holden & Reach was empty.',
+      'The receptionist was at her desk, smiling the careful smile receptionists wore on the morning everything went wrong. Holden\'s computer was gone. The three blank legal pads on her desk were gone. The brass grille in the cellar of The Black Hare was open and the second ledger was missing.',
+      'Bryn made the call to Aarhus on the walk between the office and the tavern. They spoke fast and low into the phone, in a Danish that was twenty years out of practice but still serviceable enough to be understood by anyone who needed to understand it.',
+      'Mira stood in the empty cellar and looked at the empty grille and turned the pendant in her pocket so hard the silver edge cut a thin line into her thumb.',
+      'There was a folded piece of paper on the floor of the cellar. It had not been there yesterday. Mira picked it up.',
+      'It was a courier waybill. The kind a small Aarhus firm used to ship documents nationally. The recipient had been blacked out. The sender was a name Mira had not heard before but had been waiting for: D. Nilsen.',
+      'Above her, on the stairs, she heard footsteps coming down. Bryn\'s footsteps, two at a time.',
+      '"She is on a ferry," they said. "Ten minutes ago. Heading north."',
+      'Mira showed them the waybill. Bryn read it once and laughed without smiling.',
+      '"D. Nilsen," they said. "Dave Nilsen. The brother. He runs couriers out of Aarhus."',
+      '"How long will the ferry take?"',
+      '"Three hours."',
+      '"Then we have three hours."',
+      'They left the cellar together. Behind them the brass grille hung open and the empty leather book was a hollow shape in the absence of itself.',
+      'In the street the ice had melted to slush, and Copenhagen was full of the particular grey light that comes between winters. Mira turned the pendant in her pocket once and started walking, fast, toward the harbour.',
+    ].join('\n\n'),
+    paragraphs: null, scenes: [],
+    lastEdit: Date.now(), _demo: true,
+  },
+];
+
+// Visits, woven through the chapters so the JourneyLayer animates.
+export const DEMO_VISITS = [
+  { placeId: id('pl_copenhagen'), characterId: id('ch_mira'), chapterId: id('chp_1') },
+  { placeId: id('pl_blackhare'),  characterId: id('ch_mira'), chapterId: id('chp_1') },
+  { placeId: id('pl_blackhare'),  characterId: id('ch_bryn'), chapterId: id('chp_1') },
+  { placeId: id('pl_blackhare'),  characterId: id('ch_holden'), chapterId: id('chp_1') },
+  { placeId: id('pl_blackhare'),  characterId: id('ch_mira'), chapterId: id('chp_2') },
+  { placeId: id('pl_blackhare_room2'), characterId: id('ch_mira'), chapterId: id('chp_2') },
+  { placeId: id('pl_blackhare_room2'), characterId: id('ch_mira'), chapterId: id('chp_3') },
+  { placeId: id('pl_office'),     characterId: id('ch_mira'), chapterId: id('chp_4') },
+  { placeId: id('pl_office'),     characterId: id('ch_bryn'), chapterId: id('chp_4') },
+];
+
+export const DEMO_BOOK = {
+  title: 'The Compliance Run',
+  series: 'Adwyn & Olafsson',
+  target: 2500,
+  totalChapters: 12,
+};
+
+export const DEMO_PROFILE_PATCH = {
+  workingTitle: 'The Compliance Run',
+  seriesName: 'Adwyn & Olafsson',
+  genre: 'thriller',
+  tone: ['dry', 'observational', 'urgent'],
+  pov: '3rd limited',
+  tense: 'past',
+  premise: 'A compliance auditor flies into Copenhagen with one week to find the second ledger.',
+};
+
+export const DEMO_NS = NS;

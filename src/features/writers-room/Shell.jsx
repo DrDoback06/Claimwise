@@ -22,6 +22,7 @@ import WritingAid from './WritingAid';
 import Proofreader from './Proofreader';
 import WhatsNew from './WhatsNew';
 import VersionHistory from './utilities/VersionHistory';
+import aiService from '../../services/aiService';
 import { shouldAutoSnapshot, makeSnapshot, pushSnapshot } from './utilities/snapshots';
 
 import CastPanel from './panels/cast';
@@ -71,6 +72,22 @@ export default function Shell() {
     const order = store.book?.chapterOrder || [];
     if (order.length === 0) createChapter(store, { title: 'Chapter 1', text: '' });
   }, [store._loading, store.profile?.onboarded]);
+
+  // Push any persisted API keys back into the legacy aiService so the
+  // writing aid / proofreader / interview can reach the chosen provider
+  // without the user having to re-save.
+  React.useEffect(() => {
+    if (store._loading) return;
+    const keys = store.profile?.apiKeys || {};
+    for (const [provider, key] of Object.entries(keys)) {
+      if (key && typeof aiService.setApiKey === 'function') {
+        try { aiService.setApiKey(provider, key); } catch {}
+      }
+    }
+    if (store.profile?.aiProvider && store.profile.aiProvider !== 'auto') {
+      try { aiService.preferredProvider = store.profile.aiProvider; } catch {}
+    }
+  }, [store._loading, store.profile?.apiKeys, store.profile?.aiProvider]);
 
   // Auto-snapshot on chapter save. We hook into chapter changes via lastEdit.
   const lastSnapshotMs = React.useRef({});

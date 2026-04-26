@@ -4,6 +4,8 @@ import React from 'react';
 import { useTheme, PANEL_ACCENT } from './theme';
 import { useStore } from './store';
 import { exportBackup, importBackup, clearAll, downloadBackup } from './store/persistence';
+import { isDevMode } from './devtools/dev-mode';
+import DeveloperPanel from './devtools/DeveloperPanel';
 
 const PROVIDERS = ['auto', 'anthropic', 'openai', 'gemini', 'offline'];
 const INTRUSION = ['quiet', 'medium', 'helpful', 'eager'];
@@ -135,6 +137,12 @@ export default function Settings({ onClose }) {
           <button onClick={onClearAll} style={{ ...btnStyle(t), background: t.bad, color: t.onAccent, border: 'none' }}>Clear everything</button>
           <p style={pStyle(t)}>A backup is auto-saved before clearing.</p>
         </Section>
+
+        {isDevMode() && (
+          <Section t={t} title="Developer">
+            <DeveloperPanel />
+          </Section>
+        )}
       </div>
     </aside>
   );
