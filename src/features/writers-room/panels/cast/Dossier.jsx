@@ -10,7 +10,9 @@
 import React from 'react';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore } from '../../store';
+import { useSelection } from '../../selection';
 import { characterById } from '../../store/selectors';
+import TimelineScrubber from '../../primitives/TimelineScrubber';
 import IdentityTab from './tabs/Identity';
 import StatsTab from './tabs/Stats';
 import SkillsTab from './tabs/Skills';
@@ -123,7 +125,9 @@ function ThreadsSection({ character: c }) {
 export default function Dossier({ charId, onInterview, onWeave }) {
   const t = useTheme();
   const store = useStore();
+  const { sel, select } = useSelection();
   const c = characterById(store, charId);
+  const scrubberValue = sel.chapter || store.ui?.activeChapterId || store.book?.currentChapterId;
 
   const persisted = store.ui?.dossierOpen?.[charId];
   const initialOpen = React.useMemo(
@@ -253,6 +257,15 @@ export default function Dossier({ charId, onInterview, onWeave }) {
           fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
           textTransform: 'uppercase', cursor: 'pointer',
         }}>Collapse all</button>
+      </div>
+
+      {/* Timeline scrubber — re-derives knowledge / location at the scrubbed chapter */}
+      <div style={{ padding: '0 16px 12px' }}>
+        <TimelineScrubber
+          label="As of"
+          value={scrubberValue}
+          onChange={(chapterId) => select('chapter', chapterId)}
+        />
       </div>
 
       {/* Sections */}

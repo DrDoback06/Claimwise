@@ -59,6 +59,19 @@
   background: rgba(42, 33, 24, 0.5);
 }
 
+/* @-mention spans — clickable inline references to canonical entities. */
+.lw-mention {
+  background: rgba(139, 43, 31, 0.08);
+  border-bottom: 1px dashed rgba(139, 43, 31, 0.5);
+  padding: 0 2px;
+  border-radius: 1px;
+  cursor: pointer;
+}
+[data-lw-theme="night"] .lw-mention {
+  background: rgba(212, 146, 82, 0.10);
+  border-bottom-color: rgba(212, 146, 82, 0.5);
+}
+
 .lw-app {
   position: fixed; inset: 0;
   display: grid;
@@ -74,6 +87,36 @@
 .lw-app.focus-mode .lw-topbar,
 .lw-app.focus-mode .lw-ritualbar,
 .lw-app.focus-mode .lw-panel-stack { display: none; }
+
+/* Mobile breakpoint (CODE-INSIGHT §10 / Tier 3). Below 1100px the panel
+   stack stops trying to flow next to the prose column and instead becomes a
+   single floating panel that overlays from the right. The left rail drops to
+   a thin 48px and panels span the visible width. */
+@media (max-width: 1100px) {
+  .lw-app {
+    grid-template-columns: 48px 1fr;
+  }
+  .lw-app .lw-panel-stack {
+    position: fixed;
+    top: 48px; right: 0; bottom: 0;
+    max-width: 90vw; height: auto;
+    z-index: 1500;
+    box-shadow: -8px 0 24px rgba(0,0,0,0.18);
+    background: var(--lw-sugg, transparent);
+  }
+  .lw-app .lw-panel-stack > aside {
+    width: min(90vw, 480px) !important;
+  }
+  .lw-app .lw-prose-wrap { padding-right: 0; }
+  .lw-app .lw-rail-btn { width: 36px !important; height: 36px !important; }
+  .lw-app .lw-leftrail { padding: 6px 0 !important; }
+}
+@media (max-width: 720px) {
+  .lw-app .lw-panel-stack > aside {
+    width: 96vw !important;
+    max-width: 96vw !important;
+  }
+}
 
 .lw-leftrail {
   display: flex; flex-direction: column; align-items: center;

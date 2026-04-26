@@ -9,6 +9,7 @@ import { MIME, dragProseSnippet, readDrop } from '../drag';
 import { decorateText, buildKnownEntities } from './highlights';
 import { characterById } from '../store/selectors';
 import { localProofread } from '../utilities/proofread';
+import MentionPicker from './MentionPicker';
 
 function parseParagraphsFromDOM(root) {
   if (!root) return [];
@@ -338,8 +339,16 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     if (e.dataTransfer.types.includes(MIME.ENTITY)) e.preventDefault();
   };
 
-  // Click on entity span → spotlight.
+  // Click on entity span → spotlight. Also picks up @-mention spans.
   const onClick = (e) => {
+    const mention = e.target.closest('[data-lw-mention]');
+    if (mention) {
+      e.preventDefault();
+      const kind = mention.getAttribute('data-lw-mention-kind');
+      const id = mention.getAttribute('data-lw-mention-id');
+      if (kind && id) select(kind, id);
+      return;
+    }
     const span = e.target.closest('[data-lw-entity-id]');
     if (!span) return;
     e.preventDefault();
@@ -349,23 +358,26 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
   };
 
   return (
-    <article
-      ref={ref}
-      contentEditable
-      suppressContentEditableWarning
-      spellCheck={true}
-      onBeforeInput={onBeforeInput}
-      onInput={onInput}
-      onClick={onClick}
-      onContextMenu={onCtxMenu}
-      onDragStart={onDragStart}
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-      style={{
-        maxWidth: 720, margin: '40px auto', padding: '0 40px',
-        fontFamily: t.display, fontSize: 17, lineHeight: 1.7, color: t.ink,
-        outline: 'none', minHeight: 'calc(100vh - 160px)',
-      }}
-    />
+    <>
+      <article
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        spellCheck={true}
+        onBeforeInput={onBeforeInput}
+        onInput={onInput}
+        onClick={onClick}
+        onContextMenu={onCtxMenu}
+        onDragStart={onDragStart}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        style={{
+          maxWidth: 720, margin: '40px auto', padding: '0 40px',
+          fontFamily: t.display, fontSize: 17, lineHeight: 1.7, color: t.ink,
+          outline: 'none', minHeight: 'calc(100vh - 160px)',
+        }}
+      />
+      <MentionPicker editorRef={ref} />
+    </>
   );
 }

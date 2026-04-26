@@ -95,6 +95,18 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
         }}>
         ✧ Whispers
       </button>
+      <button
+        title="Run extraction wizard on this chapter"
+        onClick={() => window.dispatchEvent(new CustomEvent('lw:open-extraction'))}
+        style={{
+          padding: '5px 10px',
+          background: 'transparent', color: t.ink2,
+          border: `1px solid ${t.rule}`, borderRadius: 14,
+          fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
+          textTransform: 'uppercase', cursor: 'pointer',
+        }}>
+        ⌬ Extract
+      </button>
       {onOpenProof && (
         <button title="Proofreader (⌘')" onClick={onOpenProof}
           style={{

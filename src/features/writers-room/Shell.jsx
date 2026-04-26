@@ -35,12 +35,16 @@ import TanglePanel from './panels/tangle';
 import GroupChatPanel from './panels/groupchat';
 import InterviewPanel from './panels/interview';
 import SeriesBible from './panels/series-bible';
+import SkillsPanel from './panels/skills';
+import ContinuityPanel from './panels/continuity';
 import SuggestionDrawer from './suggestions/SuggestionDrawer';
+import ExtractionWizard from './extraction/ExtractionWizard';
 
 const PANEL_COMPONENTS = {
   cast: CastPanel, atlas: AtlasPanel, threads: ThreadsPanel,
   voice: VoicePanel, items: ItemsPanel, language: LanguagePanel,
   tangle: TanglePanel, groupchat: GroupChatPanel, interview: InterviewPanel,
+  skills: SkillsPanel, continuity: ContinuityPanel,
 };
 
 export default function Shell() {
@@ -59,6 +63,7 @@ export default function Shell() {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [tethers, setTethers] = React.useState([]);
+  const [extractionFor, setExtractionFor] = React.useState(null); // chapterId
 
   const proseColumnRef = React.useRef(null);
   const marginRef = React.useRef(null);
@@ -146,6 +151,12 @@ export default function Shell() {
     if (actionId === 'open.groupchat') ensurePanelOpen('groupchat');
     if (actionId === 'open.suggestions') store.setPath('ui.suggestionsOpen', true);
     if (actionId === 'toggle.suggestions') store.setPath('ui.suggestionsOpen', !store.ui?.suggestionsOpen);
+    if (actionId === 'open.extraction') {
+      const chId = store.ui?.activeChapterId || store.book?.currentChapterId;
+      if (chId) setExtractionFor(chId);
+    }
+    if (actionId === 'open.skills') ensurePanelOpen('skills');
+    if (actionId === 'open.continuity') ensurePanelOpen('continuity');
     if (actionId === 'focus.toggle') store.setPath('ui.focusMode', !focusMode);
     if (actionId === 'theme.toggle') t.toggle();
   };
@@ -175,6 +186,16 @@ export default function Shell() {
       select('place', id);
     }
   };
+
+  // Listen for the Extract button in TopBar.
+  React.useEffect(() => {
+    const onOpen = () => {
+      const chId = store.ui?.activeChapterId || store.book?.currentChapterId;
+      if (chId) setExtractionFor(chId);
+    };
+    window.addEventListener('lw:open-extraction', onOpen);
+    return () => window.removeEventListener('lw:open-extraction', onOpen);
+  }, [store.ui?.activeChapterId, store.book?.currentChapterId]);
 
   // Global keyboard.
   React.useEffect(() => {
@@ -303,6 +324,12 @@ export default function Shell() {
       {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
       {helpOpen && <KeyboardHelp onClose={() => setHelpOpen(false)} />}
       {historyOpen && <VersionHistory onClose={() => setHistoryOpen(false)} />}
+      {extractionFor && (
+        <ExtractionWizard
+          chapterId={extractionFor}
+          onClose={() => setExtractionFor(null)}
+        />
+      )}
     </div>
   );
 }

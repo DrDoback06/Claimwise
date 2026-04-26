@@ -144,6 +144,9 @@ export function emptyState() {
     // (NEW) atlas
     atlasSettings: { ...EMPTY_ATLAS_SETTINGS },
     regions: [],              // Region[]
+    // (NEW) continuity & extraction
+    continuity: { findings: [], lastScanAt: null },
+    extractionRuns: {},       // { [chapterId]: { ranAt, findings, deepPassRan } }
     reviewQueue: [],
     snapshots: [],
     feedback: [],

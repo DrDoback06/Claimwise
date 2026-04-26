@@ -63,6 +63,9 @@ export default function PlaceEditor({ onWeave }) {
         <textarea rows={3} style={{ ...inp, lineHeight: 1.5 }} value={place.description || ''}
           onChange={e => update({ description: e.target.value })} />
 
+        {/* Custom properties — per CODE-INSIGHT §5.B.6 */}
+        <CustomPropsEditor place={place} update={update} t={t} lbl={lbl} inp={inp} />
+
         {template?.hasFloorplan && !place.hasFloorplan && (
           <button onClick={addFloorplan} style={{
             marginTop: 14, padding: '7px 14px',
@@ -108,6 +111,50 @@ export default function PlaceEditor({ onWeave }) {
           })}
         </CollapseSection>
       )}
+    </div>
+  );
+}
+
+function CustomPropsEditor({ place, update, t, lbl, inp }) {
+  const props = place.props || {};
+  const entries = Object.entries(props);
+  const addProp = () => {
+    const key = window.prompt('Property name (e.g. "population", "ruler")');
+    if (!key) return;
+    update({ props: { ...props, [key]: '' } });
+  };
+  const setVal = (k, v) => update({ props: { ...props, [k]: v } });
+  const removeKey = (k) => {
+    const { [k]: _, ...rest } = props;
+    update({ props: rest });
+  };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={lbl}>Custom properties</div>
+      {entries.length === 0 && (
+        <div style={{ fontFamily: t.display, fontSize: 12, color: t.ink3, fontStyle: 'italic', marginTop: 4 }}>
+          None yet — add population, ruler, biome, anything you want to remember.
+        </div>
+      )}
+      {entries.map(([k, v]) => (
+        <div key={k} style={{ display: 'flex', gap: 4, marginTop: 6, alignItems: 'center' }}>
+          <span style={{
+            minWidth: 90, fontFamily: t.mono, fontSize: 10, color: t.ink2,
+            letterSpacing: 0.12, textTransform: 'uppercase',
+          }}>{k}</span>
+          <input value={v} onChange={e => setVal(k, e.target.value)} style={{ ...inp, flex: 1, marginTop: 0 }} />
+          <button onClick={() => removeKey(k)} style={{
+            background: 'transparent', border: 'none', color: t.ink3, cursor: 'pointer',
+            fontFamily: t.mono, fontSize: 12, padding: 2,
+          }}>×</button>
+        </div>
+      ))}
+      <button onClick={addProp} style={{
+        marginTop: 6, padding: '4px 10px', background: 'transparent',
+        color: t.accent, border: `1px dashed ${t.accent}`, borderRadius: 1,
+        fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
+        textTransform: 'uppercase', cursor: 'pointer',
+      }}>+ Add property</button>
     </div>
   );
 }

@@ -40,6 +40,8 @@ const META = {
   pendingInsertions: 'lw.pendingInsertions',
   atlasSettings: 'lw.atlasSettings',
   regions: 'lw.regions',
+  continuity: 'lw.continuity',
+  extractionRuns: 'lw.extractionRuns',
 };
 
 // ─── Safe wrappers ────────────────────────────────────────────────────
@@ -126,6 +128,7 @@ export async function loadAllFromDB() {
     profileRaw, uiRaw, books, cast, places, threads, items, voices,
     nodes, edges, mapState, noticingsRaw, reviewQueueRaw, snapshotsRaw,
     suggestionDrawerRaw, pendingInsertionsRaw, atlasSettingsRaw, regionsRaw,
+    continuityRaw, extractionRunsRaw,
   ] = await Promise.all([
     dbGet(S.meta, META.profile),
     dbGet(S.meta, META.ui),
@@ -145,6 +148,8 @@ export async function loadAllFromDB() {
     dbGet(S.meta, META.pendingInsertions),
     dbGet(S.meta, META.atlasSettings),
     dbGet(S.meta, META.regions),
+    dbGet(S.meta, META.continuity),
+    dbGet(S.meta, META.extractionRuns),
   ]);
 
   const profile = { ...EMPTY_PROFILE, ...(profileRaw?.data || profileRaw || {}) };
@@ -211,6 +216,8 @@ export async function loadAllFromDB() {
     marginDetections: {},   // ephemeral
     atlasSettings: { ...EMPTY_ATLAS_SETTINGS, ...(atlasSettingsRaw?.data || {}) },
     regions: regionsRaw?.data || [],
+    continuity: continuityRaw?.data || { findings: [], lastScanAt: null },
+    extractionRuns: extractionRunsRaw?.data || {},
     reviewQueue: reviewQueueRaw?.data || [],
     snapshots: snapshotsRaw?.data || [],
     feedback: [],
@@ -274,6 +281,14 @@ export async function persistSlice(slice, prev, next) {
   }
   if (slice === 'regions') {
     await dbPut(S.meta, { id: META.regions, data: next || [] });
+    return;
+  }
+  if (slice === 'continuity') {
+    await dbPut(S.meta, { id: META.continuity, data: next || { findings: [], lastScanAt: null } });
+    return;
+  }
+  if (slice === 'extractionRuns') {
+    await dbPut(S.meta, { id: META.extractionRuns, data: next || {} });
     return;
   }
   if (slice === 'marginDetections') {

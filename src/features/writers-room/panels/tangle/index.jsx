@@ -7,6 +7,7 @@ import { useStore } from '../../store';
 import { useSelection } from '../../selection';
 import { MIME, readDrop, dragEntity } from '../../drag';
 import { rid } from '../../store';
+import RelationshipMatrix from './RelationshipMatrix';
 
 export default function TanglePanel({ onClose }) {
   const t = useTheme();
@@ -14,6 +15,7 @@ export default function TanglePanel({ onClose }) {
   const { sel, select } = useSelection();
   const tangle = store.tangle || { nodes: [], edges: [], layout: {} };
   const [connectFrom, setConnectFrom] = React.useState(null);
+  const [view, setView] = React.useState('graph'); // 'graph' | 'matrix'
 
   const setTangle = (next) => store.setSlice('tangle', tg => ({ ...tg, ...(typeof next === 'function' ? next(tg) : next) }));
 
@@ -134,15 +136,25 @@ export default function TanglePanel({ onClose }) {
       panelId="tangle"
       onClose={onClose}
       width={640}>
-      <div style={{ padding: '8px 12px', display: 'flex', gap: 6, borderBottom: `1px solid ${t.rule}` }}>
-        <button onClick={() => addNoteNode('New note', { x: 200, y: 200 })} style={btnStyle(t)}>+ note</button>
-        {tangle.nodes.length === 0 && (store.cast || []).length > 0 && (
+      <div style={{ padding: '8px 12px', display: 'flex', gap: 6, borderBottom: `1px solid ${t.rule}`, alignItems: 'center' }}>
+        <div style={{
+          display: 'flex', gap: 0,
+          background: t.paper, border: `1px solid ${t.rule}`, borderRadius: 999,
+        }}>
+          <button onClick={() => setView('graph')} style={tabStyle(t, view === 'graph')}>Graph</button>
+          <button onClick={() => setView('matrix')} style={tabStyle(t, view === 'matrix')}>Matrix</button>
+        </div>
+        {view === 'graph' && (
+          <button onClick={() => addNoteNode('New note', { x: 200, y: 200 })} style={btnStyle(t)}>+ note</button>
+        )}
+        {view === 'graph' && tangle.nodes.length === 0 && (store.cast || []).length > 0 && (
           <button onClick={proposeStarter} style={btnStyle(t, true)}>Map cast & relationships</button>
         )}
         {connectFrom && <span style={{ fontFamily: t.mono, fontSize: 9, color: t.ink2, letterSpacing: 0.12, textTransform: 'uppercase', alignSelf: 'center' }}>shift+click another node to connect</span>}
       </div>
 
-      <div
+      {view === 'matrix' && <RelationshipMatrix />}
+      {view === 'graph' && <div
         onDrop={onDrop}
         onDragEnter={e => { if (e.dataTransfer.types.includes(MIME.ENTITY) || e.dataTransfer.types.includes(MIME.PROSE)) setDragOver(true); }}
         onDragLeave={e => { if (e.target === e.currentTarget) setDragOver(false); }}
@@ -211,9 +223,19 @@ export default function TanglePanel({ onClose }) {
             Drag cast, places, threads, items here from any panel.
           </div>
         )}
-      </div>
+      </div>}
     </PanelFrame>
   );
+}
+
+function tabStyle(t, active) {
+  return {
+    padding: '4px 12px',
+    background: active ? t.accent : 'transparent',
+    color: active ? t.onAccent : t.ink2,
+    border: 'none', borderRadius: 999, cursor: 'pointer',
+    fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+  };
 }
 
 function NodeView({ node, onMouseDown, onClick, onRemove, highlighted }) {
