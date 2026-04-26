@@ -160,6 +160,26 @@ export default function SpecialistChat({ domain, accent }) {
         )}
       </div>
 
+      {/* Quick-action chips — pre-load a strict-JSON instruction so the
+          AI returns a shape buildCommit() can recognise. */}
+      {(persona.quick || []).length > 0 && (
+        <div style={{
+          padding: '6px 8px', borderTop: `1px solid ${t.rule}`,
+          display: 'flex', flexWrap: 'wrap', gap: 4,
+          background: t.paper2,
+        }}>
+          {persona.quick.map(q => (
+            <button key={q.label} onClick={() => setInput(q.prompt)} style={{
+              padding: '4px 10px', background: 'transparent',
+              color: accentColor, border: `1px solid ${accentColor}55`,
+              borderRadius: 999, cursor: 'pointer',
+              fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
+              textTransform: 'uppercase',
+            }}>{q.label}</button>
+          ))}
+        </div>
+      )}
+
       <div style={{
         borderTop: `1px solid ${t.rule}`, padding: 8, display: 'flex', gap: 6,
       }}>
@@ -360,6 +380,122 @@ function buildCommit(domain, json, store) {
         },
       };
     }
+  }
+
+  // Bulk character list.
+  if (Array.isArray(json.characters) && json.characters.length) {
+    return {
+      label: `Add ${json.characters.length} character${json.characters.length === 1 ? "" : "s"}`,
+      run: async () => {
+        for (const c of json.characters) createCharacter(helper, { ...c, draftedByLoom: true });
+        return `${json.characters.length} character${json.characters.length === 1 ? "" : "s"} added.`;
+      },
+    };
+  }
+
+  // Bulk items list.
+  if (Array.isArray(json.items) && json.items.length) {
+    return {
+      label: `Add ${json.items.length} item${json.items.length === 1 ? "" : "s"} to bank`,
+      run: async () => {
+        for (const it of json.items) createItem(helper, { ...it, draftedByLoom: true, inBank: true });
+        return `${json.items.length} item${json.items.length === 1 ? "" : "s"} added.`;
+      },
+    };
+  }
+
+  // Bulk quests list.
+  if (Array.isArray(json.quests) && json.quests.length) {
+    return {
+      label: `Add ${json.quests.length} quest${json.quests.length === 1 ? "" : "s"}`,
+      run: async () => {
+        for (const q of json.quests) createQuest(helper, { ...q, draftedByLoom: true });
+        return `${json.quests.length} quest${json.quests.length === 1 ? "" : "s"} added.`;
+      },
+    };
+  }
+
+  // Bulk skills list (different from {nodes} — these are stand-alone skills,
+  // not a tree).
+  if (Array.isArray(json.skills) && json.skills.length) {
+    return {
+      label: `Add ${json.skills.length} skill${json.skills.length === 1 ? "" : "s"}`,
+      run: async () => {
+        const placed = json.skills.map(s => ({
+          id: "sk_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6),
+          name: s.name || "Skill",
+          tier: s.tier || "novice",
+          position: s.position || { x: 100 + Math.random() * 700, y: 100 + Math.random() * 400 },
+          description: s.description || "",
+          unlockReqs: s.unlockReqs || { prereqIds: [] },
+          effects: s.effects || { stats: {}, flags: [] },
+          level: 0, maxLevel: s.maxLevel || 5,
+          draftedByLoom: true,
+        }));
+        store.setSlice("skills", xs => [...(xs || []), ...placed]);
+        return `${placed.length} skill${placed.length === 1 ? "" : "s"} added.`;
+      },
+    };
+  }
+
+  // Voice analysis: {"voiceProfile": {description, fingerprint, tics, dialect, hooks, dials}}
+  if (json.voiceProfile && typeof json.voiceProfile === "object") {
+    const charId = store.ui?.selection?.character;
+    if (!charId) return null;
+    return {
+      label: `Apply voice profile`,
+      run: async () => {
+        store.setSlice("voice", vs => {
+          const arr = vs || [];
+          const i = arr.findIndex(v => v.characterId === charId);
+          const merged = {
+            id: arr[i]?.id || `voice_${charId}`,
+            characterId: charId,
+            ...(arr[i] || {}),
+            ...json.voiceProfile,
+            analyzedAt: Date.now(),
+          };
+          if (i >= 0) return arr.map((x, j) => j === i ? merged : x);
+          return [...arr, merged];
+        });
+        return `Voice profile applied.`;
+      },
+    };
+  }
+
+  // Relationship analyst: {"relationships":[{from, to, kind, strength, note}]}
+  if (Array.isArray(json.relationships) && json.relationships.length) {
+    const cast = store.cast || [];
+    const resolveId = (s) => {
+      if (!s) return null;
+      if (cast.find(c => c.id === s)) return s;
+      const m = cast.find(c => (c.name || '').toLowerCase() === String(s).toLowerCase());
+      return m?.id || null;
+    };
+    const valid = json.relationships
+      .map(r => ({ ...r, fromId: resolveId(r.from), toId: resolveId(r.to) }))
+      .filter(r => r.fromId && r.toId && r.fromId !== r.toId);
+    if (!valid.length) return null;
+    return {
+      label: `Apply ${valid.length} relationship${valid.length === 1 ? "" : "s"}`,
+      run: async () => {
+        store.setSlice("cast", cs => cs.map(c => {
+          const outgoing = valid.filter(r => r.fromId === c.id);
+          if (!outgoing.length) return c;
+          const next = [...(c.relationships || [])];
+          for (const r of outgoing) {
+            const exists = next.find(x => x.to === r.toId);
+            if (exists) {
+              Object.assign(exists, { kind: r.kind || exists.kind, strength: r.strength ?? exists.strength, note: r.note || exists.note });
+            } else {
+              next.push({ to: r.toId, kind: r.kind || 'connected', strength: r.strength ?? 0, note: r.note || '' });
+            }
+          }
+          return { ...c, relationships: next };
+        }));
+        return `${valid.length} relationship${valid.length === 1 ? "" : "s"} applied.`;
+      },
+    };
   }
 
   return null;

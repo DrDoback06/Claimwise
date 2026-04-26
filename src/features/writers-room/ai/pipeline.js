@@ -31,12 +31,16 @@ function clearRunning(store, chapterId) {
   store.setSlice('autonomousJobs', xs => (xs || []).filter(j => j.chapterId !== chapterId));
 }
 
+const REVIEW_CAP = 200;
+
 function pushReview(store, chapterId, items, kind) {
   if (!items || items.length === 0) return;
   store.setSlice('reviewQueue', xs => {
     const arr = Array.isArray(xs) ? xs : [];
     const stamped = items.map(f => ({ id: f.id || `rq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, kind, chapterId, addedAt: Date.now(), ...f }));
-    return [...arr, ...stamped];
+    const next = [...arr, ...stamped];
+    // Cap from the front so the most recent stay surfaced.
+    return next.length > REVIEW_CAP ? next.slice(next.length - REVIEW_CAP) : next;
   });
 }
 

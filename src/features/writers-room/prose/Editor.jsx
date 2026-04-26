@@ -295,6 +295,60 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     }, 1200);
   }, [activeId, chapter?.text, store, onParagraphMeasure]);
 
+  // Hard flush — runs the save immediately. Used for blur, visibility
+  // change, beforeunload, and chapter swap to prevent prose loss when
+  // the writer navigates away mid-debounce.
+  const flushSave = React.useCallback(() => {
+    if (!ref.current || !activeId) return;
+    clearTimeout(debouncedSave.current);
+    debouncedSave.current = null;
+    const next = parseParagraphsFromDOM(ref.current);
+    const text = next.map(p => p.text).join('\n\n');
+    if (text === (chapter?.text || '')) return;
+    const wc = wordCount(text);
+    const prevText = chapter?.text || '';
+    const prevWc = wordCount(prevText);
+    const delta = Math.max(0, wc - prevWc);
+    store.setSlice('chapters', ch => ({
+      ...ch,
+      [activeId]: { ...ch[activeId], text, paragraphs: next, lastEdit: Date.now() },
+    }));
+    if (delta > 0) {
+      store.setSlice('book', b => ({ ...b, wordsToday: (b.wordsToday || 0) + delta }));
+    }
+    isUserTyping.current = false;
+  }, [activeId, chapter?.text, store]);
+
+  // Wire flush to every "user is leaving" signal.
+  React.useEffect(() => {
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flushSave(); };
+    const onBeforeUnload = () => { flushSave(); };
+    const onPageHide = () => { flushSave(); };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+      // Final flush on unmount (also covers chapter swap).
+      flushSave();
+    };
+  }, [flushSave]);
+
+  // Flush whenever the active chapter changes — guarantees the previous
+  // chapter's pending text lands before we render the new one.
+  const lastActiveIdRef = React.useRef(activeId);
+  React.useEffect(() => {
+    if (lastActiveIdRef.current && lastActiveIdRef.current !== activeId) {
+      // Use the stale flush; the close-over still references the old chapter.
+      flushSave();
+    }
+    lastActiveIdRef.current = activeId;
+  }, [activeId, flushSave]);
+
+  const onBlurFlush = () => flushSave();
+
   const onCtxMenu = (e) => {
     // Plain right-click: let the browser show its native context menu so
     // the writer can fix spelling, copy/paste, look up, etc.
@@ -366,6 +420,7 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
         spellCheck={true}
         onBeforeInput={onBeforeInput}
         onInput={onInput}
+        onBlur={onBlurFlush}
         onClick={onClick}
         onContextMenu={onCtxMenu}
         onDragStart={onDragStart}

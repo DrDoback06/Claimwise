@@ -87,21 +87,31 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
       {/* Selection pill — always rightmost-content. */}
       <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6 }}>
         <SelectionPill />
-        {(runningJobs.length > 0 || reviewQueue.length > 0) && (
-          <span title={runningJobs.length
-            ? `Pipeline running: ${runningJobs.map(j => j.label).join(' · ')}`
-            : `${reviewQueue.length} item${reviewQueue.length === 1 ? '' : 's'} waiting in review`}
+        {runningJobs.length > 0 && (
+          <span title={`Pipeline running: ${runningJobs.map(j => j.label).join(' · ')}`}
             style={{
               padding: '2px 8px', borderRadius: 999,
-              background: runningJobs.length ? t.warn : (t.sugg || t.paper2),
-              color: runningJobs.length ? t.onAccent : (t.suggInk || t.accent),
+              background: t.warn, color: t.onAccent,
               fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14,
               textTransform: 'uppercase', whiteSpace: 'nowrap',
-            }}>
-            {runningJobs.length
-              ? `⟲ ${runningJobs.map(j => j.label).join('·')}`
-              : `✦ ${reviewQueue.length} review`}
-          </span>
+            }}>⟲ {runningJobs.map(j => j.label).join('·')}</span>
+        )}
+        {!runningJobs.length && reviewQueue.length > 0 && (
+          <button
+            title={`${reviewQueue.length} item${reviewQueue.length === 1 ? '' : 's'} from the autonomous pipeline. Click to clear.`}
+            onClick={() => {
+              if (window.confirm(`Clear ${reviewQueue.length} review item${reviewQueue.length === 1 ? '' : 's'}?`)) {
+                store.setSlice('reviewQueue', []);
+              }
+            }}
+            style={{
+              padding: '2px 8px', borderRadius: 999,
+              background: t.sugg || t.paper2,
+              color: t.suggInk || t.accent,
+              border: `1px solid ${t.suggInk || t.accent}55`,
+              fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14,
+              textTransform: 'uppercase', whiteSpace: 'nowrap', cursor: 'pointer',
+            }}>✦ {reviewQueue.length} review ×</button>
         )}
       </div>
 

@@ -250,10 +250,7 @@ function ApiKeys({ t, store }) {
   };
 
   return (
-    <form
-      onSubmit={e => e.preventDefault()}
-      autoComplete="off"
-      style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <p style={{ ...pStyle(t), marginTop: 0 }}>
         Keys are kept in your browser only. Click "Get key →" to grab a fresh one
         from each provider's console.
@@ -263,10 +260,18 @@ function ApiKeys({ t, store }) {
         const isRevealed = !!revealed[p.id];
         const wasSaved = !!saved[p.id];
         return (
-          <fieldset key={p.id} style={{
-            padding: 10, background: t.paper2, border: `1px solid ${t.rule}`, borderRadius: 2,
-            margin: 0,
-          }}>
+          // One <form> per provider row — each row is its own action
+          // (one save button, one input). This stops Chromium complaining
+          // about "multiple forms" inside a single form, and keeps the
+          // password field properly contained.
+          <form key={p.id}
+            onSubmit={e => { e.preventDefault(); onSave(p.id); }}
+            autoComplete="off"
+            name={`provider-${p.id}`}
+            style={{
+              padding: 10, background: t.paper2, border: `1px solid ${t.rule}`, borderRadius: 2,
+              margin: 0,
+            }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <span style={{
                 fontFamily: t.display, fontSize: 14, color: t.ink, fontWeight: 500,
@@ -303,12 +308,12 @@ function ApiKeys({ t, store }) {
                   borderRadius: 2, outline: 'none',
                 }}
               />
-              <button onClick={() => setRevealed(r => ({ ...r, [p.id]: !r[p.id] }))} style={{
+              <button type="button" onClick={() => setRevealed(r => ({ ...r, [p.id]: !r[p.id] }))} style={{
                 padding: '0 10px', background: 'transparent', color: t.ink3,
                 border: `1px solid ${t.rule}`, borderRadius: 2, cursor: 'pointer',
                 fontFamily: t.mono, fontSize: 11,
               }}>{isRevealed ? 'Hide' : 'Show'}</button>
-              <button onClick={() => onSave(p.id)} disabled={!value.trim()} style={{
+              <button type="submit" disabled={!value.trim()} style={{
                 padding: '0 12px',
                 background: wasSaved ? t.good : t.accent, color: t.onAccent,
                 border: 'none', borderRadius: 2, cursor: 'pointer',
@@ -317,14 +322,14 @@ function ApiKeys({ t, store }) {
                 opacity: value.trim() ? 1 : 0.4,
               }}>{wasSaved ? 'Saved ✓' : 'Save'}</button>
               {value && (
-                <button onClick={() => onClear(p.id)} style={{
+                <button type="button" onClick={() => onClear(p.id)} style={{
                   padding: '0 8px', background: 'transparent', color: t.ink3,
                   border: `1px solid ${t.rule}`, borderRadius: 2, cursor: 'pointer',
                   fontFamily: t.mono, fontSize: 11,
                 }}>×</button>
               )}
             </div>
-          </fieldset>
+          </form>
         );
       })}
       <a href="/#/legacy" target="_blank" rel="noopener noreferrer" style={{
@@ -335,6 +340,6 @@ function ApiKeys({ t, store }) {
         textTransform: 'uppercase', textAlign: 'center',
         textDecoration: 'none',
       }}>Open legacy settings (backup, TTS, canon control) →</a>
-    </form>
+    </div>
   );
 }
