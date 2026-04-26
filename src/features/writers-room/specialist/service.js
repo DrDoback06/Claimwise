@@ -13,13 +13,31 @@ const HISTORY_CAP = 12;
 export async function ask({ domain, history, prompt, store, opts = {} }) {
   const persona = personaFor(domain);
   const ctx = buildContext(domain, store);
+  const p = store.profile || {};
+  const wp = p.writingPreferences || {};
+  const projectLines = [
+    p.workingTitle && `Project: ${p.workingTitle}${p.seriesName ? ' (' + p.seriesName + ')' : ''}`,
+    (p.genres || []).length && `Genres: ${p.genres.join(', ')}`,
+    (p.tone || []).length && `Tone: ${p.tone.join(' / ')}`,
+    p.pov && `POV: ${p.pov}`,
+    p.tense && `Tense: ${p.tense}`,
+    p.premise && `Premise: ${p.premise}`,
+    (p.worldRules || []).length && `World rules: ${p.worldRules.slice(0, 6).join(' · ')}`,
+    wp.dialogueStyle && `Dialogue: ${wp.dialogueStyle}`,
+    wp.descriptionDensity && `Description density: ${wp.descriptionDensity}`,
+    (wp.profanityLevel || wp.violenceLevel || wp.romanticContent) &&
+      `Content limits: profanity=${wp.profanityLevel || 'mild'}, violence=${wp.violenceLevel || 'mild'}, romance=${wp.romanticContent || 'mild'}`,
+    (wp.petPeeves || []).length && `Avoid: ${wp.petPeeves.slice(0, 8).join(' · ')}`,
+    (wp.favorites || []).length && `Lean into: ${wp.favorites.slice(0, 8).join(' · ')}`,
+  ].filter(Boolean).join('\n');
 
   const systemContext = [
     persona.voice,
+    projectLines && '\nPROJECT CONTEXT:\n' + projectLines,
     '',
     'CURRENT WORLD STATE:',
     ctx,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   const recent = (history || []).slice(-HISTORY_CAP);
   const turns = recent.map(m => (m.role === 'user' ? 'Author: ' : 'Specialist: ') + m.text).join('\n');

@@ -1,31 +1,80 @@
-// Loomwright — onboarding wizard (plan §19). 9 steps, ending in a populated room.
+// Loomwright — onboarding wizard. 2026-04 expansion: ports the deeper
+// questioning from the legacy OnboardingWizard so the AI has real context
+// about the writer's saga, voice, and content boundaries before the room
+// opens. Twelve focused steps, all skippable except Welcome / Begin.
 
 import React from 'react';
 import { useTheme, PANEL_ACCENT } from '../theme';
 import { useStore, createChapter, createCharacter } from '../store';
 import { importFile } from './file-importers';
 
-const GENRES = ['Literary', 'Fantasy', 'Sci-fi', 'Thriller', 'Romance', 'Mystery', 'Horror', 'Historical', 'YA'];
-const TONES = ['hopeful', 'dark', 'lyrical', 'plain', 'ironic', 'sincere', 'urgent', 'meditative'];
+const GENRES = [
+  'Literary', 'Fantasy', 'Sci-fi', 'Thriller', 'Romance', 'Mystery',
+  'Horror', 'Historical', 'YA', 'Adventure', 'Western', 'Crime',
+  'Dystopian', 'Urban Fantasy', 'Magic Realism', 'Comedy', 'Memoir',
+  'Slice of Life', 'RPG-Lite',
+];
+const SUB_GENRES = [
+  'Grimdark', 'High Fantasy', 'Sword & Sorcery', 'Cyberpunk',
+  'Space Opera', 'Cosy', 'Noir', 'Gothic', 'Mythic', 'Hopepunk',
+  'Steampunk', 'Post-apocalyptic', 'Coming-of-age', 'Whodunit',
+];
+const TONES = [
+  'hopeful', 'dark', 'lyrical', 'plain', 'ironic', 'sincere',
+  'urgent', 'meditative', 'melancholic', 'comic', 'reverent', 'grim',
+];
 const POVS = ['1st person', '3rd limited', '3rd omniscient', 'multiple POV'];
 const TENSES = ['past', 'present'];
+const AUDIENCES = ['adult', 'YA', 'middle-grade', 'all ages'];
+const CHAPTER_LENGTHS = ['flash (<1k)', 'short (1-2.5k)', 'standard (2.5-5k)', 'long (5k+)', 'mixed'];
+const DIALOGUE_STYLES = ['terse', 'naturalistic', 'witty', 'formal', 'florid', 'mixed'];
+const DESCRIPTION_DENSITIES = ['minimal', 'sparse', 'balanced', 'rich', 'maximalist'];
+const LEVELS = ['none', 'mild', 'moderate', 'strong', 'extreme'];
+const PET_PEEVES = [
+  'overuse of adverbs', 'said-bookisms', 'purple prose', 'excessive backstory',
+  'on-the-nose dialogue', 'info dumps', 'cliché openings ("waking up")',
+  'em-dash overuse', 'head-hopping', 'weather-as-mood opening',
+];
+const FAVORITES = [
+  'sensory detail', 'rhythmic prose', 'subtext', 'short chapters',
+  'multiple POV', 'unreliable narrator', 'in-medias-res openings',
+  'dialogue-driven scenes', 'time skips', 'epistolary inserts',
+];
+
+const STEPS = [
+  'Welcome', 'Story', 'Flavour', 'World rules', 'Voice & style',
+  'Content boundaries', 'Pet peeves & loves', 'Style references',
+  'Existing manuscript', 'Plot roadmap', 'AI & cadence', 'Begin',
+];
+const TOTAL = STEPS.length;
 
 export default function Onboarding({ onDone }) {
   const t = useTheme();
   const store = useStore();
   const [step, setStep] = React.useState(0);
   const [data, setData] = React.useState({
-    workingTitle: '', seriesName: '',
-    genre: '', tone: [], pov: '', tense: '',
-    targetWords: 90000, premise: '',
-    intrusion: 'medium', aiProvider: 'auto',
-    importedDocs: [], styleSamples: [],
-    seedCast: [],
+    workingTitle: '', seriesName: '', premise: '', comparisons: '',
+    targetAudience: 'adult',
+    genres: [], subGenres: [], tone: [], pov: '', tense: '',
+    worldRulesText: '', worldRules: [],
+    chapterLength: 'standard (2.5-5k)',
+    dialogueStyle: 'naturalistic',
+    descriptionDensity: 'balanced',
+    profanityLevel: 'mild',
+    violenceLevel: 'mild',
+    romanticContent: 'mild',
+    petPeeves: [], customPetPeeves: '',
+    favorites: [], customFavorites: '',
+    styleSamples: [], importedDocs: [],
+    targetChapters: 25, outlineText: '',
+    targetWords: 90000,
+    aiProvider: 'auto', intrusion: 'medium',
   });
   const [busy, setBusy] = React.useState(false);
 
-  const next = () => setStep(s => Math.min(8, s + 1));
+  const next = () => setStep(s => Math.min(TOTAL - 1, s + 1));
   const prev = () => setStep(s => Math.max(0, s - 1));
+  const set = (patch) => setData(d => ({ ...d, ...patch }));
 
   const onFiles = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -37,11 +86,9 @@ export default function Onboarding({ onDone }) {
         const out = await importFile(f);
         if (out.kind === 'document') docs.push({ name: f.name, paragraphs: out.paragraphs });
         else if (out.kind === 'archive') docs.push(...out.documents);
-      } catch (err) {
-        console.warn('Import failed', f.name, err);
-      }
+      } catch (err) { console.warn('Import failed', f.name, err); }
     }
-    setData(d => ({ ...d, importedDocs: [...d.importedDocs, ...docs] }));
+    set({ importedDocs: [...data.importedDocs, ...docs] });
     setBusy(false);
   };
 
@@ -56,52 +103,70 @@ export default function Onboarding({ onDone }) {
         if (out.kind === 'document') samples.push({ name: f.name, paragraphs: out.paragraphs });
       } catch {}
     }
-    setData(d => ({ ...d, styleSamples: [...d.styleSamples, ...samples] }));
+    set({ styleSamples: [...data.styleSamples, ...samples] });
     setBusy(false);
   };
 
   const finish = async () => {
     store.transaction(({ setSlice, setPath }) => {
-      // Profile.
+      // Profile — comprehensive context for every AI call.
       setPath('profile.onboarded', true);
       setPath('profile.workingTitle', data.workingTitle);
       setPath('profile.seriesName', data.seriesName);
-      setPath('profile.genre', (data.genre || '').toLowerCase());
+      setPath('profile.genre', (data.genres[0] || '').toLowerCase());
+      setPath('profile.genres', data.genres);
+      setPath('profile.subGenres', data.subGenres);
       setPath('profile.tone', data.tone);
       setPath('profile.pov', data.pov);
       setPath('profile.tense', data.tense);
+      setPath('profile.targetAudience', data.targetAudience);
+      setPath('profile.comparisons', data.comparisons);
       setPath('profile.targetWords', data.targetWords);
+      setPath('profile.targetChapters', data.targetChapters);
       setPath('profile.premise', data.premise);
       setPath('profile.intrusion', data.intrusion);
       setPath('profile.aiProvider', data.aiProvider);
+      // World rules: a free-form text plus a bulleted list (split on newlines).
+      const ruleList = (data.worldRulesText || '').split('\n').map(s => s.trim()).filter(Boolean);
+      setPath('profile.worldRules', ruleList);
+      setPath('profile.worldAnchor', data.worldRulesText);
+      // Plot roadmap.
+      setPath('profile.plotOutline', data.outlineText);
+      // Writing preferences — a single object the legacy AI prompts read.
+      setPath('profile.writingPreferences', {
+        pov: data.pov,
+        tense: data.tense,
+        chapterLength: data.chapterLength,
+        dialogueStyle: data.dialogueStyle,
+        descriptionDensity: data.descriptionDensity,
+        profanityLevel: data.profanityLevel,
+        violenceLevel: data.violenceLevel,
+        romanticContent: data.romanticContent,
+        petPeeves: [...data.petPeeves, ...(data.customPetPeeves ? data.customPetPeeves.split(',').map(s => s.trim()).filter(Boolean) : [])],
+        favorites: [...data.favorites, ...(data.customFavorites ? data.customFavorites.split(',').map(s => s.trim()).filter(Boolean) : [])],
+      });
       // Book.
       setPath('book.title', data.workingTitle || 'Untitled');
       setPath('book.series', data.seriesName || null);
       setPath('book.target', Math.round((data.targetWords || 80000) / 30) || 2500);
-      setPath('book.totalChapters', 25);
+      setPath('book.totalChapters', data.targetChapters || 25);
       setPath('book.createdAt', Date.now());
-      // Seed cast.
-      for (const c of data.seedCast) {
-        if (c.name) createCharacter({ setSlice }, { name: c.name, role: c.role || 'support', oneliner: c.oneliner || '' });
-      }
     });
 
-    // Imported documents become chapters (one chapter per doc).
+    // Imported documents become chapters.
     if (data.importedDocs.length > 0) {
       data.importedDocs.forEach((doc, i) => {
         const text = doc.paragraphs.map(p => p.text).join('\n\n');
         createChapter(store, {
           title: doc.name.replace(/\.[^.]+$/, '') || `Chapter ${i + 1}`,
-          text,
-          paragraphs: doc.paragraphs,
+          text, paragraphs: doc.paragraphs,
         });
       });
     } else {
-      // Always seed at least an empty chapter.
       createChapter(store, { title: 'Chapter 1', text: '' });
     }
 
-    // Imported style samples → voice profile narrator slot.
+    // Style samples → narrator voice profile.
     if (data.styleSamples.length > 0) {
       const narratorSamples = data.styleSamples.flatMap(s => s.paragraphs).map(p => p.text);
       store.setSlice('voice', vs => {
@@ -119,63 +184,133 @@ export default function Onboarding({ onDone }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
-      background: t.bg,
-      display: 'grid', placeItems: 'center',
+      background: t.bg, display: 'grid', placeItems: 'start center',
       overflowY: 'auto',
     }}>
-      <div style={{
-        width: 'min(100%, 720px)', padding: 40, color: t.ink,
-        fontFamily: t.display,
-      }}>
+      <div style={{ width: 'min(100%, 760px)', padding: '40px 24px 80px', color: t.ink, fontFamily: t.display }}>
         <div style={{
           fontFamily: t.mono, fontSize: 9, color: PANEL_ACCENT.loom,
           letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 6,
-        }}>Loomwright · Step {step + 1} of 9</div>
+        }}>Loomwright · Step {step + 1} of {TOTAL} · {STEPS[step]}</div>
         <div style={{ height: 2, background: t.rule, marginBottom: 24, borderRadius: 1 }}>
           <div style={{
-            width: `${((step + 1) / 9) * 100}%`, height: '100%',
+            width: `${((step + 1) / TOTAL) * 100}%`, height: '100%',
             background: PANEL_ACCENT.loom, transition: 'width 200ms',
           }} />
         </div>
 
         {step === 0 && (
           <Section title="Welcome">
-            <p style={pStyle(t)}>Loomwright is a writers room. As you write, the manuscript becomes a living wiki of people, places, items, threads, and voices — surfaced quietly in the margins.</p>
-            <p style={pStyle(t)}>Let me get to know your story.</p>
+            <p style={pStyle(t)}>Loomwright is your writers room. As you write, the manuscript becomes a living wiki of people, places, items, quests, and voices — surfaced quietly in the margins.</p>
+            <p style={pStyle(t)}>The next 10 minutes are a one-time setup. The deeper your answers, the smarter the room is from day one. Anything you skip you can fill in later from Settings.</p>
           </Section>
         )}
+
         {step === 1 && (
-          <Section title="What is your story called?">
+          <Section title="What is your story?">
             <Field label="Working title">
-              <input value={data.workingTitle} onChange={e => setData(d => ({ ...d, workingTitle: e.target.value }))} style={inpStyle(t)} placeholder="Untitled" autoFocus />
+              <input value={data.workingTitle} onChange={e => set({ workingTitle: e.target.value })} style={inp(t)} placeholder="Untitled" autoFocus />
             </Field>
             <Field label="Series name (optional)">
-              <input value={data.seriesName} onChange={e => setData(d => ({ ...d, seriesName: e.target.value }))} style={inpStyle(t)} />
+              <input value={data.seriesName} onChange={e => set({ seriesName: e.target.value })} style={inp(t)} placeholder="The Compliance Run, The First Law, etc." />
             </Field>
-            <Field label="Premise (optional)">
-              <textarea rows={3} value={data.premise} onChange={e => setData(d => ({ ...d, premise: e.target.value }))} style={{ ...inpStyle(t), fontFamily: t.display, lineHeight: 1.5 }} placeholder="A few sentences…" />
+            <Field label="One-paragraph premise">
+              <textarea rows={4} value={data.premise} onChange={e => set({ premise: e.target.value })}
+                style={{ ...inp(t), fontFamily: t.display, lineHeight: 1.5 }}
+                placeholder="A fallen knight and a goblin squire navigate a welfare system run by feudal bureaucrats..." />
+            </Field>
+            <Field label="Comparable works (optional, comma-separated)">
+              <input value={data.comparisons} onChange={e => set({ comparisons: e.target.value })} style={inp(t)}
+                placeholder="Discworld, Dark Souls, Kafka on the Shore" />
+            </Field>
+            <Field label="Target audience">
+              <Chips items={AUDIENCES} selected={[data.targetAudience]} onChange={v => set({ targetAudience: v[0] || 'adult' })} multi={false} t={t} />
             </Field>
           </Section>
         )}
+
         {step === 2 && (
           <Section title="What flavour?">
-            <Field label="Genre">
-              <Chips items={GENRES} selected={data.genre ? [data.genre] : []} onChange={v => setData(d => ({ ...d, genre: v[0] || '' }))} multi={false} t={t} />
+            <Field label="Genres (pick any that apply)">
+              <Chips items={GENRES} selected={data.genres} onChange={v => set({ genres: v })} multi t={t} />
             </Field>
-            <Field label="Tone">
-              <Chips items={TONES} selected={data.tone} onChange={v => setData(d => ({ ...d, tone: v }))} multi={true} t={t} />
+            <Field label="Sub-genres (optional)">
+              <Chips items={SUB_GENRES} selected={data.subGenres} onChange={v => set({ subGenres: v })} multi t={t} />
+            </Field>
+            <Field label="Tone (pick any)">
+              <Chips items={TONES} selected={data.tone} onChange={v => set({ tone: v })} multi t={t} />
             </Field>
             <Field label="POV">
-              <Chips items={POVS} selected={data.pov ? [data.pov] : []} onChange={v => setData(d => ({ ...d, pov: v[0] || '' }))} multi={false} t={t} />
+              <Chips items={POVS} selected={data.pov ? [data.pov] : []} onChange={v => set({ pov: v[0] || '' })} multi={false} t={t} />
             </Field>
             <Field label="Tense">
-              <Chips items={TENSES} selected={data.tense ? [data.tense] : []} onChange={v => setData(d => ({ ...d, tense: v[0] || '' }))} multi={false} t={t} />
+              <Chips items={TENSES} selected={data.tense ? [data.tense] : []} onChange={v => set({ tense: v[0] || '' })} multi={false} t={t} />
             </Field>
           </Section>
         )}
+
         {step === 3 && (
+          <Section title="World rules">
+            <p style={pStyle(t)}>The hard limits of your world — the laws of magic, technology, society, anything that would feel like cheating to break. The Loom uses these every time it suggests prose.</p>
+            <Field label="Describe the world (one or two paragraphs)">
+              <textarea rows={5} value={data.worldRulesText} onChange={e => set({ worldRulesText: e.target.value })}
+                style={{ ...inp(t), lineHeight: 1.5 }}
+                placeholder="Magic costs life-years. The council is real. Steel rusts in the marsh. ..." />
+            </Field>
+            <p style={{ ...pStyle(t), fontSize: 13 }}>Tip: one rule per line gets read as a checklist by the AI.</p>
+          </Section>
+        )}
+
+        {step === 4 && (
+          <Section title="Voice & style">
+            <Field label="Average chapter length">
+              <Chips items={CHAPTER_LENGTHS} selected={[data.chapterLength]} onChange={v => set({ chapterLength: v[0] || 'standard (2.5-5k)' })} multi={false} t={t} />
+            </Field>
+            <Field label="Dialogue style">
+              <Chips items={DIALOGUE_STYLES} selected={[data.dialogueStyle]} onChange={v => set({ dialogueStyle: v[0] || 'naturalistic' })} multi={false} t={t} />
+            </Field>
+            <Field label="Description density">
+              <Chips items={DESCRIPTION_DENSITIES} selected={[data.descriptionDensity]} onChange={v => set({ descriptionDensity: v[0] || 'balanced' })} multi={false} t={t} />
+            </Field>
+          </Section>
+        )}
+
+        {step === 5 && (
+          <Section title="Content boundaries">
+            <p style={pStyle(t)}>How far the AI is allowed to go when proposing prose.</p>
+            <Field label="Profanity">
+              <Chips items={LEVELS} selected={[data.profanityLevel]} onChange={v => set({ profanityLevel: v[0] || 'mild' })} multi={false} t={t} />
+            </Field>
+            <Field label="Violence">
+              <Chips items={LEVELS} selected={[data.violenceLevel]} onChange={v => set({ violenceLevel: v[0] || 'mild' })} multi={false} t={t} />
+            </Field>
+            <Field label="Romance / sexual content">
+              <Chips items={LEVELS} selected={[data.romanticContent]} onChange={v => set({ romanticContent: v[0] || 'mild' })} multi={false} t={t} />
+            </Field>
+          </Section>
+        )}
+
+        {step === 6 && (
+          <Section title="Pet peeves & favourites">
+            <p style={pStyle(t)}>Tell the Loom what to avoid and what to lean into.</p>
+            <Field label="Avoid">
+              <Chips items={PET_PEEVES} selected={data.petPeeves} onChange={v => set({ petPeeves: v })} multi t={t} />
+              <input value={data.customPetPeeves} onChange={e => set({ customPetPeeves: e.target.value })}
+                style={{ ...inp(t), marginTop: 8 }}
+                placeholder="Anything else, comma separated" />
+            </Field>
+            <Field label="Lean into">
+              <Chips items={FAVORITES} selected={data.favorites} onChange={v => set({ favorites: v })} multi t={t} />
+              <input value={data.customFavorites} onChange={e => set({ customFavorites: e.target.value })}
+                style={{ ...inp(t), marginTop: 8 }}
+                placeholder="Anything else, comma separated" />
+            </Field>
+          </Section>
+        )}
+
+        {step === 7 && (
           <Section title="Style references (optional)">
-            <p style={pStyle(t)}>Upload books or chapters whose voice you want to study. The Loom can compare against them.</p>
+            <p style={pStyle(t)}>Upload a passage from a writer whose voice you want to study. The Loom can compare drafts against it.</p>
             <FileDrop t={t} accept=".docx,.pdf,.txt,.md,.markdown,.zip" onFiles={onStyleFiles} busy={busy} />
             {data.styleSamples.length > 0 && (
               <div style={{ marginTop: 10, fontFamily: t.mono, fontSize: 10, color: t.ink2 }}>
@@ -184,9 +319,10 @@ export default function Onboarding({ onDone }) {
             )}
           </Section>
         )}
-        {step === 4 && (
-          <Section title="Bring in an existing manuscript?">
-            <p style={pStyle(t)}>Optional. DOCX, PDF, TXT, Markdown, or a ZIP of any of those. Imports become chapters; entities you have not added yet appear as suggestions in the margin.</p>
+
+        {step === 8 && (
+          <Section title="Bring in an existing manuscript? (optional)">
+            <p style={pStyle(t)}>DOCX, PDF, TXT, Markdown, or a ZIP. Imports become chapters; new entities surface as suggestions in the margin.</p>
             <FileDrop t={t} accept=".docx,.pdf,.txt,.md,.markdown,.zip" onFiles={onFiles} busy={busy} />
             {data.importedDocs.length > 0 && (
               <div style={{ marginTop: 10, fontFamily: t.mono, fontSize: 10, color: t.ink2 }}>
@@ -196,61 +332,62 @@ export default function Onboarding({ onDone }) {
             )}
           </Section>
         )}
-        {step === 5 && (
-          <Section title="How vocal should the Loom be?">
-            <Chips
-              items={['quiet', 'medium', 'helpful', 'eager']}
-              selected={[data.intrusion]}
-              onChange={v => setData(d => ({ ...d, intrusion: v[0] || 'medium' }))}
-              multi={false} t={t}
-            />
-            <p style={{ ...pStyle(t), marginTop: 14, fontSize: 13 }}>
-              {data.intrusion === 'quiet' && 'Only the most confident noticings will appear. Best for a finished manuscript.'}
-              {data.intrusion === 'medium' && 'A balanced cadence. The default.'}
-              {data.intrusion === 'helpful' && 'More margin noticings — good for first drafts.'}
-              {data.intrusion === 'eager' && 'The Loom speaks freely. Best for brainstorming.'}
-            </p>
-          </Section>
-        )}
-        {step === 6 && (
-          <Section title="AI provider">
-            <Chips
-              items={['auto', 'anthropic', 'openai', 'gemini', 'offline']}
-              selected={[data.aiProvider]}
-              onChange={v => setData(d => ({ ...d, aiProvider: v[0] || 'auto' }))}
-              multi={false} t={t}
-            />
-            <p style={{ ...pStyle(t), fontSize: 13 }}>
-              You can change this later in Settings, and add API keys when you are ready.
-            </p>
-          </Section>
-        )}
-        {step === 7 && (
-          <Section title="Word count goal">
-            <Field label="Target words for this book">
-              <input type="number" value={data.targetWords} onChange={e => setData(d => ({ ...d, targetWords: Number(e.target.value) || 0 }))} style={inpStyle(t)} />
+
+        {step === 9 && (
+          <Section title="Plot roadmap (optional)">
+            <Field label="Target chapter count">
+              <input type="number" min={1} max={120} value={data.targetChapters}
+                onChange={e => set({ targetChapters: Math.max(1, Number(e.target.value) || 25) })} style={inp(t)} />
             </Field>
-            <p style={{ ...pStyle(t), fontSize: 13 }}>
-              We will divide that across chapters and surface a daily target in the ritual bar.
-            </p>
-          </Section>
-        )}
-        {step === 8 && (
-          <Section title="One last thing">
-            <p style={pStyle(t)}>You are ready. Hit Begin and the room will open.</p>
-            <p style={pStyle(t)}>Tip: right-click anywhere in the prose for a contextual radial menu.</p>
+            <Field label="Outline / beats (one per line, optional)">
+              <textarea rows={6} value={data.outlineText} onChange={e => set({ outlineText: e.target.value })}
+                style={{ ...inp(t), lineHeight: 1.5, fontFamily: t.display }}
+                placeholder={`ch.01 — Tom finds the watch\nch.02 — Marlo arrives\nch.03 — the river crossing`} />
+            </Field>
           </Section>
         )}
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 30 }}>
-          {step > 0 && (
-            <button onClick={prev} style={btnStyle(t)}>Back</button>
-          )}
+        {step === 10 && (
+          <Section title="AI & cadence">
+            <Field label="Preferred AI provider">
+              <Chips items={['auto', 'anthropic', 'openai', 'gemini', 'groq', 'huggingface', 'offline']}
+                selected={[data.aiProvider]} onChange={v => set({ aiProvider: v[0] || 'auto' })} multi={false} t={t} />
+              <p style={{ ...pStyle(t), fontSize: 12, marginTop: 6 }}>Auto tries the free providers first. Add API keys later in Settings.</p>
+            </Field>
+            <Field label="How vocal should the Loom be?">
+              <Chips items={['quiet', 'medium', 'helpful', 'eager']}
+                selected={[data.intrusion]} onChange={v => set({ intrusion: v[0] || 'medium' })} multi={false} t={t} />
+              <p style={{ ...pStyle(t), fontSize: 12, marginTop: 6 }}>
+                {data.intrusion === 'quiet' && 'Only the most confident noticings.'}
+                {data.intrusion === 'medium' && 'A balanced cadence. The default.'}
+                {data.intrusion === 'helpful' && 'More margin noticings — good for first drafts.'}
+                {data.intrusion === 'eager' && 'Speaks freely. Best for brainstorming.'}
+              </p>
+            </Field>
+            <Field label="Total target words">
+              <input type="number" value={data.targetWords} onChange={e => set({ targetWords: Math.max(1000, Number(e.target.value) || 0) })} style={inp(t)} />
+            </Field>
+          </Section>
+        )}
+
+        {step === 11 && (
+          <Section title="Ready">
+            <p style={pStyle(t)}>Hit Begin and the room opens with everything wired in.</p>
+            <p style={pStyle(t)}>Tip: right-click in prose for the contextual radial. Type @ to mention any character / place / item.</p>
+            <p style={pStyle(t)}>You can revise anything you set here from the Settings panel.</p>
+          </Section>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 30, alignItems: 'center' }}>
+          {step > 0 && <button onClick={prev} style={btn(t)}>Back</button>}
           <div style={{ flex: 1 }} />
-          {step < 8 ? (
-            <button onClick={next} style={btnStyle(t, true)}>Next</button>
+          <span style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.12 }}>
+            {step === 0 ? '' : step < TOTAL - 1 ? 'Optional — skip if you like' : ''}
+          </span>
+          {step < TOTAL - 1 ? (
+            <button onClick={next} style={btn(t, true)}>Next</button>
           ) : (
-            <button onClick={finish} style={btnStyle(t, true)}>Begin →</button>
+            <button onClick={finish} style={btn(t, true)}>Begin →</button>
           )}
         </div>
       </div>
@@ -278,11 +415,8 @@ function Field({ label, children }) {
 }
 function Chips({ items, selected, onChange, multi, t }) {
   const toggle = (v) => {
-    if (multi) {
-      onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]);
-    } else {
-      onChange([v]);
-    }
+    if (multi) onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]);
+    else onChange([v]);
   };
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -302,8 +436,7 @@ function FileDrop({ t, accept, onFiles, busy }) {
   return (
     <label style={{
       display: 'block', padding: 30, textAlign: 'center', cursor: busy ? 'wait' : 'pointer',
-      border: `2px dashed ${t.rule}`, borderRadius: 2,
-      background: busy ? t.paper2 : 'transparent',
+      border: `2px dashed ${t.rule}`, borderRadius: 2, background: busy ? t.paper2 : 'transparent',
     }}>
       <input type="file" multiple accept={accept} onChange={onFiles} style={{ display: 'none' }} disabled={busy} />
       <div style={{ fontFamily: t.display, fontSize: 14, color: busy ? t.ink3 : t.ink2 }}>
@@ -315,7 +448,7 @@ function FileDrop({ t, accept, onFiles, busy }) {
     </label>
   );
 }
-function inpStyle(t) {
+function inp(t) {
   return {
     width: '100%', padding: '8px 10px',
     fontFamily: t.display, fontSize: 14, color: t.ink,
@@ -325,7 +458,7 @@ function inpStyle(t) {
 function pStyle(t) {
   return { fontFamily: t.display, fontSize: 16, color: t.ink2, lineHeight: 1.7, marginBottom: 12 };
 }
-function btnStyle(t, primary) {
+function btn(t, primary) {
   return {
     padding: '10px 18px',
     background: primary ? t.accent : 'transparent',

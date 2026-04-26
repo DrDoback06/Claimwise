@@ -180,12 +180,19 @@ export default function Dossier({ charId, onInterview, onWeave }) {
       <div style={{
         padding: '16px 16px 12px', display: 'flex', alignItems: 'flex-start', gap: 12,
       }}>
-        <div style={{
+        <label title="Click to change colour" style={{
+          position: 'relative', cursor: 'pointer', flexShrink: 0,
           width: 52, height: 52, borderRadius: '50%',
           background: accent, color: t.onAccent,
           display: 'grid', placeItems: 'center',
-          fontFamily: t.display, fontWeight: 500, fontSize: 22, flexShrink: 0,
-        }}>{(c.name || '?')[0]}</div>
+          fontFamily: t.display, fontWeight: 500, fontSize: 22,
+        }}>
+          {(c.name || '?')[0]}
+          <input type="color"
+            value={/^#[0-9a-f]{6}$/i.test(c.color || '') ? c.color : '#8b2b1f'}
+            onChange={e => updateChar({ color: e.target.value })}
+            style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', borderRadius: '50%' }} />
+        </label>
         <div style={{ flex: 1, minWidth: 0 }}>
           <input
             value={[c.role, c.age, c.pronouns].filter(Boolean).join(' · ') || c.role || 'support'}

@@ -5,6 +5,7 @@
 
 import React from 'react';
 import PanelFrame from '../PanelFrame';
+import { dragEntity } from '../../drag';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore, createQuest } from '../../store';
 import { useSelection } from '../../selection';
@@ -139,14 +140,18 @@ export default function QuestsPanel({ onClose }) {
           </div>
         )}
         {filtered.map(q => (
-          <button key={q.id} onClick={() => select('quest', q.id)} style={{
-            padding: '8px 10px', textAlign: 'left',
-            background: questId === q.id ? t.paper2 : 'transparent',
-            border: `1px solid ${questId === q.id ? (q.color || t.accent) : t.rule}`,
-            borderLeft: `3px solid ${q.color || PANEL_ACCENT.threads}`,
-            borderRadius: 2, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 8,
-          }}>
+          <button key={q.id}
+            onClick={() => select('quest', q.id)}
+            draggable
+            onDragStart={e => dragEntity(e, 'quest', q.id)}
+            style={{
+              padding: '8px 10px', textAlign: 'left',
+              background: questId === q.id ? t.paper2 : 'transparent',
+              border: `1px solid ${questId === q.id ? (q.color || t.accent) : t.rule}`,
+              borderLeft: `3px solid ${q.color || PANEL_ACCENT.threads}`,
+              borderRadius: 2, cursor: 'grab',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: t.display, fontSize: 13, color: t.ink, fontWeight: 500 }}>{q.name || q.title}</div>
               <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.12, textTransform: 'uppercase' }}>

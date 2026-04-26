@@ -3,15 +3,19 @@
 // distinct persona, a curated system context, and chat history persisted to
 // `ui.specialistHistory[domain]`.
 //
+// When the specialist's reply contains entity-shaped JSON, a "Commit to canon"
+// button appears so the writer can drop the result straight into the slice.
+//
 // Use: <SpecialistChat domain="items" panelId="inventory" />
 
 import React from 'react';
 import { useTheme, PANEL_ACCENT } from '../theme';
-import { useStore } from '../store';
-import { ask } from './service';
+import { useStore, createCharacter, createPlace, createItem, createQuest } from '../store';
+import { ask, extractJSON } from './service';
 import { personaFor } from './personas';
+import { ensureWikiEntry } from '../wiki/service';
 
-function rid() { return 'm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6); }
+function rid(prefix = 'm') { return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6); }
 
 export default function SpecialistChat({ domain, accent }) {
   const t = useTheme();
@@ -122,19 +126,31 @@ export default function SpecialistChat({ domain, accent }) {
             tree for a wheelwright".
           </div>
         )}
-        {messages.map(m => (
-          <div key={m.id} style={{
-            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: '85%',
-            padding: '6px 10px',
-            background: m.role === 'user' ? t.paper2 : (t.sugg || t.paper),
-            border: `1px solid ${m.role === 'user' ? t.rule : (t.suggInk || t.rule)}33`,
-            borderLeft: m.role === 'user' ? `1px solid ${t.rule}` : `2px solid ${t.suggInk || accentColor}`,
-            borderRadius: 4,
-            fontFamily: t.display, fontSize: 13, color: t.ink, lineHeight: 1.4,
-            whiteSpace: 'pre-wrap',
-          }}>{m.text}</div>
-        ))}
+        {messages.map(m => {
+          const json = m.role === 'specialist' ? extractJSON(m.text) : null;
+          const commit = json ? buildCommit(domain, json, store) : null;
+          return (
+            <div key={m.id} style={{
+              alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+              maxWidth: '90%',
+              display: 'flex', flexDirection: 'column', gap: 6,
+            }}>
+              <div style={{
+                padding: '6px 10px',
+                background: m.role === 'user' ? t.paper2 : (t.sugg || t.paper),
+                border: `1px solid ${m.role === 'user' ? t.rule : (t.suggInk || t.rule)}33`,
+                borderLeft: m.role === 'user' ? `1px solid ${t.rule}` : `2px solid ${t.suggInk || accentColor}`,
+                borderRadius: 4,
+                fontFamily: t.display, fontSize: 13, color: t.ink, lineHeight: 1.4,
+                whiteSpace: 'pre-wrap',
+              }}>{m.text}</div>
+              {commit && (
+                <CommitChip t={t} accent={accentColor} commit={commit}
+                  onDone={(label) => setHistory(h => [...h, { id: rid(), role: 'system', text: `✓ ${label}`, at: Date.now() }])} />
+              )}
+            </div>
+          );
+        })}
         {busy && (
           <div style={{
             alignSelf: 'flex-start', padding: '6px 10px',
@@ -181,3 +197,194 @@ function iconBtn(t) {
     fontFamily: t.mono, fontSize: 11, lineHeight: 1, padding: 0,
   };
 }
+
+
+// ── Domain commit helpers ────────────────────────────────────────────
+// Inspect a JSON blob from the specialist and return a `{label, run}`
+// commit handle if we recognise its shape.
+
+function buildCommit(domain, json, store) {
+  const helper = { setSlice: store.setSlice };
+  if (!json) return null;
+
+  // Items master: {"item": {...}, "missingStats": [...], "missingSkills": [...], "wikiDraft": "..."}
+  if (json.item && typeof json.item === "object") {
+    return {
+      label: `Add "${json.item.name || "item"}" to bank`,
+      run: async () => {
+        const id = createItem(helper, { ...json.item, draftedByLoom: true, inBank: true });
+        if (json.wikiDraft) {
+          try { await ensureWikiEntry({ entityId: id, entityType: "item", entity: json.item, body: json.wikiDraft, draftedByLoom: true }); } catch {}
+        }
+        // Auto-create missing stats.
+        if (Array.isArray(json.missingStats)) {
+          store.setSlice("statCatalog", xs => {
+            const cur = Array.isArray(xs) ? xs : [];
+            const known = new Set(cur.map(c => c.key));
+            const next = [...cur];
+            for (const s of json.missingStats) if (s?.key && !known.has(s.key)) {
+              next.push({ key: s.key, description: s.description || "", max: s.max || 100 });
+            }
+            return next;
+          });
+        }
+        // Auto-create missing skills.
+        if (Array.isArray(json.missingSkills)) {
+          for (const sk of json.missingSkills) {
+            if (!sk?.name) continue;
+            const skId = "sk_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+            store.setSlice("skills", xs => [...(xs || []), {
+              id: skId, name: sk.name, tier: sk.tier || "novice",
+              position: { x: 100 + Math.random() * 600, y: 100 + Math.random() * 400 },
+              description: sk.description || "",
+              unlockReqs: { prereqIds: [] },
+              effects: sk.effects || { stats: {}, flags: [] },
+              level: 0, maxLevel: sk.maxLevel || 5,
+              draftedByLoom: true,
+            }]);
+          }
+        }
+        return `Item "${json.item.name}" added.`;
+      },
+    };
+  }
+
+  // Skill librarian: {"nodes": [...], "missingStats": [...], "wikiDrafts": {...}}
+  if (Array.isArray(json.nodes) && json.nodes.length) {
+    return {
+      label: `Commit ${json.nodes.length} skill node${json.nodes.length === 1 ? "" : "s"}`,
+      run: async () => {
+        const placed = json.nodes.map(n => ({
+          id: "sk_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6),
+          name: n.name || "Skill",
+          tier: ["novice", "adept", "master", "unique"].includes(n.tier) ? n.tier : "novice",
+          position: n.position || { x: 100 + Math.random() * 700, y: 100 + Math.random() * 400 },
+          description: n.description || "",
+          unlockReqs: n.unlockReqs || { prereqIds: [] },
+          effects: n.effects || { stats: {}, flags: [] },
+          level: 0, maxLevel: n.maxLevel || 5,
+          costPoints: n.costPoints || 1,
+          cooldown: n.cooldown || 0,
+          draftedByLoom: true,
+        }));
+        store.setSlice("skills", xs => [...(xs || []), ...placed]);
+        if (Array.isArray(json.missingStats)) {
+          store.setSlice("statCatalog", xs => {
+            const cur = Array.isArray(xs) ? xs : [];
+            const known = new Set(cur.map(c => c.key));
+            const next = [...cur];
+            for (const s of json.missingStats) if (s?.key && !known.has(s.key)) {
+              next.push({ key: s.key, description: s.description || "", max: s.max || 100 });
+            }
+            return next;
+          });
+        }
+        for (const node of placed) {
+          const draft = json.wikiDrafts?.[node.name];
+          try { await ensureWikiEntry({ entityId: node.id, entityType: "skill", entity: { name: node.name, description: node.description }, body: draft, draftedByLoom: true }); } catch {}
+        }
+        return `${placed.length} skill node${placed.length === 1 ? "" : "s"} added.`;
+      },
+    };
+  }
+
+  // Quest architect: {"quest": {...}, "wikiDraft": "..."}
+  if (json.quest && typeof json.quest === "object") {
+    return {
+      label: `Add quest "${json.quest.name || "quest"}"`,
+      run: async () => {
+        const id = createQuest(helper, { ...json.quest, draftedByLoom: true });
+        if (json.wikiDraft) {
+          try { await ensureWikiEntry({ entityId: id, entityType: "quest", entity: json.quest, body: json.wikiDraft, draftedByLoom: true }); } catch {}
+        }
+        return `Quest "${json.quest.name}" added.`;
+      },
+    };
+  }
+
+  // Casting director: {"character": {...}, "wikiDraft": "..."}
+  if (json.character && typeof json.character === "object") {
+    return {
+      label: `Add character "${json.character.name || "character"}"`,
+      run: async () => {
+        const id = createCharacter(helper, { ...json.character, draftedByLoom: true });
+        if (json.wikiDraft) {
+          try { await ensureWikiEntry({ entityId: id, entityType: "character", entity: json.character, body: json.wikiDraft, draftedByLoom: true }); } catch {}
+        }
+        return `Character "${json.character.name}" added.`;
+      },
+    };
+  }
+
+  // Cartographer: {"place": {...}} or {"places": [...]}
+  if (json.place && typeof json.place === "object") {
+    return {
+      label: `Add place "${json.place.name}"`,
+      run: async () => {
+        const id = createPlace(helper, { ...json.place, draftedByLoom: true });
+        if (json.wikiDraft) {
+          try { await ensureWikiEntry({ entityId: id, entityType: "place", entity: json.place, body: json.wikiDraft, draftedByLoom: true }); } catch {}
+        }
+        return `Place "${json.place.name}" added.`;
+      },
+    };
+  }
+  if (Array.isArray(json.places) && json.places.length) {
+    return {
+      label: `Add ${json.places.length} place${json.places.length === 1 ? "" : "s"}`,
+      run: async () => {
+        for (const p of json.places) createPlace(helper, { ...p, draftedByLoom: true });
+        return `${json.places.length} place${json.places.length === 1 ? "" : "s"} added.`;
+      },
+    };
+  }
+
+  // Mechanics designer: {"stats": {...}}
+  if (json.stats && typeof json.stats === "object" && !Array.isArray(json.stats)) {
+    const keys = Object.keys(json.stats);
+    if (keys.length) {
+      return {
+        label: `Add ${keys.length} stat${keys.length === 1 ? "" : "s"} to catalogue`,
+        run: async () => {
+          store.setSlice("statCatalog", xs => {
+            const cur = Array.isArray(xs) ? xs : [];
+            const known = new Set(cur.map(c => c.key));
+            const next = [...cur];
+            for (const [k, v] of Object.entries(json.stats)) {
+              if (known.has(k)) continue;
+              next.push({ key: k, description: v?.description || "", max: v?.max || 100 });
+            }
+            return next;
+          });
+          return `${keys.length} stat${keys.length === 1 ? "" : "s"} added.`;
+        },
+      };
+    }
+  }
+
+  return null;
+}
+
+function CommitChip({ t, accent, commit, onDone }) {
+  const [busy, setBusy] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+  if (done) return null;
+  return (
+    <button
+      onClick={async () => {
+        if (busy) return;
+        setBusy(true);
+        try { const label = await commit.run(); setDone(true); onDone?.(label || commit.label); }
+        finally { setBusy(false); }
+      }}
+      style={{
+        alignSelf: "flex-start",
+        padding: "5px 12px", background: accent, color: t.onAccent,
+        border: "none", borderRadius: 999, cursor: busy ? "wait" : "pointer",
+        fontFamily: t.mono, fontSize: 10, letterSpacing: 0.14,
+        textTransform: "uppercase", fontWeight: 600,
+        opacity: busy ? 0.6 : 1,
+      }}>{busy ? "Committing…" : "✦ " + commit.label}</button>
+  );
+}
+

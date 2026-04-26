@@ -35,115 +35,99 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
     return () => window.removeEventListener('keydown', onKey);
   }, [activeIdx, order.length]);
 
+  // Single source-of-truth for the right-side toolbar so we can render it
+  // compactly without per-button styling drifting.
+  const tools = [
+    onOpenAid     && { id: 'aid',     icon: 'sparkle',  label: '✦', title: 'Writing aid (⌘\\)',         onClick: onOpenAid },
+    {                  id: 'whisper', icon: null,       label: '✧', title: 'Suggestions drawer',
+      active: suggestionsOpen, onClick: () => store.setPath('ui.suggestionsOpen', !suggestionsOpen) },
+    {                  id: 'extract', icon: null,       label: '⌬', title: 'Run extraction on this chapter',
+      onClick: () => window.dispatchEvent(new CustomEvent('lw:open-extraction')) },
+    onOpenProof   && { id: 'proof',   icon: null,       label: '✓', title: "Proofreader (⌘')",          onClick: onOpenProof },
+    onOpenHistory && { id: 'hist',    icon: 'book',     label: null, title: 'Version history',           onClick: onOpenHistory },
+    onOpenBible   && { id: 'bible',   icon: 'building', label: null, title: 'Series bible',              onClick: onOpenBible },
+    onOpenSettings && { id: 'settings', icon: 'cog',    label: null, title: 'Settings',                  onClick: onOpenSettings },
+    {                  id: 'focus',   icon: 'focus',    label: null, title: 'Focus mode (F9)',
+      active: focusMode, onClick: onToggleFocus },
+  ].filter(Boolean);
+
   return (
     <header className="lw-topbar" style={{
-      display: 'flex', alignItems: 'center', gap: 16,
-      padding: '8px 16px', borderBottom: `1px solid ${t.rule}`,
-      background: t.paper, height: 48,
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap',
+      padding: '6px 12px', borderBottom: `1px solid ${t.rule}`,
+      background: t.paper, height: 48, minWidth: 0, overflow: 'hidden',
     }}>
-      {book.series && (
+      {/* Left cluster — shrinkable, ellipsises when tight */}
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 6,
+        minWidth: 0, flex: '0 1 auto', overflow: 'hidden',
+      }}>
+        {book.series && (
+          <span style={{
+            fontFamily: t.mono, fontSize: 9, color: t.ink3,
+            letterSpacing: 0.16, textTransform: 'uppercase', whiteSpace: 'nowrap',
+          }}>{book.series}</span>
+        )}
         <span style={{
-          fontFamily: t.mono, fontSize: 9, color: t.ink3,
-          letterSpacing: 0.16, textTransform: 'uppercase',
-        }}>{book.series}</span>
-      )}
-      <span style={{
-        fontFamily: t.display, fontSize: 16, color: t.ink, fontWeight: 500,
-      }}>{book.title || 'Untitled'}</span>
-      {activeCh && <span style={{
-        fontFamily: t.mono, fontSize: 11, color: t.ink2, letterSpacing: 0.1,
-      }}>· ch.{activeCh.n} {activeCh.title}</span>}
+          fontFamily: t.display, fontSize: 15, color: t.ink, fontWeight: 500,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220,
+        }}>{book.title || 'Untitled'}</span>
+        {activeCh && <span style={{
+          fontFamily: t.mono, fontSize: 10, color: t.ink2, letterSpacing: 0.1, whiteSpace: 'nowrap',
+        }}>· ch.{activeCh.n}</span>}
+      </div>
 
-      <ChapterScrubber order={order} activeIdx={activeIdx} jump={jump} t={t} chapters={store.chapters || {}} />
-      <div style={{ flex: 1 }} />
-      <SelectionPill />
+      {/* Middle scrubber — flex-grows, but allowed to shrink. */}
+      <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+        <ChapterScrubber order={order} activeIdx={activeIdx} jump={jump} t={t} chapters={store.chapters || {}} />
+      </div>
 
-      <button onClick={onOpenPalette} style={{
-        padding: '5px 10px', background: 'transparent',
+      {/* Selection pill — always rightmost-content. */}
+      <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
+        <SelectionPill />
+      </div>
+
+      {/* Compact "Ask the Loom" command palette button. */}
+      <button onClick={onOpenPalette} title="Ask the Loom (⌘K)" style={{
+        flex: '0 0 auto',
+        padding: '4px 8px', background: 'transparent',
         border: `1px solid ${t.rule}`, borderRadius: 14,
         fontFamily: t.display, fontSize: 11, color: t.ink3,
-        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
+        whiteSpace: 'nowrap',
       }}>
         <Icon name="search" size={11} color={t.ink3} />
-        Ask the Loom… <span style={{ fontFamily: t.mono, fontSize: 9 }}>⌘K</span>
+        <span>⌘K</span>
       </button>
 
       <ReadAloud />
 
-      {onOpenAid && (
-        <button title="Writing aid (⌘\\)" onClick={onOpenAid}
-          style={{
-            padding: '5px 10px', background: 'transparent',
-            color: t.ink2, border: `1px solid ${t.rule}`, borderRadius: 14,
-            fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
-            textTransform: 'uppercase', cursor: 'pointer',
+      {/* Right toolbar — uniform 28×28 icon buttons that never wrap. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 2, flex: '0 0 auto',
+      }}>
+        {tools.map(tool => (
+          <button key={tool.id} title={tool.title} onClick={tool.onClick} style={{
+            width: 28, height: 28, padding: 0, borderRadius: 4,
+            background: tool.active ? (t.sugg || t.paper2) : 'transparent',
+            color: tool.active ? (t.suggInk || t.accent) : t.ink2,
+            border: `1px solid ${tool.active ? (t.suggInk || t.accent) : 'transparent'}`,
+            cursor: 'pointer',
+            display: 'grid', placeItems: 'center',
+            fontFamily: t.mono, fontSize: 13, lineHeight: 1,
           }}>
-          ✦ Aid
-        </button>
-      )}
-      <button
-        title="Suggestions drawer"
-        onClick={() => store.setPath('ui.suggestionsOpen', !suggestionsOpen)}
-        style={{
-          padding: '5px 10px',
-          background: suggestionsOpen ? (t.sugg || t.paper2) : 'transparent',
-          color: suggestionsOpen ? (t.suggInk || t.accent) : t.ink2,
-          border: `1px solid ${suggestionsOpen ? (t.suggInk || t.accent) : t.rule}`,
-          borderRadius: 14,
-          fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
-          textTransform: 'uppercase', cursor: 'pointer',
-        }}>
-        ✧ Whispers
-      </button>
-      <button
-        title="Run extraction wizard on this chapter"
-        onClick={() => window.dispatchEvent(new CustomEvent('lw:open-extraction'))}
-        style={{
-          padding: '5px 10px',
-          background: 'transparent', color: t.ink2,
-          border: `1px solid ${t.rule}`, borderRadius: 14,
-          fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
-          textTransform: 'uppercase', cursor: 'pointer',
-        }}>
-        ⌬ Extract
-      </button>
-      {onOpenProof && (
-        <button title="Proofreader (⌘')" onClick={onOpenProof}
-          style={{
-            padding: '5px 10px', background: 'transparent',
-            color: t.ink2, border: `1px solid ${t.rule}`, borderRadius: 14,
-            fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
-            textTransform: 'uppercase', cursor: 'pointer',
-          }}>
-          ✓ Proof
-        </button>
-      )}
-      {onOpenHistory && (
-        <button title="Version history" onClick={onOpenHistory} className="lw-rail-btn"
-          style={{ width: 32, height: 32, borderColor: 'transparent', color: t.ink2 }}>
-          <Icon name="book" size={14} color={t.ink2} />
-        </button>
-      )}
-      {onOpenBible && (
-        <button title="Series bible" onClick={onOpenBible} className="lw-rail-btn"
-          style={{ width: 32, height: 32, borderColor: 'transparent', color: t.ink2 }}>
-          <Icon name="building" size={14} color={t.ink2} />
-        </button>
-      )}
-      {onOpenSettings && (
-        <button title="Settings" onClick={onOpenSettings} className="lw-rail-btn"
-          style={{ width: 32, height: 32, borderColor: 'transparent', color: t.ink2 }}>
-          <Icon name="cog" size={14} color={t.ink2} />
-        </button>
-      )}
-      <button title="Focus mode (F9)" onClick={onToggleFocus} className="lw-rail-btn"
-        style={{ width: 32, height: 32, borderColor: focusMode ? t.accent : 'transparent', color: focusMode ? t.accent : t.ink2 }}>
-        <Icon name="focus" size={14} color={focusMode ? t.accent : t.ink2} />
-      </button>
+            {tool.icon
+              ? <Icon name={tool.icon} size={14} color={tool.active ? (t.suggInk || t.accent) : t.ink2} />
+              : <span>{tool.label}</span>}
+          </button>
+        ))}
+      </div>
 
+      {/* Word counter — drops out at narrow widths via overflow hidden on header. */}
       <span style={{
         fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.12,
-      }}>{book.wordsToday || 0} / {book.target || 0} · {book.streak || 0}🔥</span>
+        whiteSpace: 'nowrap', flex: '0 0 auto',
+      }}>{book.wordsToday || 0}/{book.target || 0}·{book.streak || 0}🔥</span>
     </header>
   );
 }

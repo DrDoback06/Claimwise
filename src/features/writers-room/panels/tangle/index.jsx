@@ -250,12 +250,15 @@ function NodeView({ node, onMouseDown, onClick, onRemove, highlighted }) {
   } else if (node.kind === 'place') {
     const p = (store.places || []).find(x => x.id === node.entityId);
     if (p) { label = p.name; kindLabel = p.kind || 'place'; }
-  } else if (node.kind === 'thread') {
+  } else if (node.kind === 'thread' || node.kind === 'quest') {
     const th = (store.quests || []).find(x => x.id === node.entityId);
-    if (th) { label = th.name; color = th.color || color; kindLabel = 'thread'; }
+    if (th) { label = th.name; color = th.color || color; kindLabel = th.kind || 'quest'; }
   } else if (node.kind === 'item') {
     const it = (store.items || []).find(x => x.id === node.entityId);
     if (it) { label = it.name; kindLabel = 'item'; }
+  } else if (node.kind === 'skill') {
+    const sk = (store.skills || []).find(x => x.id === node.entityId);
+    if (sk) { label = sk.name; kindLabel = sk.tier || 'skill'; }
   } else if (node.kind === 'note') {
     label = node.text || 'note'; kindLabel = 'note';
   }

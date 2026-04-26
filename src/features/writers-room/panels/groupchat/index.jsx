@@ -41,19 +41,29 @@ export default function GroupChatPanel({ onClose }) {
 
   const toggleSelect = (id) => setSelected(xs => xs.includes(id) ? xs.filter(x => x !== id) : [...xs, id]);
 
-  const personaFor = (c) => (
-    `You are ${c.name}, ${c.role || 'a character'} in "${store.book?.title || 'this book'}". ` +
-    `Voice: ${c.dossier?.voice || c.voice || 'natural, their own'}. ` +
-    `Known: ${(c.knows || []).join('; ') || 'unspecified'}. ` +
-    `Hidden: ${(c.hides || []).join('; ') || 'nothing'}. ` +
-    `Wants: ${c.wants?.true || c.wants?.surface || 'unclear'}. ` +
-    `Fears: ${(c.fears || []).join('; ') || 'none stated'}. ` +
-    `Traits: ${(c.traits || []).join(', ') || 'unstated'}. ` +
-    `Stay in character. Reply in 1-3 sentences.`
-  );
+  const personaFor = (c) => {
+    const profile = store.profile || {};
+    const worldName = profile.seriesName || profile.workingTitle || 'your world';
+    const genre = (profile.genres?.[0] || profile.genre || 'realistic').toLowerCase();
+    const premise = profile.premise || '';
+    return [
+      `You are ${c.name}. You are a real person living in ${worldName} (a ${genre} world).`,
+      premise && `Setting: ${premise}`,
+      c.role && `Your role: ${c.role}.`,
+      c.oneliner && `${c.oneliner}.`,
+      `Voice: ${c.dossier?.voice || c.voice || 'natural, your own'}.`,
+      (c.knows || []).length && `You know: ${(c.knows || []).map(k => k.fact || k).filter(Boolean).join('; ')}.`,
+      (c.hides || []).length && `You hide: ${(c.hides || []).map(k => k.fact || k).filter(Boolean).join('; ')}.`,
+      (c.fears || []).length && `You fear: ${(c.fears || []).map(k => k.fact || k).filter(Boolean).join('; ')}.`,
+      c.wants?.true && `You want: ${c.wants.true}.`,
+      (c.traits || []).length && `Traits: ${(c.traits || []).join(', ')}.`,
+      '',
+      'STAY IN CHARACTER. Never break the fourth wall — never refer to "the book", "the author", "the writer", "the story", or "the manuscript". You are speaking with another voice in your world. Reply in 1–3 sentences in your own voice.',
+    ].filter(Boolean).join('\n');
+  };
 
   const transcriptSoFar = () => messages.map(m => {
-    if (m.role === 'author') return `Author: ${m.text}`;
+    if (m.role === 'author') return `Stranger: ${m.text}`;
     if (m.role === 'character') {
       const c = cast.find(x => x.id === m.charId);
       return `${c?.name || 'Character'}: ${m.text}`;
@@ -65,11 +75,11 @@ export default function GroupChatPanel({ onClose }) {
     const c = cast.find(x => x.id === charId);
     if (!c) return;
     const persona = personaFor(c);
-    const prompt = `${persona}\n\nThe author asks: "${question}"\n\nPrior conversation:\n${transcriptSoFar()}\n\nReply as ${c.name}.`;
+    const prompt = `${transcriptSoFar()}\nStranger: ${question}\n\n${c.name}:`;
     try {
       let reply = '';
       if (typeof aiService?.callAI === 'function') {
-        const r = await aiService.callAI(prompt, { maxTokens: 200 });
+        const r = await aiService.callAI(prompt, 'creative', persona, { useCache: false });
         reply = typeof r === 'string' ? r : (r?.text || r?.content || '');
       }
       reply = (reply || '').trim() || `*${c.name} says nothing.*`;

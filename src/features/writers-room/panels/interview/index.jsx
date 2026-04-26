@@ -46,28 +46,41 @@ export default function InterviewPanel({ onClose }) {
     );
   }
 
-  const personaFor = (c) => (
-    `You are ${c.name}, ${c.role || 'a character'} in "${store.book?.title || 'this book'}". ` +
-    `Voice: ${c.dossier?.voice || c.voice || 'natural, their own'}. ` +
-    `Known: ${(c.knows || []).join('; ') || 'unspecified'}. ` +
-    `Hidden: ${(c.hides || []).join('; ') || 'nothing'}. ` +
-    `Wants: ${c.wants?.true || c.wants?.surface || 'unclear'}. ` +
-    `Fears: ${(c.fears || []).join('; ') || 'none stated'}. ` +
-    `Traits: ${(c.traits || []).join(', ') || 'unstated'}. ` +
-    `Relationships: ${(c.relationships || []).map(r => `${r.kind} ${cast.find(x => x.id === r.to)?.name || '?'}`).join(', ') || 'none'}. ` +
-    `Stay in character. Reply in 1-3 sentences.`
-  );
+  const personaFor = (c) => {
+    const profile = store.profile || {};
+    const worldName = profile.seriesName || profile.workingTitle || 'your world';
+    const genre = (profile.genres?.[0] || profile.genre || 'realistic').toLowerCase();
+    const premise = profile.premise || '';
+    const worldRules = (profile.worldRules || []).slice(0, 3).join(' · ');
+    return [
+      `You are ${c.name}. You are a real person living in ${worldName} (a ${genre} world).`,
+      premise && `Setting: ${premise}`,
+      worldRules && `World rules: ${worldRules}`,
+      c.role && `Your role here: ${c.role}.`,
+      c.oneliner && `${c.oneliner}.`,
+      c.dossier?.bio && `Background: ${c.dossier.bio}`,
+      `Voice: ${c.dossier?.voice || c.voice || 'natural, your own'}.`,
+      (c.knows || []).length && `You know: ${(c.knows || []).map(k => k.fact || k).filter(Boolean).join('; ')}.`,
+      (c.hides || []).length && `You hide: ${(c.hides || []).map(k => k.fact || k).filter(Boolean).join('; ')}.`,
+      (c.fears || []).length && `You fear: ${(c.fears || []).map(k => k.fact || k).filter(Boolean).join('; ')}.`,
+      c.wants?.true && `You want: ${c.wants.true}.`,
+      (c.traits || []).length && `Traits: ${(c.traits || []).join(', ')}.`,
+      (c.relationships || []).length && `Relationships: ${(c.relationships || []).map(r => `${r.kind || 'knows'} ${cast.find(x => x.id === r.to)?.name || '?'}`).join(', ')}.`,
+      '',
+      'STAY IN CHARACTER. Never break the fourth wall. Never refer to "the book", "the author", "the writer", "the story", or "the manuscript". You exist inside your world and only inside your world. The person speaking to you is another voice you can hear — call them "stranger" or by whatever name they give. Speak in your own voice with 1–3 sentences.',
+    ].filter(Boolean).join('\n');
+  };
 
   async function ask(question) {
     setMessages(prev => [...prev, { id: `m_${Date.now()}`, role: 'author', text: question }]);
     setBusy(true);
     const persona = personaFor(character);
-    const prior = messages.map(m => m.role === 'author' ? `Author: ${m.text}` : `${character.name}: ${m.text}`).join('\n');
-    const prompt = `${persona}\n\nPrior:\n${prior}\n\nAuthor asks: "${question}"\n\nReply as ${character.name}.`;
+    const prior = messages.map(m => m.role === 'author' ? `Stranger: ${m.text}` : `${character.name}: ${m.text}`).join('\n');
+    const prompt = `${prior ? prior + '\n' : ''}Stranger: ${question}\n\n${character.name}:`;
     try {
       let reply = '';
       if (typeof aiService?.callAI === 'function') {
-        const r = await aiService.callAI(prompt, { maxTokens: 200 });
+        const r = await aiService.callAI(prompt, 'creative', persona, { useCache: false });
         reply = typeof r === 'string' ? r : (r?.text || r?.content || '');
       }
       reply = (reply || '').trim() || `*${character.name} stays silent.*`;

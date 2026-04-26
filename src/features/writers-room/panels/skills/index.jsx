@@ -10,6 +10,7 @@ import { useStore } from '../../store';
 import { generateTree } from '../../skills/treeService';
 import { ensureWikiEntry } from '../../wiki/service';
 import SpecialistChat from '../../specialist/SpecialistChat';
+import { dragEntity } from '../../drag';
 
 const TIERS = ['novice', 'adept', 'master', 'unique'];
 const TIER_COLOR = (t) => ({
@@ -125,6 +126,7 @@ export default function SkillsPanel({ onClose }) {
       position: point, description: '',
       unlockReqs: { prereqIds: [] },
       effects: { stats: {}, flags: [] },
+      level: 0, maxLevel: 5,
     };
     store.setSlice('skills', xs => [...(xs || []), node]);
     setSelectedId(id);
@@ -308,6 +310,39 @@ export default function SkillsPanel({ onClose }) {
           )}
         </svg>
       </div>
+
+      {/* Draggable skill tray — lets the writer drag any skill onto the editor / tangle. */}
+      {skills.length > 0 && (
+        <div style={{
+          padding: '8px 12px', borderBottom: `1px solid ${t.rule}`,
+          display: 'flex', flexWrap: 'wrap', gap: 4,
+        }}>
+          {skills.map(sk => {
+            const c = tierColor[sk.tier] || t.accent;
+            return (
+              <div key={sk.id}
+                draggable
+                onDragStart={e => dragEntity(e, 'skill', sk.id)}
+                onClick={() => setSelectedId(sk.id)}
+                title="Drag to editor or tangle"
+                style={{
+                  padding: '3px 8px',
+                  background: selectedId === sk.id ? c : 'transparent',
+                  color: selectedId === sk.id ? t.onAccent : t.ink2,
+                  border: `1px solid ${c}`, borderRadius: 999,
+                  fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
+                  textTransform: 'uppercase', cursor: 'grab',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                {sk.name}
+                {(sk.maxLevel || 0) > 0 && (
+                  <span style={{ opacity: 0.7 }}>{sk.level || 0}/{sk.maxLevel || 5}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {selected && <SkillEditor skill={selected} update={(p) => updateNode(selected.id, p)} t={t} />}
       {!selected && (
@@ -505,6 +540,37 @@ function SkillEditor({ skill: s, update, t }) {
           unlockReqs: { ...(s.unlockReqs || { prereqIds: [] }), minChapter: e.target.value ? parseInt(e.target.value, 10) : undefined },
         })} />
 
+      {/* Per-skill level / progression */}
+      <div style={lbl}>Level / progression</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+        <button onClick={() => update({ level: Math.max(0, (s.level || 0) - 1) })} style={iconBtnSk(t)}>−</button>
+        <span style={{
+          fontFamily: t.mono, fontSize: 14, color: t.ink, fontWeight: 600,
+          minWidth: 52, textAlign: 'center',
+        }}>{s.level || 0} / {s.maxLevel || 5}</span>
+        <button onClick={() => update({ level: Math.min(s.maxLevel || 5, (s.level || 0) + 1) })} style={iconBtnSk(t)}>+</button>
+        <span style={{ flex: 1 }} />
+        <span style={{
+          fontFamily: t.mono, fontSize: 9, color: t.ink3,
+          letterSpacing: 0.12, textTransform: 'uppercase',
+        }}>max</span>
+        <input type="number" min={1} max={20}
+          value={s.maxLevel || 5}
+          onChange={e => update({ maxLevel: Math.max(1, parseInt(e.target.value, 10) || 5) })}
+          style={{ width: 56, ...inp, marginTop: 0, fontFamily: t.mono, fontSize: 11, padding: '3px 6px' }} />
+      </div>
+      <div style={{ height: 6, background: t.rule, borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+        <div style={{
+          width: `${((s.level || 0) / (s.maxLevel || 5)) * 100}%`,
+          height: '100%', background: t.accent, transition: 'width 200ms',
+        }} />
+      </div>
+      {s.cooldown > 0 && (
+        <div style={{ marginTop: 6, fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.12, textTransform: 'uppercase' }}>
+          cooldown: {s.cooldown} · cost: {s.costPoints || 1}
+        </div>
+      )}
+
       <div style={lbl}>Stat effects · while active</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
         {Object.entries(stats).map(([k, v]) => (
@@ -540,4 +606,13 @@ function SkillEditor({ skill: s, update, t }) {
       )}
     </div>
   );
+}
+
+function iconBtnSk(t) {
+  return {
+    width: 26, height: 26, borderRadius: 999,
+    border: `1px solid ${t.rule}`, background: 'transparent',
+    color: t.ink2, cursor: 'pointer',
+    fontFamily: t.mono, fontSize: 13, lineHeight: 1, padding: 0,
+  };
 }

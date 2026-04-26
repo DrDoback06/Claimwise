@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { useTheme } from '../theme';
-import { useStore, createCharacter, createPlace, createItem, createThread } from '../store';
+import { useStore, createCharacter, createPlace, createItem, createThread, createQuest } from '../store';
 import { runExtractPass } from './service';
 
 const STEPS = ['SCAN', 'REVIEW', 'EDIT', 'COMMIT'];
@@ -87,7 +87,7 @@ export default function ExtractionWizard({ chapterId, onClose }) {
         const slice = f.kind === 'character' ? 'cast'
           : f.kind === 'place' ? 'places'
           : f.kind === 'item' ? 'items'
-          : f.kind === 'thread' ? 'threads' : null;
+          : (f.kind === 'thread' || f.kind === 'quest') ? 'quests' : null;
         if (slice) {
           store.setSlice(slice, xs => xs.map(x => x.id === f.resolvesTo ? { ...x, ...patch } : x));
         }
@@ -95,7 +95,15 @@ export default function ExtractionWizard({ chapterId, onClose }) {
         if (f.kind === 'character') createCharacter(helper, patch);
         else if (f.kind === 'place') createPlace(helper, patch);
         else if (f.kind === 'item') createItem(helper, patch);
-        else if (f.kind === 'thread') createThread(helper, { title: patch.name, ...patch });
+        else if (f.kind === 'quest' || f.kind === 'thread') createQuest(helper, { name: patch.name, kind: f.kind === 'thread' ? 'thread' : 'main-quest', ...patch });
+        else if (f.kind === 'fact' && (store.cast || []).length) {
+          // Park unattributed facts on the first character as `knows`. Author
+          // can move them later.
+          const target = store.cast[0];
+          store.setSlice('cast', xs => xs.map(x => x.id === target.id
+            ? { ...x, knows: [...(x.knows || []), { id: 'kw_' + Date.now().toString(36), fact: patch.name, kind: 'knows', source: 'extracted' }] }
+            : x));
+        }
       }
     }
     onClose?.();
