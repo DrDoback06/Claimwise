@@ -223,6 +223,53 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     }
   });
 
+  // Listen for accepted suggestions and inject as staged spans at the cursor.
+  // CODE-INSIGHT §3.B.3 — Caveat font + ochre ink + left bracket while staged.
+  React.useEffect(() => {
+    const handler = (e) => {
+      const detail = e?.detail || {};
+      const body = detail.body || '';
+      const sgId = detail.suggestionId || '';
+      if (!ref.current || !body) return;
+      ref.current.focus();
+      const sel = window.getSelection();
+      let range = sel?.rangeCount ? sel.getRangeAt(0) : null;
+      // If selection isn't inside the editor, append at end.
+      if (!range || !ref.current.contains(range.startContainer)) {
+        const last = ref.current.lastElementChild || ref.current;
+        range = document.createRange();
+        range.selectNodeContents(last);
+        range.collapse(false);
+      }
+      const span = document.createElement('span');
+      span.className = 'lw-staged-suggestion';
+      span.setAttribute('data-staged', 'true');
+      if (sgId) span.setAttribute('data-suggestion-id', sgId);
+      span.textContent = ' ' + body + ' ';
+      range.insertNode(span);
+      // Cursor goes after the inserted span so further typing is normal prose.
+      const after = document.createRange();
+      after.setStartAfter(span);
+      after.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(after);
+      onInput();
+    };
+    window.addEventListener('lw:insert-staged', handler);
+    return () => window.removeEventListener('lw:insert-staged', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Promote staged spans to manuscript font once the writer edits inside them.
+  const onBeforeInput = React.useCallback((e) => {
+    const span = e.target?.closest?.('[data-staged="true"]')
+      || (window.getSelection()?.anchorNode?.parentElement?.closest?.('[data-staged="true"]'));
+    if (span) {
+      span.removeAttribute('data-staged');
+      span.classList.remove('lw-staged-suggestion');
+    }
+  }, []);
+
   const onInput = React.useCallback(() => {
     isUserTyping.current = true;
     savedRange.current = saveSelection(ref.current);
@@ -307,6 +354,7 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
       contentEditable
       suppressContentEditableWarning
       spellCheck={true}
+      onBeforeInput={onBeforeInput}
       onInput={onInput}
       onClick={onClick}
       onContextMenu={onCtxMenu}

@@ -1,9 +1,16 @@
 // Loomwright — shared panel chrome.
+//
+// CODE-INSIGHT §1: each panel header carries a per-panel pin/lock chip,
+// so panels can opt out of the global selection bus.
 
 import React from 'react';
 import { useTheme } from '../theme';
+import LockChip from '../selection/LockChip';
 
-export default function PanelFrame({ title, eyebrow, accent, onClose, width = 460, children, footer }) {
+export default function PanelFrame({
+  title, eyebrow, accent, onClose, width = 460, children, footer,
+  panelId,    // optional: enables the LockChip
+}) {
   const t = useTheme();
   return (
     <aside style={{
@@ -29,6 +36,7 @@ export default function PanelFrame({ title, eyebrow, accent, onClose, width = 46
             marginTop: 2, lineHeight: 1.2,
           }}>{title}</div>
         </div>
+        {panelId && <LockChip panelId={panelId} accent={accent} />}
         {onClose && (
           <button onClick={onClose} aria-label="Close panel" style={{
             background: 'transparent', border: 'none', color: t.ink3, cursor: 'pointer',

@@ -44,6 +44,7 @@ export default function ThreadsPanel({ onClose, onWeave }) {
       title="Threads"
       eyebrow="Threads & beats"
       accent={PANEL_ACCENT.threads}
+      panelId="threads"
       onClose={onClose}
       width={460}>
       <div style={{ padding: '12px 16px', display: 'flex', gap: 6, alignItems: 'center', borderBottom: `1px solid ${t.rule}` }}>

@@ -6,7 +6,10 @@
 // migrations and dot-path-aware writes.
 
 import db from '../../../services/database';
-import { EMPTY_BOOK, EMPTY_PROFILE, EMPTY_UI, DEFAULT_TWEAKS, SCHEMA_VERSION } from './schema';
+import {
+  EMPTY_BOOK, EMPTY_PROFILE, EMPTY_UI, DEFAULT_TWEAKS, SCHEMA_VERSION,
+  EMPTY_SUGGESTION_PREFS, EMPTY_ATLAS_SETTINGS,
+} from './schema';
 
 // Store names (mirroring database.js v22).
 export const S = {
@@ -32,6 +35,11 @@ const META = {
   schemaVersion: 'lw.schemaVersion',
   reviewQueue: 'lw.reviewQueue',
   snapshots: 'lw.snapshots',
+  // (NEW — design pass)
+  suggestionDrawer: 'lw.suggestionDrawer',
+  pendingInsertions: 'lw.pendingInsertions',
+  atlasSettings: 'lw.atlasSettings',
+  regions: 'lw.regions',
 };
 
 // ─── Safe wrappers ────────────────────────────────────────────────────
@@ -117,6 +125,7 @@ export async function loadAllFromDB() {
   const [
     profileRaw, uiRaw, books, cast, places, threads, items, voices,
     nodes, edges, mapState, noticingsRaw, reviewQueueRaw, snapshotsRaw,
+    suggestionDrawerRaw, pendingInsertionsRaw, atlasSettingsRaw, regionsRaw,
   ] = await Promise.all([
     dbGet(S.meta, META.profile),
     dbGet(S.meta, META.ui),
@@ -132,11 +141,21 @@ export async function loadAllFromDB() {
     dbGet(S.meta, META.noticings),
     dbGet(S.meta, META.reviewQueue),
     dbGet(S.meta, META.snapshots),
+    dbGet(S.meta, META.suggestionDrawer),
+    dbGet(S.meta, META.pendingInsertions),
+    dbGet(S.meta, META.atlasSettings),
+    dbGet(S.meta, META.regions),
   ]);
 
   const profile = { ...EMPTY_PROFILE, ...(profileRaw?.data || profileRaw || {}) };
+  // Lazy backfill of suggestion prefs.
+  profile.suggestionPrefs = { ...EMPTY_SUGGESTION_PREFS, ...(profile.suggestionPrefs || {}) };
   const ui = { ...EMPTY_UI, ...(uiRaw?.data || uiRaw || {}) };
   ui.tweaks = { ...DEFAULT_TWEAKS, ...(ui.tweaks || {}) };
+  ui.dossierOpen = ui.dossierOpen || {};
+  // Backfill the multi field added in 2026-04 design refresh.
+  ui.selection = { ...EMPTY_UI.selection, ...(ui.selection || {}) };
+  if (!Array.isArray(ui.selection.multi)) ui.selection.multi = [];
 
   const primaryBook = books.find(b => b.id === 'lw.primary') || books[0] || null;
   const book = primaryBook ? { ...EMPTY_BOOK, ...primaryBook } : { ...EMPTY_BOOK };
@@ -186,6 +205,12 @@ export async function loadAllFromDB() {
     ui: { ...ui, activeChapterId: ui.activeChapterId || book.currentChapterId || null },
     noticings: noticingsRaw?.data || noticingsRaw?.value || {},
     suggestions: [],
+    // (NEW — design pass)
+    suggestionDrawer: suggestionDrawerRaw?.data || { byScope: {} },
+    pendingInsertions: pendingInsertionsRaw?.data || [],
+    marginDetections: {},   // ephemeral
+    atlasSettings: { ...EMPTY_ATLAS_SETTINGS, ...(atlasSettingsRaw?.data || {}) },
+    regions: regionsRaw?.data || [],
     reviewQueue: reviewQueueRaw?.data || [],
     snapshots: snapshotsRaw?.data || [],
     feedback: [],
@@ -233,6 +258,26 @@ export async function persistSlice(slice, prev, next) {
   }
   if (slice === 'snapshots') {
     await dbPut(S.meta, { id: META.snapshots, data: next || [] });
+    return;
+  }
+  if (slice === 'suggestionDrawer') {
+    await dbPut(S.meta, { id: META.suggestionDrawer, data: next || { byScope: {} } });
+    return;
+  }
+  if (slice === 'pendingInsertions') {
+    await dbPut(S.meta, { id: META.pendingInsertions, data: next || [] });
+    return;
+  }
+  if (slice === 'atlasSettings') {
+    await dbPut(S.meta, { id: META.atlasSettings, data: next || EMPTY_ATLAS_SETTINGS });
+    return;
+  }
+  if (slice === 'regions') {
+    await dbPut(S.meta, { id: META.regions, data: next || [] });
+    return;
+  }
+  if (slice === 'marginDetections') {
+    // Ephemeral — never persisted.
     return;
   }
   if (slice === 'book') {

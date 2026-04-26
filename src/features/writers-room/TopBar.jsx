@@ -5,11 +5,13 @@ import { useTheme } from './theme';
 import { useStore } from './store';
 import Icon from './entities/Icon';
 import ReadAloud from './utilities/ReadAloud';
+import SelectionPill from './selection/SelectionPill';
 
 export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpenSettings, onOpenBible, onOpenHistory, onOpenProof, onOpenAid }) {
   const t = useTheme();
   const store = useStore();
   const { book } = store;
+  const suggestionsOpen = !!store.ui?.suggestionsOpen;
 
   const order = book?.chapterOrder || [];
   const activeId = store.ui?.activeChapterId || book?.currentChapterId;
@@ -54,6 +56,7 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
 
       <ChapterScrubber order={order} activeIdx={activeIdx} jump={jump} t={t} chapters={store.chapters || {}} />
       <div style={{ flex: 1 }} />
+      <SelectionPill />
 
       <button onClick={onOpenPalette} style={{
         padding: '5px 10px', background: 'transparent',
@@ -78,6 +81,20 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
           ✦ Aid
         </button>
       )}
+      <button
+        title="Suggestions drawer"
+        onClick={() => store.setPath('ui.suggestionsOpen', !suggestionsOpen)}
+        style={{
+          padding: '5px 10px',
+          background: suggestionsOpen ? (t.sugg || t.paper2) : 'transparent',
+          color: suggestionsOpen ? (t.suggInk || t.accent) : t.ink2,
+          border: `1px solid ${suggestionsOpen ? (t.suggInk || t.accent) : t.rule}`,
+          borderRadius: 14,
+          fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
+          textTransform: 'uppercase', cursor: 'pointer',
+        }}>
+        ✧ Whispers
+      </button>
       {onOpenProof && (
         <button title="Proofreader (⌘')" onClick={onOpenProof}
           style={{

@@ -32,6 +32,7 @@ export default function CastPanel({ onClose, onInterview, onWeave }) {
         title="Who is on this page"
         eyebrow="Cast · empty"
         accent={PANEL_ACCENT.cast}
+        panelId="dossier"
         onClose={onClose}
         width={460}>
         <div style={{ padding: 40, textAlign: 'center' }}>
@@ -56,6 +57,7 @@ export default function CastPanel({ onClose, onInterview, onWeave }) {
       title="Who is on this page"
       eyebrow={`Cast · ${onPage.length} on page`}
       accent={PANEL_ACCENT.cast}
+      panelId="dossier"
       onClose={onClose}
       width={460}>
       <Roster activeId={charId} onSelect={setSel} />

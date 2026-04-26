@@ -38,6 +38,7 @@ export default function VoicePanel({ onClose }) {
       title="How they sound"
       eyebrow="Voice"
       accent={PANEL_ACCENT.voice}
+      panelId="voice"
       onClose={onClose}
       width={420}>
       <div style={{ padding: '12px 16px' }}>

@@ -35,6 +35,7 @@ import TanglePanel from './panels/tangle';
 import GroupChatPanel from './panels/groupchat';
 import InterviewPanel from './panels/interview';
 import SeriesBible from './panels/series-bible';
+import SuggestionDrawer from './suggestions/SuggestionDrawer';
 
 const PANEL_COMPONENTS = {
   cast: CastPanel, atlas: AtlasPanel, threads: ThreadsPanel,
@@ -143,6 +144,8 @@ export default function Shell() {
     if (actionId === 'open.history') setHistoryOpen(true);
     if (actionId === 'open.help') setHelpOpen(true);
     if (actionId === 'open.groupchat') ensurePanelOpen('groupchat');
+    if (actionId === 'open.suggestions') store.setPath('ui.suggestionsOpen', true);
+    if (actionId === 'toggle.suggestions') store.setPath('ui.suggestionsOpen', !store.ui?.suggestionsOpen);
     if (actionId === 'focus.toggle') store.setPath('ui.focusMode', !focusMode);
     if (actionId === 'theme.toggle') t.toggle();
   };
@@ -283,6 +286,9 @@ export default function Shell() {
               onInterview={() => ensurePanelOpen('interview')}
             />;
           })}
+          {store.ui?.suggestionsOpen && (
+            <SuggestionDrawer onClose={() => store.setPath('ui.suggestionsOpen', false)} />
+          )}
         </div>
       )}
 

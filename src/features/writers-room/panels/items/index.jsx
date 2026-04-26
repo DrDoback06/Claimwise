@@ -29,6 +29,7 @@ export default function ItemsPanel({ onClose }) {
       title="Things, marked"
       eyebrow="Items"
       accent={PANEL_ACCENT.items}
+      panelId="inventory"
       onClose={onClose}
       width={420}>
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${t.rule}` }}>

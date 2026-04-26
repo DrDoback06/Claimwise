@@ -23,6 +23,10 @@ export const THEMES = {
     good: '#4a6b2e',
     warn: '#b8731c',
     bad: '#a33a2b',
+    // Suggestion-engine palette (CODE-INSIGHT §9 — additive).
+    sugg: '#f6efd9',
+    suggInk: '#7a5d2a',
+    hand: "'Caveat', 'Comic Sans MS', cursive",
     font: "'Fraunces', Georgia, serif",
     display: "'Fraunces', Georgia, serif",
     mono: "'JetBrains Mono', 'Courier New', monospace",
@@ -46,6 +50,10 @@ export const THEMES = {
     good: '#7cb26a',
     warn: '#d49252',
     bad: '#d87a6a',
+    // Suggestion-engine palette tuned for dark mode (warmer paper, ochre ink).
+    sugg: '#2a2118',
+    suggInk: '#d4a866',
+    hand: "'Caveat', 'Comic Sans MS', cursive",
     font: "'Fraunces', Georgia, serif",
     display: "'Fraunces', Georgia, serif",
     mono: "'JetBrains Mono', 'Courier New', monospace",
@@ -85,6 +93,14 @@ export function ThemeProvider({ initial = 'day', children }) {
     try { localStorage.setItem('lw.themeMode', mode); } catch {}
     if (typeof document !== 'undefined') {
       document.body.dataset.lwTheme = mode;
+      // Surface design-pass tokens to plain CSS rules (e.g. .lw-staged-suggestion).
+      const root = document.documentElement;
+      const T = THEMES[mode];
+      if (T) {
+        root.style.setProperty('--lw-hand', T.hand || "'Caveat', cursive");
+        root.style.setProperty('--lw-sugg-ink', T.suggInk || '#7a5d2a');
+        root.style.setProperty('--lw-sugg', T.sugg || T.paper);
+      }
     }
   }, [mode]);
   const value = React.useMemo(() => ({

@@ -16,6 +16,7 @@ export default function AtlasPanel({ onClose, onSummonRing, onWeave }) {
       title="The world, charted"
       eyebrow="Atlas"
       accent={PANEL_ACCENT.atlas}
+      panelId="atlas"
       onClose={onClose}
       width={460}>
       <div style={{ height: 320, borderBottom: `1px solid ${t.rule}` }}>

@@ -131,6 +131,7 @@ export default function TanglePanel({ onClose }) {
       title="Tangle"
       eyebrow="Mind map"
       accent={PANEL_ACCENT.tangle}
+      panelId="tangle"
       onClose={onClose}
       width={640}>
       <div style={{ padding: '8px 12px', display: 'flex', gap: 6, borderBottom: `1px solid ${t.rule}` }}>

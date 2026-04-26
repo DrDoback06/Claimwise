@@ -87,18 +87,36 @@ export const DEFAULT_TWEAKS = {
 export const EMPTY_UI = {
   panels: [],                 // ['cast','atlas',…] (open order)
   panelWidths: {},
-  selection: { character: null, place: null, thread: null, item: null, paragraph: null, scene: null },
+  selection: { character: null, place: null, thread: null, item: null, paragraph: null, scene: null, chapter: null, multi: [] },
   tweaks: { ...DEFAULT_TWEAKS },
   focusMode: false,
   activeChapterId: null,
   activeSceneId: null,
   castDossierTab: {},         // { [charId]: 'identity' | 'stats' | … }
+  // (NEW — design pass) per-character open state for the vertical-section
+  // dossier; missing keys fall back to defaults from the dossier.
+  dossierOpen: {},            // { [charId]: { stats: bool, skills: bool, … } }
+  // (NEW) suggestion drawer
+  suggestionsOpen: false,     // is the right rail visible
+};
+
+// (NEW) Suggestion engine preferences. Living on `profile` because it's
+// per-user, not per-book.
+export const EMPTY_SUGGESTION_PREFS = {
+  defaultInsertion: 'cursor',     // 'cursor' | 'tray'
+  snoozeReSurfaceDelta: 15,       // percent points
+  marginaliaTreatment: 'caveat',  // 'caveat' | 'italic' | 'bracket-only'
+};
+
+// (NEW) Atlas settings — per-project.
+export const EMPTY_ATLAS_SETTINGS = {
+  basemapMode: 'real',  // 'real' | 'parchment'
 };
 
 export function emptyState() {
   return {
     version: SCHEMA_VERSION,
-    profile: { ...EMPTY_PROFILE },
+    profile: { ...EMPTY_PROFILE, suggestionPrefs: { ...EMPTY_SUGGESTION_PREFS } },
     book: { ...EMPTY_BOOK },
     chapters: {},
     cast: [],
@@ -113,7 +131,19 @@ export function emptyState() {
     tangle: { nodes: [], edges: [], layout: {} },
     ui: { ...EMPTY_UI },
     noticings: {},            // legacy redesign field; preserved
-    suggestions: [],          // current live suggestions
+    suggestions: [],          // legacy flat list (kept for back-compat)
+    // (NEW — design pass) suggestion engine slices.
+    suggestionDrawer: {
+      // keyed by scope-string so per-entity caches are independent.
+      // open/snoozed/dismissed/accepted held per scope.
+      byScope: {},            // { [scopeKey]: { open: [], snoozed: [], dismissed: [], accepted: [] } }
+    },
+    pendingInsertions: [],    // Insertion[] — the writer's tray
+    // ephemeral; never persisted (filtered in store/persistence.js).
+    marginDetections: {},     // { [paragraphId]: Detection[] }
+    // (NEW) atlas
+    atlasSettings: { ...EMPTY_ATLAS_SETTINGS },
+    regions: [],              // Region[]
     reviewQueue: [],
     snapshots: [],
     feedback: [],
