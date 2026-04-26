@@ -150,7 +150,8 @@ export function emptyState() {
     // (NEW) continuity & extraction
     continuity: { findings: [], lastScanAt: null },
     extractionRuns: {},       // { [chapterId]: { ranAt, findings, deepPassRan } }
-    reviewQueue: [],
+    reviewQueue: [],            // (NEW) autonomous-pipeline findings awaiting review
+    autonomousJobs: [],         // (NEW) ephemeral; running pipeline jobs
     snapshots: [],
     feedback: [],
     _loading: true,

@@ -4,6 +4,7 @@
 // these as accept/dismiss cards.
 
 import aiService from '../../../services/aiService';
+import { composeSystem } from '../ai/context';
 
 function safeParse(raw) {
   if (!raw) return [];
@@ -33,20 +34,28 @@ export async function detectQuestProgress(state, chapterId) {
     return `quest ${q.id} :: ${q.name} (${q.kind || 'main-quest'}) sides:\n${sides || '    (no sides)'}`;
   }).join('\n\n');
 
-  const sys = [
+  const persona = [
     'You are a quest progress detector for a novel manuscript.',
     'Find moments in the chapter where one of the listed sides advances or suffers a setback toward its goal.',
-    'Cite the side by id. Be conservative — only return beats with confidence ≥ 0.6.',
-    'Return ONLY this JSON:',
-    '{"beats":[{"questId":"...","sideId":"...","beat":"<one-sentence summary>","confidence":0.0,"chapterId":"' + chapter.id + '"}]}',
-    '',
-    'ACTIVE QUESTS:',
-    questBlock,
-  ].join('\n');
+    'Cite the side by id. Be conservative — only return beats with confidence ≥ 0.6. Use the saga context below to avoid false positives that contradict world rules.',
+  ].join(' ');
+
+  const sys = composeSystem({
+    state, persona,
+    focusChapterId: chapterId,
+    slice: ['cast', 'places'],
+    extra: [
+      'ACTIVE QUESTS:',
+      questBlock,
+      '',
+      'Return ONLY this JSON:',
+      '{"beats":[{"questId":"...","sideId":"...","beat":"<one-sentence summary>","confidence":0.0,"chapterId":"' + chapter.id + '"}]}',
+    ].join('\n'),
+  });
 
   let raw = '';
   try {
-    raw = await aiService.callAI(`Chapter text:\n${chapter.text}\n\nDetect quest progress now.`, 'quest-detect', sys, { useCache: false });
+    raw = await aiService.callAI(`Chapter text:\n${chapter.text}\n\nDetect quest progress now.`, 'analytical', sys, { useCache: false });
   } catch { return []; }
   const beats = safeParse(raw);
   return beats

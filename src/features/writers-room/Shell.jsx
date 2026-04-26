@@ -24,6 +24,7 @@ import WhatsNew from './WhatsNew';
 import VersionHistory from './utilities/VersionHistory';
 import aiService from '../../services/aiService';
 import { shouldAutoSnapshot, makeSnapshot, pushSnapshot } from './utilities/snapshots';
+import { scheduleAutonomousRun, clearAllRuns } from './ai/pipeline';
 
 import CastPanel from './panels/cast';
 import AtlasPanel from './panels/atlas';
@@ -97,16 +98,28 @@ export default function Shell() {
 
   // Auto-snapshot on chapter save. We hook into chapter changes via lastEdit.
   const lastSnapshotMs = React.useRef({});
+  const lastPipelineMs = React.useRef({});
   React.useEffect(() => {
     const id = store.ui?.activeChapterId || store.book?.currentChapterId;
     const ch = id ? store.chapters?.[id] : null;
     if (!ch?.lastEdit) return;
-    if (lastSnapshotMs.current[id] === ch.lastEdit) return;
-    lastSnapshotMs.current[id] = ch.lastEdit;
-    if (shouldAutoSnapshot(id, store.snapshots)) {
-      pushSnapshot(store, makeSnapshot(ch, 'auto'));
+    if (lastSnapshotMs.current[id] !== ch.lastEdit) {
+      lastSnapshotMs.current[id] = ch.lastEdit;
+      if (shouldAutoSnapshot(id, store.snapshots)) {
+        pushSnapshot(store, makeSnapshot(ch, 'auto'));
+      }
+    }
+    // Autonomous AI pipeline: only schedule when the writer's onboarded
+    // (so we have context) and the chapter has real content.
+    if (lastPipelineMs.current[id] !== ch.lastEdit
+        && (ch.text || '').trim().length > 80
+        && store.profile?.onboarded) {
+      lastPipelineMs.current[id] = ch.lastEdit;
+      scheduleAutonomousRun(store, id);
     }
   }, [store.chapters, store.ui?.activeChapterId, store.book?.currentChapterId, store.snapshots, store]);
+
+  React.useEffect(() => () => clearAllRuns(), []);
 
   // Reset wordsToday at midnight (user local).
   React.useEffect(() => {

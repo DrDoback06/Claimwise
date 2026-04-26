@@ -3,6 +3,7 @@
 // effects, plus a list of any stats it wanted that don't exist yet.
 
 import aiService from '../../../services/aiService';
+import { composeSystem } from '../ai/context';
 
 function rid(prefix) { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
 
@@ -25,16 +26,24 @@ function knownStatsFromState(state) {
 }
 
 function buildSystemPrompt(state, opts) {
-  return [
-    'You are a skill-tree architect. Design a coherent tree (8 to ' + (opts.maxNodes || 14) + ' nodes) that progresses novice → adept → master → unique.',
+  const persona = [
+    'You are a skill-tree architect for a saga. Design a coherent tree (8 to ' + (opts.maxNodes || 14) + ' nodes) that progresses novice → adept → master → unique.',
     'Use prereqIds to link nodes (each prereqId must reference another node\'s name OR be empty). Prefer 1–2 prereqs per node.',
     'Effects: stats are stat deltas applied while the skill is active; flags are short string labels (e.g. "comprehend.bargemen").',
-    '',
-    'Known stats: ' + (knownStatsFromState(state).join(', ') || '(none yet)'),
-    '',
-    'Return ONLY this JSON:',
-    '{"nodes":[{"name":"...","tier":"novice|adept|master|unique","description":"...","prereqs":["<node-name>"],"effects":{"stats":{"STR":2},"flags":["..."]},"costPoints":1,"cooldown":0}],"missingStats":[{"key":"STAMINA","description":"..."}],"wikiDrafts":{"<nodeName>":"<short paragraph>"}}',
-  ].join('\n');
+    'Skill names and lore must feel native to the saga in the project context below.',
+  ].join(' ');
+
+  return composeSystem({
+    state, persona,
+    focusCharId: state.ui?.selection?.character || null,
+    slice: ['cast', 'skills', 'items'],
+    extra: [
+      'Known stats: ' + (knownStatsFromState(state).join(', ') || '(none yet)'),
+      '',
+      'Return ONLY this JSON:',
+      '{"nodes":[{"name":"...","tier":"novice|adept|master|unique","description":"...","prereqs":["<node-name>"],"effects":{"stats":{"STR":2},"flags":["..."]},"costPoints":1,"cooldown":0,"maxLevel":5}],"missingStats":[{"key":"STAMINA","description":"..."}],"wikiDrafts":{"<nodeName>":"<short paragraph>"}}',
+    ].join('\n'),
+  });
 }
 
 export async function generateTree(state, userPrompt, opts = {}) {
@@ -42,7 +51,7 @@ export async function generateTree(state, userPrompt, opts = {}) {
   const prompt = `Writer's request: ${userPrompt}\n\nDesign the tree now.`;
   let raw = '';
   try {
-    raw = await aiService.callAI(prompt, opts.task || 'skill-tree', sys, { useCache: false });
+    raw = await aiService.callAI(prompt, opts.task || 'creative-deep', sys, { useCache: false });
   } catch (err) {
     return { error: err?.message || 'tree gen failed', nodes: [] };
   }

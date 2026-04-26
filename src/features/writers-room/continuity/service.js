@@ -1,26 +1,20 @@
 // Loomwright — Continuity scan service (CODE-INSIGHT §8 / §12.7).
-// Calls the free model with the manuscript + canon snapshot; parses to
-// ContinuityFinding[].
+// Calls the AI with the manuscript + canon snapshot; parses to ContinuityFinding[].
+// Wired through ai/context.composeSystem so the model sees full saga context.
 
 import aiService from '../../../services/aiService';
+import { composeSystem } from '../ai/context';
 
-function buildPrompt({ chapter, cast, places, items, knowledge }) {
-  return [
-    'You are a continuity checker for a novel manuscript. Look for inconsistencies across canon and the chapter text.',
-    'Examples: a character is in two places at once; an item changes hands without explanation; a fact contradicts a previous chapter.',
-    'Return ONLY JSON of this exact shape:',
-    '{"findings":[{"severity":"info|warn|error","description":"<1 short sentence>","manuscriptLocations":[{"chapterId":"<id>"}],"suggestedFix":"<optional>"}]}',
-    '',
-    `CANON:`,
-    `Cast: ${(cast || []).map(c => c.name).filter(Boolean).join(', ')}`,
-    `Places: ${(places || []).map(p => p.name).filter(Boolean).join(', ')}`,
-    `Items: ${(items || []).map(i => i.name).filter(Boolean).join(', ')}`,
-    knowledge ? `Knowledge ledger: ${knowledge}` : '',
-    '',
-    `CHAPTER ${chapter?.n || ''} (id: ${chapter?.id}):`,
-    chapter?.text || '(empty)',
-  ].filter(Boolean).join('\n');
-}
+const PERSONA = [
+  'You are a continuity checker for a novel manuscript.',
+  'Look for inconsistencies across canon and the chapter text — a character in two places at once, an item that changes hands without explanation, a fact that contradicts a previous chapter, a stat that defies the world rules.',
+  'Be specific: name the chapter and the entity. Skip nitpicks the writer would already accept (e.g. stylistic choice).',
+].join(' ');
+
+const SCHEMA = [
+  'Return ONLY JSON of this exact shape:',
+  '{"findings":[{"severity":"info|warn|error","description":"<1 short sentence>","manuscriptLocations":[{"chapterId":"<id>"}],"suggestedFix":"<optional>","confidence":0.0}]}',
+].join('\n');
 
 function safeParse(raw) {
   if (!raw) return [];
@@ -38,19 +32,34 @@ function safeParse(raw) {
 
 export async function scanContinuity(state, chapterId) {
   const chapter = chapterId ? state.chapters?.[chapterId] : null;
-  if (!chapter) return [];
+  if (!chapter?.text) return [];
   const knowledge = (state.cast || [])
     .filter(c => (c.knows?.length || c.hides?.length || c.fears?.length))
-    .map(c => `${c.name}: knows[${(c.knows || []).map(k => k.fact).join(' / ')}] hides[${(c.hides || []).map(k => k.fact).join(' / ')}]`)
+    .map(c => `${c.name}: knows[${(c.knows || []).map(k => k.fact || k).filter(Boolean).join(' / ')}] hides[${(c.hides || []).map(k => k.fact || k).filter(Boolean).join(' / ')}]`)
+    .slice(0, 12)
     .join(' || ');
+
+  const sys = composeSystem({
+    state, persona: PERSONA,
+    focusChapterId: chapterId,
+    slice: ['cast', 'places', 'items', 'quests'],
+    extra: [
+      knowledge && 'KNOWLEDGE LEDGER: ' + knowledge,
+      SCHEMA,
+    ].filter(Boolean).join('\n\n'),
+  });
+
+  const prompt = [
+    `Chapter ${chapter.n || '?'} (id: ${chapter.id}):`,
+    '',
+    chapter.text,
+    '',
+    'List inconsistencies now. JSON only.',
+  ].join('\n');
+
   let raw = '';
   try {
-    raw = await aiService.callAI(
-      buildPrompt({ chapter, cast: state.cast, places: state.places, items: state.items, knowledge }),
-      'continuity',
-      'You are a careful continuity checker for a novel manuscript.',
-      { useCache: false },
-    );
+    raw = await aiService.callAI(prompt, 'analytical', sys, { useCache: false });
   } catch {
     return [];
   }
@@ -63,5 +72,6 @@ export async function scanContinuity(state, chapterId) {
       description: f.description,
       manuscriptLocations: Array.isArray(f.manuscriptLocations) ? f.manuscriptLocations : [{ chapterId }],
       suggestedFix: f.suggestedFix,
+      confidence: typeof f.confidence === 'number' ? f.confidence : 0.7,
     }));
 }

@@ -1,43 +1,54 @@
 // Loomwright — specialist chat service. Wraps aiService.callAI with the
 // domain persona + curated slice context so each panel feels like talking
-// to a focused expert.
+// to a focused expert. Now uses the unified ai/context.composeSystem so the
+// model sees full saga + voice + recent chapters + canon on every turn.
 
 import aiService from '../../../services/aiService';
 import { personaFor } from './personas';
 import { buildContext } from './context';
+import { composeSystem } from '../ai/context';
 
 // Keep recent messages so the convo feels continuous; cap to last 12 turns
 // per domain to keep the prompt small.
 const HISTORY_CAP = 12;
 
+// Map specialist domain to the canon slices that should be in scope.
+const DOMAIN_SLICE = {
+  items:    ['cast', 'items', 'skills'],
+  skills:   ['cast', 'skills', 'items'],
+  quests:   ['cast', 'quests', 'places'],
+  cast:     ['cast', 'quests', 'places'],
+  atlas:    ['places', 'cast'],
+  voice:    ['cast'],
+  language: ['cast', 'places'],
+  tangle:   ['cast', 'quests'],
+  stats:    ['cast', 'skills', 'items'],
+};
+
+// Heuristic task tag — drives intelligenceRouter to pick the right model.
+const DOMAIN_TASK = {
+  items:    'creative-deep',
+  skills:   'creative-deep',
+  quests:   'creative-deep',
+  cast:     'creative',
+  atlas:    'creative',
+  voice:    'analytical',
+  language: 'creative',
+  tangle:   'analytical',
+  stats:    'analytical',
+};
+
 export async function ask({ domain, history, prompt, store, opts = {} }) {
   const persona = personaFor(domain);
-  const ctx = buildContext(domain, store);
-  const p = store.profile || {};
-  const wp = p.writingPreferences || {};
-  const projectLines = [
-    p.workingTitle && `Project: ${p.workingTitle}${p.seriesName ? ' (' + p.seriesName + ')' : ''}`,
-    (p.genres || []).length && `Genres: ${p.genres.join(', ')}`,
-    (p.tone || []).length && `Tone: ${p.tone.join(' / ')}`,
-    p.pov && `POV: ${p.pov}`,
-    p.tense && `Tense: ${p.tense}`,
-    p.premise && `Premise: ${p.premise}`,
-    (p.worldRules || []).length && `World rules: ${p.worldRules.slice(0, 6).join(' · ')}`,
-    wp.dialogueStyle && `Dialogue: ${wp.dialogueStyle}`,
-    wp.descriptionDensity && `Description density: ${wp.descriptionDensity}`,
-    (wp.profanityLevel || wp.violenceLevel || wp.romanticContent) &&
-      `Content limits: profanity=${wp.profanityLevel || 'mild'}, violence=${wp.violenceLevel || 'mild'}, romance=${wp.romanticContent || 'mild'}`,
-    (wp.petPeeves || []).length && `Avoid: ${wp.petPeeves.slice(0, 8).join(' · ')}`,
-    (wp.favorites || []).length && `Lean into: ${wp.favorites.slice(0, 8).join(' · ')}`,
-  ].filter(Boolean).join('\n');
+  const inlineCtx = buildContext(domain, store); // existing thin slice for back-compat
 
-  const systemContext = [
-    persona.voice,
-    projectLines && '\nPROJECT CONTEXT:\n' + projectLines,
-    '',
-    'CURRENT WORLD STATE:',
-    ctx,
-  ].filter(Boolean).join('\n');
+  const systemContext = composeSystem({
+    state: store,
+    persona: persona.voice + '\n\nDOMAIN-SPECIFIC SLICE:\n' + inlineCtx,
+    focusCharId: store.ui?.selection?.character || null,
+    focusChapterId: store.ui?.selection?.chapter || store.ui?.activeChapterId || null,
+    slice: DOMAIN_SLICE[domain] || ['cast'],
+  });
 
   const recent = (history || []).slice(-HISTORY_CAP);
   const turns = recent.map(m => (m.role === 'user' ? 'Author: ' : 'Specialist: ') + m.text).join('\n');
@@ -48,7 +59,7 @@ export async function ask({ domain, history, prompt, store, opts = {} }) {
   ].join('\n');
 
   try {
-    const raw = await aiService.callAI(fullPrompt, opts.task || `specialist-${domain}`, systemContext, {
+    const raw = await aiService.callAI(fullPrompt, opts.task || DOMAIN_TASK[domain] || 'creative', systemContext, {
       useCache: false,
     });
     return String(raw || '').trim();

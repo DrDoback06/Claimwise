@@ -9,6 +9,7 @@ import { ALL_AFFIXES } from '../data/affixes';
 import { ALL_GEMS } from '../data/gems';
 import { RUNEWORDS, RUNES } from '../data/runewords';
 import { SETS } from '../data/sets';
+import { composeSystem } from '../ai/context';
 
 function rid(prefix) { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
 
@@ -35,10 +36,12 @@ function safeParse(raw) {
 }
 
 function buildSystemPrompt(state) {
-  return [
+  const persona = [
     'You are an items master for a fantasy series with Diablo II-style mechanics.',
-    'Mint a single item from the writer\'s prompt. Use existing stats / skills when possible; only invent new ones if the prompt clearly calls for them.',
-    '',
+    'Mint a single item from the writer\'s prompt. Use existing stats / skills when possible; only invent new ones if the prompt clearly calls for them. The item must feel native to the saga in the project context below.',
+  ].join(' ');
+
+  const extra = [
     'Known stats: ' + (knownStatsFromState(state).join(', ') || '(none yet)'),
     'Known skills: ' + (knownSkills(state).map(s => `${s.id}::${s.name}`).join(', ') || '(none yet)'),
     '',
@@ -49,8 +52,15 @@ function buildSystemPrompt(state) {
     'Existing sets you can reference: ' + SETS.map(s => s.id).join(', '),
     '',
     'Return ONLY this JSON (no commentary):',
-    '{"item":{"name":"...","slot":"...","kind":"weapon|armor|charm|...","rarity":"common|magic|rare|legendary|unique|mythic","weight":1.0,"description":"...","statMods":{"STR":2,"DEX":1},"affixes":["pre_keen"],"sockets":[{}, {}],"setId":null,"grantedSkills":["sk_existing_id"]},"missingStats":[{"key":"STAMINA","description":"..."}],"missingSkills":[{"name":"Death Blow","tier":"adept","description":"...","effects":{"stats":{"STR":2}}}],"wikiDraft":"# Origin\\n\\n..."}',
+    '{"item":{"name":"...","slot":"...","kind":"weapon|armor|charm|...","rarity":"common|magic|rare|legendary|unique|mythic","weight":1.0,"description":"...","statMods":{"STR":2,"DEX":1},"affixes":["pre_keen"],"sockets":[{}, {}],"setId":null,"grantedSkills":["sk_existing_id"]},"missingStats":[{"key":"STAMINA","description":"..."}],"missingSkills":[{"name":"Death Blow","tier":"adept","description":"...","effects":{"stats":{"STR":2}}}],"wikiDraft":"<short origin paragraph rooted in the saga lore>"}',
   ].join('\n');
+
+  return composeSystem({
+    state, persona,
+    focusCharId: state.ui?.selection?.character || null,
+    slice: ['cast', 'items', 'skills'],
+    extra,
+  });
 }
 
 export async function craftItem(state, userPrompt, opts = {}) {
@@ -58,7 +68,7 @@ export async function craftItem(state, userPrompt, opts = {}) {
   const prompt = `Writer's request:\n${userPrompt}\n\nMint the item now.`;
   let raw = '';
   try {
-    raw = await aiService.callAI(prompt, opts.task || 'item-craft', sys, { useCache: false });
+    raw = await aiService.callAI(prompt, opts.task || 'creative-deep', sys, { useCache: false });
   } catch (err) {
     return { error: err?.message || 'craft failed', item: null };
   }

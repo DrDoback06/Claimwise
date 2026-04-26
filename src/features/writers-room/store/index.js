@@ -44,6 +44,7 @@ export function StoreProvider({ children }) {
     for (const k of Object.keys(state)) {
       if (k === '_loading' || k === 'feedback' || k === 'suggestions') continue;
       if (k === 'marginDetections') continue; // ephemeral — see CODE-INSIGHT §4
+      if (k === 'autonomousJobs') continue;   // ephemeral — running-job indicators
       if (prev[k] !== state[k]) changed.push(k);
     }
     changed.forEach(k => pendingRef.current.add(k));
