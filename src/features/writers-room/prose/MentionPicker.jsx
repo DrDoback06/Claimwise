@@ -24,7 +24,7 @@ function searchEntities(store, kind, query) {
   const list = kind === 'character' ? store.cast
     : kind === 'place' ? store.places
     : kind === 'item' ? store.items
-    : kind === 'thread' ? store.threads
+    : kind === 'thread' ? store.quests
     : kind === 'chapter' ? Object.values(store.chapters || {})
     : [];
   return (list || [])

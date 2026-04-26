@@ -199,10 +199,22 @@ export async function loadAllFromDB() {
     chapters,
     cast: castWithColors,
     places: Array.isArray(places) ? places : [],
-    threads: Array.isArray(threads) ? threads : [],
+    // 2026-04 rename: persisted IDB store is still `plotThreads` but the
+    // exposed slice is `quests`. Old records become `kind: 'thread'` quests
+    // and gain an empty sides[] / progress[]. New records are full quests.
+    quests: (Array.isArray(threads) ? threads : []).map(q => ({
+      kind: q.kind || 'thread',
+      sides: q.sides || [],
+      objectives: q.objectives || [],
+      progress: q.progress || [],
+      rewards: q.rewards || [],
+      ...q,
+    })),
+    threads: [], // legacy alias slot — no longer used; quests is canonical.
     items: Array.isArray(items) ? items : [],
     skills: [],
     stats: [],
+    statCatalog: [],
     relationships: [],
     timelineEvents: [],
     voice: Array.isArray(voices) ? voices : [],
@@ -315,7 +327,8 @@ export async function persistSlice(slice, prev, next) {
   const map = {
     cast:    S.actors,
     places:  S.locations,
-    threads: S.plotThreads,
+    quests:  S.plotThreads,   // 2026-04 rename: IDB store name unchanged
+    threads: S.plotThreads,   // back-compat alias
     items:   S.items,
     voice:   S.voices,
   };

@@ -7,6 +7,7 @@ import MapCanvas from './MapCanvas';
 import PlaceEditor from './PlaceEditor';
 import RegionList from './RegionList';
 import TimelineScrubber from '../../primitives/TimelineScrubber';
+import SpecialistChat from '../../specialist/SpecialistChat';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useSelection } from '../../selection';
 import { useStore } from '../../store';
@@ -48,6 +49,7 @@ export default function AtlasPanel({ onClose, onSummonRing, onWeave }) {
         </div>
       )}
       {!sel.place && regions.length > 0 && <RegionList />}
+      <SpecialistChat domain="atlas" accent={PANEL_ACCENT.atlas} />
     </PanelFrame>
   );
 }

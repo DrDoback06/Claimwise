@@ -2,6 +2,7 @@
 
 import React from 'react';
 import PanelFrame from '../PanelFrame';
+import SpecialistChat from '../../specialist/SpecialistChat';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore } from '../../store';
 import { useSelection } from '../../selection';
@@ -127,6 +128,7 @@ export default function VoicePanel({ onClose }) {
           }}>Teach</button>
         </div>
       )}
+      <SpecialistChat domain="voice" accent={PANEL_ACCENT.voice} />
     </PanelFrame>
   );
 }

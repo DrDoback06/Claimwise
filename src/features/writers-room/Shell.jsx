@@ -27,7 +27,7 @@ import { shouldAutoSnapshot, makeSnapshot, pushSnapshot } from './utilities/snap
 
 import CastPanel from './panels/cast';
 import AtlasPanel from './panels/atlas';
-import ThreadsPanel from './panels/threads';
+import QuestsPanel from './panels/quests';
 import VoicePanel from './panels/voice';
 import ItemsPanel from './panels/items';
 import LanguagePanel from './panels/language';
@@ -41,7 +41,7 @@ import SuggestionDrawer from './suggestions/SuggestionDrawer';
 import ExtractionWizard from './extraction/ExtractionWizard';
 
 const PANEL_COMPONENTS = {
-  cast: CastPanel, atlas: AtlasPanel, threads: ThreadsPanel,
+  cast: CastPanel, atlas: AtlasPanel, quests: QuestsPanel, threads: QuestsPanel,
   voice: VoicePanel, items: ItemsPanel, language: LanguagePanel,
   tangle: TanglePanel, groupchat: GroupChatPanel, interview: InterviewPanel,
   skills: SkillsPanel, continuity: ContinuityPanel,

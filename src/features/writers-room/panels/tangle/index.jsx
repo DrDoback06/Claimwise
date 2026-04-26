@@ -2,6 +2,7 @@
 
 import React from 'react';
 import PanelFrame from '../PanelFrame';
+import SpecialistChat from '../../specialist/SpecialistChat';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore } from '../../store';
 import { useSelection } from '../../selection';
@@ -224,6 +225,7 @@ export default function TanglePanel({ onClose }) {
           </div>
         )}
       </div>}
+      <SpecialistChat domain="tangle" accent={PANEL_ACCENT.tangle} />
     </PanelFrame>
   );
 }
@@ -249,7 +251,7 @@ function NodeView({ node, onMouseDown, onClick, onRemove, highlighted }) {
     const p = (store.places || []).find(x => x.id === node.entityId);
     if (p) { label = p.name; kindLabel = p.kind || 'place'; }
   } else if (node.kind === 'thread') {
-    const th = (store.threads || []).find(x => x.id === node.entityId);
+    const th = (store.quests || []).find(x => x.id === node.entityId);
     if (th) { label = th.name; color = th.color || color; kindLabel = 'thread'; }
   } else if (node.kind === 'item') {
     const it = (store.items || []).find(x => x.id === node.entityId);

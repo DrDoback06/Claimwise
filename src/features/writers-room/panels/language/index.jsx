@@ -3,6 +3,7 @@
 
 import React from 'react';
 import PanelFrame from '../PanelFrame';
+import SpecialistChat from '../../specialist/SpecialistChat';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore } from '../../store';
 import Icon from '../../entities/Icon';
@@ -194,6 +195,7 @@ export default function LanguagePanel({ onClose }) {
           </div>
         ))}
       </div>
+      <SpecialistChat domain="language" accent={PANEL_ACCENT.language} />
     </PanelFrame>
   );
 }

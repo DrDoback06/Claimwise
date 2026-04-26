@@ -45,7 +45,7 @@ export async function runExtractPass(state, chapterId, opts = {}) {
       buildPrompt({
         chapter,
         cast: state.cast, places: state.places,
-        items: state.items, threads: state.threads,
+        items: state.items, threads: state.quests,
         deep: opts.deep,
       }),
       opts.deep ? 'extraction-deep' : 'extraction',

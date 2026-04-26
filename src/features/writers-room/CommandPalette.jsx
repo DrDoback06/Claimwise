@@ -23,14 +23,14 @@ export default function CommandPalette({ onClose, onAction }) {
   const ql = q.trim().toLowerCase();
   const cast = (store.cast || []).filter(c => !ql || (c.name || '').toLowerCase().includes(ql));
   const places = (store.places || []).filter(p => !ql || (p.name || '').toLowerCase().includes(ql));
-  const threads = (store.threads || []).filter(th => !ql || (th.name || '').toLowerCase().includes(ql));
+  const threads = (store.quests || []).filter(th => !ql || (th.name || '').toLowerCase().includes(ql));
   const items = (store.items || []).filter(it => !ql || (it.name || '').toLowerCase().includes(ql));
   const proseHits = ql.length > 2 ? findProseHits(store, ql) : [];
 
   const actions = [
     { id: 'panel.cast', label: 'Open Cast' },
     { id: 'panel.atlas', label: 'Open Atlas' },
-    { id: 'panel.threads', label: 'Open Threads' },
+    { id: 'panel.quests', label: 'Open Quests' },
     { id: 'panel.voice', label: 'Open Voice' },
     { id: 'panel.items', label: 'Open Items' },
     { id: 'panel.language', label: 'Open Language' },

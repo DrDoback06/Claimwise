@@ -4,6 +4,7 @@ import React from 'react';
 import PanelFrame from '../PanelFrame';
 import Roster from './Roster';
 import Dossier from './Dossier';
+import SpecialistChat from '../../specialist/SpecialistChat';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore, createCharacter } from '../../store';
 import { useSelection } from '../../selection';
@@ -66,6 +67,7 @@ export default function CastPanel({ onClose, onInterview, onWeave }) {
         onInterview={() => onInterview?.(charId)}
         onWeave={() => onWeave?.(charId)}
       />
+      <SpecialistChat domain="cast" accent={PANEL_ACCENT.cast} />
     </PanelFrame>
   );
 }

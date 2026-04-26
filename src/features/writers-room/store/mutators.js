@@ -81,26 +81,41 @@ export function createPlace(store, patch = {}) {
   return id;
 }
 
-export function createThread(store, patch = {}) {
-  const id = patch.id || rid('th');
+// Quests are the renamed Threads (CODE-INSIGHT 2026-04). They support
+// multi-side scenarios: a quest has named sides (factions) and per-side
+// progress beats. The old `createThread` name is kept as an alias.
+export function createQuest(store, patch = {}) {
+  const id = patch.id || rid('qu');
   const rec = {
     id,
-    name: patch.name || 'New thread',
+    name: patch.name || patch.title || 'New quest',
     severity: patch.severity || 'medium',
     active: true,
     color: patch.color || pickColor(1),
     description: '',
     opens: patch.opens ?? 1,
-    beats: [],
-    characters: [],
-    places: [],
-    items: [],
+    beats: patch.beats || [],
+    characters: patch.characters || [],
+    places: patch.places || [],
+    items: patch.items || [],
+    // (NEW) sides + objectives + progress.
+    sides: patch.sides || [],          // [{id, name, color, members:[charId], goal}]
+    objectives: patch.objectives || [], // [{id, text, completed, sideId?}]
+    progress: patch.progress || [],     // [{id, sideId, beat, chapterId, confidence, source}]
+    rewards: patch.rewards || [],
+    kind: patch.kind || 'main-quest',   // main-quest | side-quest | rivalry | thread (legacy)
     createdAt: Date.now(),
     draftedByLoom: !!patch.draftedByLoom,
     ...patch,
   };
-  store.setSlice('threads', ts => [...(ts || []), rec]);
+  store.setSlice('quests', qs => [...(qs || []), rec]);
   return id;
+}
+
+// Back-compat: old code calling createThread still works; it routes through
+// createQuest with the legacy `thread` kind so the data lives in one slice.
+export function createThread(store, patch = {}) {
+  return createQuest(store, { ...patch, kind: 'thread' });
 }
 
 export function createItem(store, patch = {}) {

@@ -9,7 +9,7 @@ const PANELS = [
   { id: 'atlas',      label: 'Atlas',      icon: 'map',     accent: PANEL_ACCENT.atlas },
   { id: 'cast',       label: 'Cast',       icon: 'users',   accent: PANEL_ACCENT.cast },
   { id: 'voice',      label: 'Voice',      icon: 'volume',  accent: PANEL_ACCENT.voice },
-  { id: 'threads',    label: 'Threads',    icon: 'flag',    accent: PANEL_ACCENT.threads },
+  { id: 'quests',     label: 'Quests',     icon: 'flag',    accent: PANEL_ACCENT.threads },
   { id: 'items',      label: 'Items',      icon: 'bag',     accent: PANEL_ACCENT.items },
   { id: 'skills',     label: 'Skills',     icon: 'sparkle', accent: PANEL_ACCENT.items },
   { id: 'language',   label: 'Language',   icon: 'pen',     accent: PANEL_ACCENT.language },

@@ -7,6 +7,9 @@ import PanelFrame from '../PanelFrame';
 import ContextMenu, { useContextMenu } from '../../primitives/ContextMenu';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore } from '../../store';
+import { generateTree } from '../../skills/treeService';
+import { ensureWikiEntry } from '../../wiki/service';
+import SpecialistChat from '../../specialist/SpecialistChat';
 
 const TIERS = ['novice', 'adept', 'master', 'unique'];
 const TIER_COLOR = (t) => ({
@@ -51,8 +54,57 @@ export default function SkillsPanel({ onClose }) {
   const [selectedId, setSelectedId] = React.useState(null);
   const [linking, setLinking] = React.useState(null); // { fromId, x, y }
   const [drag, setDrag] = React.useState(null);
+  const [genOpen, setGenOpen] = React.useState(false);
+  const [genPrompt, setGenPrompt] = React.useState('');
+  const [genBusy, setGenBusy] = React.useState(false);
+  const [genResult, setGenResult] = React.useState(null);
   const svgRef = React.useRef(null);
   const ctx = useContextMenu();
+
+  const runGenerate = async () => {
+    if (!genPrompt.trim() || genBusy) return;
+    setGenBusy(true);
+    try {
+      const r = await generateTree(store, genPrompt);
+      setGenResult(r);
+    } finally {
+      setGenBusy(false);
+    }
+  };
+
+  const commitGenerated = async () => {
+    if (!genResult?.nodes?.length) return;
+    // Append nodes to skills slice.
+    store.setSlice('skills', xs => [...(xs || []), ...genResult.nodes]);
+    // Auto-create missing stats.
+    if (genResult.missingStats?.length) {
+      store.setSlice('statCatalog', xs => {
+        const cur = Array.isArray(xs) ? xs : [];
+        const known = new Set(cur.map(c => c.key));
+        const next = [...cur];
+        for (const ns of genResult.missingStats) {
+          if (!known.has(ns.key)) next.push({ key: ns.key, description: ns.description || '', max: ns.max || 100 });
+        }
+        return next;
+      });
+    }
+    // Wiki origins for each new skill.
+    for (const node of genResult.nodes) {
+      const draft = genResult.wikiDrafts?.[node.name];
+      try {
+        await ensureWikiEntry({
+          entityId: node.id,
+          entityType: 'skill',
+          entity: { name: node.name, description: node.description },
+          body: draft,
+          draftedByLoom: true,
+        });
+      } catch {}
+    }
+    setGenOpen(false);
+    setGenPrompt('');
+    setGenResult(null);
+  };
 
   const selected = skills.find(s => s.id === selectedId) || null;
   const tierColor = TIER_COLOR(t);
@@ -165,6 +217,23 @@ export default function SkillsPanel({ onClose }) {
       panelId="skills"
       onClose={onClose}
       width={520}>
+      <div style={{
+        padding: '8px 12px', borderBottom: `1px solid ${t.rule}`,
+        display: 'flex', gap: 6, alignItems: 'center',
+      }}>
+        <span style={{
+          fontFamily: t.mono, fontSize: 9, color: t.ink3,
+          letterSpacing: 0.16, textTransform: 'uppercase',
+        }}>{skills.length} nodes · shift-drag links</span>
+        <span style={{ flex: 1 }} />
+        <button onClick={() => setGenOpen(true)} style={{
+          padding: '4px 10px', background: t.accent, color: t.onAccent,
+          border: 'none', borderRadius: 999, cursor: 'pointer',
+          fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14,
+          textTransform: 'uppercase', fontWeight: 600,
+        }}>✦ Generate tree</button>
+      </div>
+
       <div style={{ position: 'relative', height: 380, borderBottom: `1px solid ${t.rule}`, background: t.paper2 }}>
         <svg
           ref={svgRef}
@@ -238,12 +307,6 @@ export default function SkillsPanel({ onClose }) {
             </text>
           )}
         </svg>
-        <div style={{
-          position: 'absolute', top: 8, left: 8,
-          fontFamily: t.mono, fontSize: 9, color: t.ink3,
-          letterSpacing: 0.16, textTransform: 'uppercase',
-          padding: '3px 8px', background: t.paper, border: `1px solid ${t.rule}`, borderRadius: 999,
-        }}>{skills.length} nodes · shift-drag to link</div>
       </div>
 
       {selected && <SkillEditor skill={selected} update={(p) => updateNode(selected.id, p)} t={t} />}
@@ -256,9 +319,147 @@ export default function SkillsPanel({ onClose }) {
         </div>
       )}
 
+      <SpecialistChat domain="skills" accent={PANEL_ACCENT.items} />
+
       <ContextMenu state={ctx.state} onClose={ctx.close} />
+
+      {genOpen && (
+        <div role="dialog" aria-modal="true" style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 4000,
+          display: 'grid', placeItems: 'center', padding: 24,
+        }}>
+          <div style={{
+            width: 'min(640px, 100%)', maxHeight: '90vh',
+            background: t.paper, color: t.ink,
+            border: `1px solid ${t.rule}`, borderRadius: 6,
+            display: 'flex', flexDirection: 'column',
+            animation: 'lw-card-in 200ms ease-out',
+          }}>
+            <header style={{
+              padding: '14px 18px', borderBottom: `1px solid ${t.rule}`,
+            }}>
+              <div style={{
+                fontFamily: t.mono, fontSize: 9, color: t.ink3,
+                letterSpacing: 0.16, textTransform: 'uppercase',
+              }}>Skill librarian</div>
+              <div style={{ fontFamily: t.display, fontSize: 18, color: t.ink, fontWeight: 500, marginTop: 2 }}>
+                Generate a skill tree
+              </div>
+            </header>
+            <div style={{ padding: 18, flex: 1, overflowY: 'auto' }}>
+              {!genResult && (
+                <>
+                  <div style={{ fontFamily: t.display, fontSize: 13, color: t.ink2, fontStyle: 'italic', lineHeight: 1.5 }}>
+                    Examples: "a 10-node tree for a wheelwright that branches into engineering and folk-magic",
+                    "small assassin tree built around stealth and crit",
+                    "scholar tree centred on lore and language gates".
+                  </div>
+                  <textarea value={genPrompt} onChange={e => setGenPrompt(e.target.value)}
+                    rows={5} placeholder="Describe the tree you want…"
+                    style={{
+                      width: '100%', marginTop: 12, padding: 12,
+                      fontFamily: t.display, fontSize: 14, color: t.ink, lineHeight: 1.5,
+                      background: t.paper2, border: `1px solid ${t.rule}`, borderRadius: 2, outline: 'none', resize: 'vertical',
+                    }} />
+                </>
+              )}
+              {genResult?.error && (
+                <div style={{ color: t.bad, fontFamily: t.display, fontSize: 13 }}>{genResult.error}</div>
+              )}
+              {genResult?.nodes?.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{
+                    fontFamily: t.mono, fontSize: 10, color: t.ink2,
+                    letterSpacing: 0.14, textTransform: 'uppercase', marginBottom: 4,
+                  }}>{genResult.nodes.length} nodes proposed</div>
+                  {genResult.nodes.map(n => (
+                    <div key={n.id} style={{
+                      padding: 10, background: t.paper2, border: `1px solid ${t.rule}`, borderRadius: 2,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontFamily: t.display, fontSize: 14, color: t.ink, fontWeight: 500 }}>{n.name}</span>
+                        <span style={{
+                          fontFamily: t.mono, fontSize: 9, color: t.ink3,
+                          letterSpacing: 0.14, textTransform: 'uppercase',
+                        }}>{n.tier}</span>
+                      </div>
+                      {n.description && (
+                        <div style={{ fontFamily: t.display, fontSize: 12, color: t.ink2, fontStyle: 'italic', marginTop: 4, lineHeight: 1.5 }}>{n.description}</div>
+                      )}
+                      {Object.keys(n.effects?.stats || {}).length > 0 && (
+                        <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                          {Object.entries(n.effects.stats).map(([k, v]) => (
+                            <span key={k} style={{
+                              padding: '1px 6px', background: t.paper, border: `1px solid ${v > 0 ? t.good : v < 0 ? t.bad : t.rule}`,
+                              borderRadius: 999, fontFamily: t.mono, fontSize: 9, color: v > 0 ? t.good : v < 0 ? t.bad : t.ink2,
+                            }}>{k} {v > 0 ? '+' : ''}{v}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {(genResult.missingStats?.length || 0) > 0 && (
+                    <div style={{
+                      marginTop: 10, padding: 10, background: t.paper2,
+                      borderLeft: `3px solid ${t.warn}`, borderRadius: 2,
+                    }}>
+                      <div style={{
+                        fontFamily: t.mono, fontSize: 10, color: t.warn,
+                        letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 4,
+                      }}>Will create {genResult.missingStats.length} new stat{genResult.missingStats.length === 1 ? '' : 's'}</div>
+                      {genResult.missingStats.map(s => (
+                        <div key={s.key} style={{ fontFamily: t.display, fontSize: 12, color: t.ink2 }}>
+                          <strong style={{ color: t.ink }}>{s.key}</strong>{s.description ? ' — ' + s.description : ''}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <footer style={{
+              padding: '12px 18px', borderTop: `1px solid ${t.rule}`,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              {!genResult ? (
+                <>
+                  <span style={{ flex: 1 }} />
+                  <button onClick={() => { setGenOpen(false); setGenPrompt(''); }} style={ghostBtn(t)}>Cancel</button>
+                  <button onClick={runGenerate} disabled={!genPrompt.trim() || genBusy} style={primaryBtn(t)}>
+                    {genBusy ? 'Designing…' : 'Generate'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => { setGenResult(null); }} style={ghostBtn(t)}>← Try again</button>
+                  <span style={{ flex: 1 }} />
+                  <button onClick={commitGenerated} disabled={genBusy || !genResult.nodes?.length} style={primaryBtn(t)}>
+                    {genBusy ? 'Committing…' : 'Commit ' + (genResult.nodes?.length || 0) + ' nodes'}
+                  </button>
+                </>
+              )}
+            </footer>
+          </div>
+        </div>
+      )}
     </PanelFrame>
   );
+}
+
+function primaryBtn(t) {
+  return {
+    padding: '8px 16px', background: t.accent, color: t.onAccent,
+    border: 'none', borderRadius: 2, cursor: 'pointer',
+    fontFamily: t.mono, fontSize: 11, letterSpacing: 0.14,
+    textTransform: 'uppercase', fontWeight: 600,
+  };
+}
+function ghostBtn(t) {
+  return {
+    padding: '7px 12px', background: 'transparent', color: t.ink2,
+    border: `1px solid ${t.rule}`, borderRadius: 2, cursor: 'pointer',
+    fontFamily: t.mono, fontSize: 10, letterSpacing: 0.14, textTransform: 'uppercase',
+  };
 }
 
 function SkillEditor({ skill: s, update, t }) {

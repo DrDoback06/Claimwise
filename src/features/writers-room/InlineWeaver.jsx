@@ -17,7 +17,7 @@ export default function InlineWeaver({ onClose, onWalkThrough }) {
     let cancelled = false;
     setRunning(true);
     const ctx = {
-      cast: store.cast, places: store.places, threads: store.threads,
+      cast: store.cast, places: store.places, threads: store.quests,
       items: store.items, profile: store.profile,
     };
     suggest(ch?.text || '', ctx, { mode: 'inline-weaver' }).then(res => {

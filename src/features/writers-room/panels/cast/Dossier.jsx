@@ -49,7 +49,7 @@ const SECTIONS = [
   {
     id: 'threads', label: 'Threads', cmp: ThreadsSection,
     desc: 'Filtered to this character',
-    count: (c, store) => (store.threads || []).filter(t => (t.characters || []).includes(c.id)).length,
+    count: (c, store) => (store.quests || []).filter(t => (t.characters || []).includes(c.id)).length,
   },
   {
     id: 'rels', label: 'Relationships', cmp: RelationshipsTab,
@@ -95,7 +95,7 @@ function ThreadsSection({ character: c }) {
   // Light reuse — full Threads panel is heavy. Render filtered list inline.
   const t = useTheme();
   const store = useStore();
-  const threads = (store.threads || []).filter(th => (th.characters || []).includes(c.id));
+  const threads = (store.quests || []).filter(th => (th.characters || []).includes(c.id));
   if (threads.length === 0) {
     return (
       <div style={{ padding: '8px 16px', fontFamily: t.display, fontSize: 13, color: t.ink3, fontStyle: 'italic' }}>

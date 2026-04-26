@@ -6,10 +6,21 @@ import { useStore } from './store';
 import { exportBackup, importBackup, clearAll, downloadBackup } from './store/persistence';
 import { isDevMode } from './devtools/dev-mode';
 import DeveloperPanel from './devtools/DeveloperPanel';
+import aiService from '../../services/aiService';
 
-const PROVIDERS = ['auto', 'anthropic', 'openai', 'gemini', 'offline'];
+const PROVIDERS = ['auto', 'anthropic', 'openai', 'gemini', 'groq', 'huggingface', 'offline'];
 const INTRUSION = ['quiet', 'medium', 'helpful', 'eager'];
 const ATLAS_AUTO = ['off', 'conservative', 'helpful', 'eager'];
+
+// API providers + canonical key URLs (same set the legacy Settings panel uses).
+const KEY_PROVIDERS = [
+  { id: 'groq',        label: 'Groq',         badge: 'FREE',     note: '14,400 req/day',     url: 'https://console.groq.com/keys' },
+  { id: 'huggingface', label: 'Hugging Face', badge: 'FREE',     note: 'No key sometimes',   url: 'https://huggingface.co/settings/tokens' },
+  { id: 'gemini',      label: 'Gemini',       badge: 'PAID',     note: 'Google AI Studio',   url: 'https://aistudio.google.com/apikey' },
+  { id: 'openai',      label: 'OpenAI',       badge: 'PAID',     note: 'GPT + DALL-E',       url: 'https://platform.openai.com/api-keys' },
+  { id: 'anthropic',   label: 'Anthropic',    badge: 'PAID',     note: 'Claude',             url: 'https://console.anthropic.com/settings/keys' },
+  { id: 'elevenlabs',  label: 'ElevenLabs',   badge: 'OPTIONAL', note: 'Premium TTS voices', url: 'https://elevenlabs.io/app/settings/api-keys' },
+];
 
 export default function Settings({ onClose }) {
   const t = useTheme();
@@ -22,7 +33,7 @@ export default function Settings({ onClose }) {
   const onExport = async () => {
     const json = await exportBackup({
       profile, book: store.book, chapters: store.chapters,
-      cast: store.cast, places: store.places, threads: store.threads,
+      cast: store.cast, places: store.places, threads: store.quests,
       items: store.items, voice: store.voice, tangle: store.tangle,
       ui: store.ui, noticings: store.noticings, snapshots: store.snapshots,
     });
@@ -40,7 +51,7 @@ export default function Settings({ onClose }) {
       // Pre-destructive backup first.
       const cur = await exportBackup({
         profile, book: store.book, chapters: store.chapters,
-        cast: store.cast, places: store.places, threads: store.threads,
+        cast: store.cast, places: store.places, threads: store.quests,
         items: store.items, voice: store.voice, tangle: store.tangle,
         ui: store.ui, noticings: store.noticings,
       });
@@ -63,7 +74,7 @@ export default function Settings({ onClose }) {
     // Pre-destructive backup.
     const cur = await exportBackup({
       profile, book: store.book, chapters: store.chapters,
-      cast: store.cast, places: store.places, threads: store.threads,
+      cast: store.cast, places: store.places, threads: store.quests,
       items: store.items, voice: store.voice, tangle: store.tangle,
       ui: store.ui, noticings: store.noticings,
     });
@@ -112,8 +123,15 @@ export default function Settings({ onClose }) {
         </Section>
 
         <Section t={t} title="AI provider">
-          <Chips t={t} items={PROVIDERS} selected={[profile.aiProvider || 'auto']} onChange={v => set('profile.aiProvider', v[0])} />
-          <p style={pStyle(t)}>You can paste API keys into the legacy Settings panel for now. Loomwright will use whichever provider Claimwise has configured.</p>
+          <Chips t={t} items={PROVIDERS} selected={[profile.aiProvider || 'auto']} onChange={v => {
+            set('profile.aiProvider', v[0]);
+            try { aiService.preferredProvider = v[0]; } catch {}
+          }} />
+          <p style={pStyle(t)}>Auto tries the free providers first (Groq → HuggingFace) and falls back to whichever paid key you've saved.</p>
+        </Section>
+
+        <Section t={t} title="API keys & integrations">
+          <ApiKeys t={t} store={store} />
         </Section>
 
         <Section t={t} title="Margin & ribbons">
@@ -205,4 +223,114 @@ function btnStyle(t) {
     fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
     textTransform: 'uppercase', cursor: 'pointer',
   };
+}
+
+function ApiKeys({ t, store }) {
+  const persisted = store.profile?.apiKeys || {};
+  const runtime = (() => { try { return aiService.getRuntimeKeys?.() || {}; } catch { return {}; } })();
+  const initial = {};
+  for (const p of KEY_PROVIDERS) initial[p.id] = persisted[p.id] || runtime[p.id] || '';
+  const [keys, setKeys] = React.useState(initial);
+  const [revealed, setRevealed] = React.useState({});
+  const [saved, setSaved] = React.useState({});
+
+  const onSave = (id) => {
+    const k = (keys[id] || '').trim();
+    if (!k) return;
+    try { aiService.setApiKey(id, k); } catch {}
+    store.setPath(`profile.apiKeys.${id}`, k);
+    setSaved(s => ({ ...s, [id]: Date.now() }));
+    setTimeout(() => setSaved(s => { const n = { ...s }; delete n[id]; return n; }), 1500);
+  };
+
+  const onClear = (id) => {
+    setKeys(k => ({ ...k, [id]: '' }));
+    try { aiService.setApiKey(id, ''); } catch {}
+    store.setPath(`profile.apiKeys.${id}`, '');
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <p style={{ ...pStyle(t), marginTop: 0 }}>
+        Keys are kept in your browser only. Click "Get key →" to grab a fresh one
+        from each provider's console.
+      </p>
+      {KEY_PROVIDERS.map(p => {
+        const value = keys[p.id] || '';
+        const isRevealed = !!revealed[p.id];
+        const wasSaved = !!saved[p.id];
+        return (
+          <div key={p.id} style={{
+            padding: 10, background: t.paper2, border: `1px solid ${t.rule}`, borderRadius: 2,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <span style={{
+                fontFamily: t.display, fontSize: 14, color: t.ink, fontWeight: 500,
+              }}>{p.label}</span>
+              <span style={{
+                padding: '1px 6px',
+                background: p.badge === 'FREE' ? t.good : (p.badge === 'OPTIONAL' ? t.ink3 : t.warn),
+                color: t.onAccent,
+                fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14,
+                borderRadius: 999,
+              }}>{p.badge}</span>
+              <span style={{ flex: 1 }} />
+              <a href={p.url} target="_blank" rel="noopener noreferrer" style={{
+                fontFamily: t.mono, fontSize: 9, color: t.accent,
+                letterSpacing: 0.14, textTransform: 'uppercase',
+                textDecoration: 'none',
+              }}>Get key →</a>
+            </div>
+            <div style={{
+              fontFamily: t.display, fontSize: 12, color: t.ink3, fontStyle: 'italic', marginBottom: 6,
+            }}>{p.note}</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type={isRevealed ? 'text' : 'password'}
+                value={value}
+                onChange={e => setKeys(k => ({ ...k, [p.id]: e.target.value }))}
+                placeholder={`Paste your ${p.label} key`}
+                spellCheck={false}
+                autoComplete="off"
+                style={{
+                  flex: 1, padding: '6px 8px',
+                  fontFamily: t.mono, fontSize: 12, color: t.ink,
+                  background: t.paper, border: `1px solid ${t.rule}`,
+                  borderRadius: 2, outline: 'none',
+                }}
+              />
+              <button onClick={() => setRevealed(r => ({ ...r, [p.id]: !r[p.id] }))} style={{
+                padding: '0 10px', background: 'transparent', color: t.ink3,
+                border: `1px solid ${t.rule}`, borderRadius: 2, cursor: 'pointer',
+                fontFamily: t.mono, fontSize: 11,
+              }}>{isRevealed ? 'Hide' : 'Show'}</button>
+              <button onClick={() => onSave(p.id)} disabled={!value.trim()} style={{
+                padding: '0 12px',
+                background: wasSaved ? t.good : t.accent, color: t.onAccent,
+                border: 'none', borderRadius: 2, cursor: 'pointer',
+                fontFamily: t.mono, fontSize: 10, letterSpacing: 0.14,
+                textTransform: 'uppercase', fontWeight: 600,
+                opacity: value.trim() ? 1 : 0.4,
+              }}>{wasSaved ? 'Saved ✓' : 'Save'}</button>
+              {value && (
+                <button onClick={() => onClear(p.id)} style={{
+                  padding: '0 8px', background: 'transparent', color: t.ink3,
+                  border: `1px solid ${t.rule}`, borderRadius: 2, cursor: 'pointer',
+                  fontFamily: t.mono, fontSize: 11,
+                }}>×</button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <a href="/#/legacy" target="_blank" rel="noopener noreferrer" style={{
+        marginTop: 8, padding: '8px 12px',
+        background: 'transparent', color: t.ink2,
+        border: `1px dashed ${t.rule}`, borderRadius: 2,
+        fontFamily: t.mono, fontSize: 10, letterSpacing: 0.14,
+        textTransform: 'uppercase', textAlign: 'center',
+        textDecoration: 'none',
+      }}>Open legacy settings (backup, TTS, canon control) →</a>
+    </div>
+  );
 }

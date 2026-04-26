@@ -26,7 +26,7 @@ export default function EntityChip({ kind, id, size = 'md' }) {
     if (!p) return <Orphan label="place" />;
     label = p.name; color = PLACE_COLORS[p.kind] || t.ink3; sub = p.kind || '';
   } else if (kind === 'thread') {
-    const th = (store.threads || []).find(x => x.id === id);
+    const th = (store.quests || []).find(x => x.id === id);
     if (!th) return <Orphan label="thread" />;
     label = th.name; color = th.color || t.ink3; sub = th.severity || '';
   } else if (kind === 'item') {

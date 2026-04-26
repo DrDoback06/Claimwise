@@ -96,7 +96,7 @@ function ChaptersTab() {
 function PlotTab() {
   const t = useTheme();
   const store = useStore();
-  const threads = store.threads || [];
+  const threads = store.quests || [];
   return (
     <div>
       <div style={{
@@ -169,7 +169,7 @@ function LoreAuditTab() {
     if (!it.owner) issues.push(`Item "${it.name}" has no owner.`);
   }
   // Threads with no beats.
-  for (const th of store.threads || []) {
+  for (const th of store.quests || []) {
     if ((th.beats || []).length === 0) issues.push(`Thread "${th.name}" has no beats.`);
   }
   return (

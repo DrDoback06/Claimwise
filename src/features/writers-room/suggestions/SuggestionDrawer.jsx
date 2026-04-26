@@ -247,7 +247,7 @@ function scopeLabel(state, ref) {
   if (!ref) return 'Whole-book';
   const list = ref.kind === 'character' ? state.cast
     : ref.kind === 'place' ? state.places
-    : ref.kind === 'thread' ? state.threads
+    : ref.kind === 'thread' ? state.quests
     : ref.kind === 'item' ? state.items
     : [];
   const e = (list || []).find(x => x.id === ref.id);

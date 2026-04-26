@@ -8,7 +8,7 @@ import React from 'react';
 import { emptyState } from './schema';
 import { loadAllFromDB, persistSlice } from './persistence';
 import {
-  createCharacter, createPlace, createThread, createItem,
+  createCharacter, createPlace, createThread, createQuest, createItem,
   createChapter, removeChapter, reorderChapters,
   rid, wordCount, pickColor, clearDraftFlag,
 } from './mutators';
@@ -182,7 +182,7 @@ export function useStore() {
 }
 
 export {
-  createCharacter, createPlace, createThread, createItem,
+  createCharacter, createPlace, createThread, createQuest, createItem,
   createChapter, removeChapter, reorderChapters,
   rid, wordCount, pickColor, clearDraftFlag,
 };

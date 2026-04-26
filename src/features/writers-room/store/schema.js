@@ -87,7 +87,8 @@ export const DEFAULT_TWEAKS = {
 export const EMPTY_UI = {
   panels: [],                 // ['cast','atlas',…] (open order)
   panelWidths: {},
-  selection: { character: null, place: null, thread: null, item: null, paragraph: null, scene: null, chapter: null, multi: [] },
+  // 'thread' kept as an alias for legacy data; 'quest' is the canonical name now.
+  selection: { character: null, place: null, quest: null, thread: null, item: null, paragraph: null, scene: null, chapter: null, multi: [] },
   tweaks: { ...DEFAULT_TWEAKS },
   focusMode: false,
   activeChapterId: null,
@@ -121,10 +122,12 @@ export function emptyState() {
     chapters: {},
     cast: [],
     places: [],
-    threads: [],
+    quests: [],               // (renamed) was 'threads'; kept alias on read.
+    threads: [],              // legacy alias; persistence migrates to quests.
     items: [],
     skills: [],
     stats: [],
+    statCatalog: [],          // [{key, description, max}] custom stats
     relationships: [],
     timelineEvents: [],
     voice: [],                // voice profiles

@@ -45,7 +45,7 @@ const MarginNoticings = React.forwardRef(function MarginNoticings({ onWalkThroug
     let cancelled = false;
     setRunning(true);
     const ctx = {
-      cast: store.cast, places: store.places, threads: store.threads,
+      cast: store.cast, places: store.places, threads: store.quests,
       items: store.items, profile: store.profile,
     };
     suggest(chapter.text, ctx, { mode: 'idle' }).then(res => {
@@ -77,7 +77,7 @@ const MarginNoticings = React.forwardRef(function MarginNoticings({ onWalkThroug
       ...(store.cast || []).map(c => ({ kind: 'character', name: c.name })),
       ...(store.places || []).map(p => ({ kind: 'place', name: p.name })),
       ...(store.items || []).map(i => ({ kind: 'item', name: i.name })),
-      ...(store.threads || []).map(t => ({ kind: 'thread', name: t.title || t.name })),
+      ...(store.quests || []).map(t => ({ kind: 'thread', name: t.title || t.name })),
     ].filter(e => e.name);
 
     paragraphs.forEach((p, i) => {
