@@ -10,7 +10,6 @@ import { dragEntity } from '../../drag';
 import { itemById, characterById, chapterList, derivedStats, itemTotalMods, activeRuneword } from '../../store/selectors';
 import CraftWizard from '../../items/CraftWizard';
 import Catalog from '../../items/Catalog';
-import SpecialistChat from '../../specialist/SpecialistChat';
 import QueuePanel from '../../review-queue/QueuePanel';
 import EntityImageButton from '../../images/EntityImageButton';
 
@@ -72,6 +71,13 @@ export default function ItemsPanel({ onClose }) {
           fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14,
           textTransform: 'uppercase', fontWeight: 600,
         }}>✦ Forge</button>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('lw:open-weaver', {
+          detail: { tags: ['items'], prompt: 'Generate 3 new item concepts with rarity, slot, and short lore hooks.' },
+        }))} style={{
+          padding: '4px 10px', background: 'transparent', color: t.accent,
+          border: `1px solid ${t.accent}`, borderRadius: 999, cursor: 'pointer',
+          fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+        }}>✦ Item ideas</button>
       </div>
 
       <QueuePanel domain="items" accent={PANEL_ACCENT.items} title="Items review queue" />
@@ -99,7 +105,6 @@ export default function ItemsPanel({ onClose }) {
       )}
       {tab === 'catalog' && <Catalog />}
 
-      <SpecialistChat domain="items" accent={PANEL_ACCENT.items} />
 
       {craftOpen && <CraftWizard onClose={() => setCraftOpen(false)} />}
     </PanelFrame>
@@ -173,6 +178,17 @@ function ItemDetail({ item }) {
   const rw = activeRuneword(item);
 
   const update = (patch) => store.setSlice('items', is => is.map(x => x.id === item.id ? { ...x, ...patch } : x));
+  const trashItem = () => {
+    if (!window.confirm(`Move "${item.name || 'this item'}" to trash?`)) return;
+    store.setSlice('trash', xs => ([...(xs || []), {
+      id: `trash_${Date.now()}`,
+      kind: 'item',
+      payload: item,
+      deletedAt: Date.now(),
+    }]));
+    store.setSlice('items', is => (is || []).filter(x => x.id !== item.id));
+    store.setPath('ui.selection.item', null);
+  };
 
   const lbl = {
     fontFamily: t.mono, fontSize: 9, color: t.ink3,
@@ -215,6 +231,14 @@ function ItemDetail({ item }) {
             fontFamily: t.display, fontSize: 12, color: t.ink2, fontStyle: 'italic', lineHeight: 1.5,
             background: t.paper, border: `1px solid ${t.rule}`, borderRadius: 1, outline: 'none',
           }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+          <button onClick={trashItem} style={{
+            padding: '4px 10px', background: 'transparent',
+            color: t.bad || '#b33', border: `1px solid ${t.bad || '#b33'}`,
+            borderRadius: 1, cursor: 'pointer',
+            fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12, textTransform: 'uppercase',
+          }}>Move to trash</button>
+        </div>
       </div>
 
       {/* Total contribution */}

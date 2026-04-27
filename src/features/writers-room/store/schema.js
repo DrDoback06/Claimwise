@@ -54,6 +54,11 @@ export const EMPTY_PROFILE = {
   preferredProvider: 'auto',
   aiProvider: 'auto',
   apiKeys: {},
+  reviewAutomation: {
+    autoApplyBlue: true,
+    showAutoAdded: true,
+    groupByRiskBand: true,
+  },
 };
 
 export const EMPTY_BOOK = {
@@ -104,6 +109,7 @@ export const EMPTY_UI = {
   // (NEW) the Today page mounts on the LEFT side (vs panels which stack
   // on the right). Tracks visibility independently.
   todayOpen: false,
+  chapterMetaOpenId: null,
 };
 
 // (NEW) Suggestion engine preferences. Living on `profile` because it's
@@ -148,6 +154,11 @@ export function emptyState() {
     statCatalog: [],          // [{key, description, max}] custom stats
     relationships: [],
     timelineEvents: [],
+    entityEvents: [],          // universal linked event graph
+    entityLinks: [],           // cross-entity links inferred or manual
+    entityMentions: [],        // mentions with chapter/paragraph evidence
+    entityAliases: [],         // alias records for merge/resolve support
+    entityAudit: [],           // append-only mutation/audit log
     voice: [],                // voice profiles
     tangle: { nodes: [], edges: [], layout: {} },
     ui: { ...EMPTY_UI },
@@ -175,6 +186,7 @@ export function emptyState() {
     //   { id, name, label, category, paragraphs[], importedAt, sizeBytes,
     //     sourceKind: 'upload'|'paste', linkedTo: { sectionIds[], characterIds[] } }
     references: [],
+    trash: [],                // soft-deleted entities for restore
     snapshots: [],
     feedback: [],
     _loading: true,

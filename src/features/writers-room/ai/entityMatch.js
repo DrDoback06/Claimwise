@@ -1,11 +1,17 @@
-// Loomwright — fuzzy entity matching. Ported from the legacy
-// entityMatchingService (Levenshtein) so AI-generated names get reconciled
-// against canon before they spawn duplicates.
+// Loomwright — fuzzy + contextual entity reconciliation.
+
+function normalizeEntityName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function calculateSimilarity(a, b) {
   if (!a || !b) return 0;
-  const s = String(a).toLowerCase().trim();
-  const t = String(b).toLowerCase().trim();
+  const s = normalizeEntityName(a);
+  const t = normalizeEntityName(b);
   if (s === t) return 1;
   const len = Math.max(s.length, t.length);
   if (len === 0) return 1;
@@ -28,15 +34,12 @@ function levenshtein(a, b) {
   return dp[m][n];
 }
 
-// Find the best matching entity in `pool` for a given name. Returns
-// `{ entity, similarity }` or null if nothing crosses the threshold.
 export function findMatch(name, pool, threshold = 0.78) {
   if (!name || !Array.isArray(pool)) return null;
   let best = null;
   for (const e of pool) {
     const candidate = e.name || e.title || '';
     if (!candidate) continue;
-    // Also try aliases.
     const surfaces = [candidate, ...(e.aliases || [])];
     let score = 0;
     for (const s of surfaces) {
@@ -50,33 +53,61 @@ export function findMatch(name, pool, threshold = 0.78) {
   return best;
 }
 
-// Walk a list of findings (from extraction etc.) and reconcile against the
-// store. Mutates each finding to mark `status: 'known'` + `resolvesTo` when
-// a match is found above threshold.
-export function reconcileFindings(findings, state) {
-  if (!Array.isArray(findings)) return [];
+export function resolveEntityCandidate(candidate, state) {
+  if (!candidate?.name || !candidate?.kind) return { ...candidate, status: candidate?.status || 'new' };
   const pools = {
     character: state.cast || [],
-    place:     state.places || [],
-    item:      state.items || [],
-    quest:     state.quests || [],
-    thread:    state.quests || [],
-    skill:     state.skills || [],
+    place: state.places || [],
+    item: state.items || [],
+    quest: state.quests || [],
+    thread: state.quests || [],
+    skill: state.skills || [],
   };
+  const pool = pools[candidate.kind] || [];
+  const direct = findMatch(candidate.name, pool, 0.79);
+  if (direct) {
+    return {
+      ...candidate,
+      status: 'known',
+      resolvesTo: direct.entity.id,
+      matchScore: direct.similarity,
+    };
+  }
+  return { ...candidate, status: candidate.status || 'new' };
+}
+
+export function resolveEntitySet(candidates, state) {
+  if (!Array.isArray(candidates)) return [];
+  return candidates.map(c => resolveEntityCandidate(c, state));
+}
+
+export function makeMergeSuggestions(candidate, state) {
+  if (!candidate?.name || !candidate?.kind) return [];
+  const pools = {
+    character: state.cast || [],
+    place: state.places || [],
+    item: state.items || [],
+    quest: state.quests || [],
+    thread: state.quests || [],
+    skill: state.skills || [],
+  };
+  const pool = pools[candidate.kind] || [];
+  return pool
+    .map(entity => ({ entityId: entity.id, name: entity.name || entity.title, score: calculateSimilarity(candidate.name, entity.name || entity.title) }))
+    .filter(x => x.score >= 0.6)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
+export function reconcileFindings(findings, state) {
+  if (!Array.isArray(findings)) return [];
   return findings.map(f => {
     if (!f || !f.name) return f;
-    if (f.status === 'known' && f.resolvesTo) return f; // already matched
-    const pool = pools[f.kind];
-    if (!pool) return f;
-    const match = findMatch(f.name, pool);
-    if (match) {
-      return {
-        ...f,
-        status: 'known',
-        resolvesTo: match.entity.id,
-        matchScore: match.similarity,
-      };
-    }
-    return { ...f, status: f.status || 'new' };
+    if (f.status === 'known' && f.resolvesTo) return f;
+    const resolved = resolveEntityCandidate(f, state);
+    const suggestions = makeMergeSuggestions(f, state);
+    return { ...resolved, mergeSuggestions: suggestions };
   });
 }
+
+export { normalizeEntityName };

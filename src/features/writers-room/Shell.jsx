@@ -12,7 +12,7 @@ import Editor from './prose/Editor';
 import MarginNoticings from './prose/MarginNoticings';
 import Tethers from './prose/Tethers';
 import CommandPalette from './CommandPalette';
-import InlineWeaver from './InlineWeaver';
+import EntityWeaveWizard from './entities/EntityWeaveWizard';
 import SummoningRing from './radial/SummoningRing';
 import WalkThroughWizard from './wizard/WalkThroughWizard';
 import Onboarding from './onboarding';
@@ -40,6 +40,7 @@ import SeriesBible from './panels/series-bible';
 import SkillsPanel from './panels/skills';
 import ContinuityPanel from './panels/continuity';
 import ReferencesPanel from './panels/references';
+import TrashPanel from './panels/trash';
 import SuggestionDrawer from './suggestions/SuggestionDrawer';
 import ExtractionWizard from './extraction/ExtractionWizard';
 import TodayPanel from './today/TodayPanel';
@@ -50,7 +51,7 @@ const PANEL_COMPONENTS = {
   voice: VoicePanel, items: ItemsPanel, language: LanguagePanel,
   tangle: TanglePanel, groupchat: GroupChatPanel, interview: InterviewPanel,
   skills: SkillsPanel, continuity: ContinuityPanel,
-  references: ReferencesPanel,
+  references: ReferencesPanel, trash: TrashPanel,
 };
 
 export default function Shell() {
@@ -60,6 +61,7 @@ export default function Shell() {
 
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [weaverOpen, setWeaverOpen] = React.useState(false);
+  const [weaverSeed, setWeaverSeed] = React.useState(null);
   const [aidOpen, setAidOpen] = React.useState(false);
   const [proofOpen, setProofOpen] = React.useState(false);
   const [ring, setRing] = React.useState(null);
@@ -235,6 +237,15 @@ export default function Shell() {
     return () => window.removeEventListener('lw:open-extraction', onOpen);
   }, [store.ui?.activeChapterId, store.book?.currentChapterId]);
 
+  React.useEffect(() => {
+    const onWeaverOpen = (e) => {
+      setWeaverSeed(e?.detail || null);
+      setWeaverOpen(true);
+    };
+    window.addEventListener('lw:open-weaver', onWeaverOpen);
+    return () => window.removeEventListener('lw:open-weaver', onWeaverOpen);
+  }, []);
+
   // Global keyboard.
   React.useEffect(() => {
     const onKey = (e) => {
@@ -360,7 +371,7 @@ export default function Shell() {
       )}
 
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onAction={onAction} />}
-      {weaverOpen && <InlineWeaver onClose={() => setWeaverOpen(false)} onWalkThrough={onWalkThrough} />}
+      {weaverOpen && <EntityWeaveWizard seed={weaverSeed} onClose={() => { setWeaverOpen(false); setWeaverSeed(null); }} />}
       {aidOpen && <WritingAid onClose={() => setAidOpen(false)} />}
       {proofOpen && <Proofreader onClose={() => setProofOpen(false)} />}
       {!focusMode && <WhatsNew onOpenAid={() => setAidOpen(true)} onOpenProof={() => setProofOpen(true)} />}

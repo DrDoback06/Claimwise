@@ -16,8 +16,6 @@ export default function QueuePanel({ domain, accent, title = 'Review queue' }) {
   const [view, setView] = React.useState('pending'); // 'pending' | 'history'
   const [open, setOpen] = React.useState(true);
 
-  if (pending.length === 0 && history.length === 0) return null;
-
   const list = view === 'pending' ? pending : history;
 
   return (
