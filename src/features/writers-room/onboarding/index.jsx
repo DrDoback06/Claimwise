@@ -12,6 +12,7 @@ import { scheduleAutonomousRun } from '../ai/pipeline';
 import { sectionById } from './schemas';
 import { evaluateSection } from './completeness';
 import SectionIO, { TrafficLight } from './SectionIO';
+import ApiKeysStep from './ApiKeysStep';
 
 const GENRES = [
   'Literary', 'Fantasy', 'Sci-fi', 'Thriller', 'Romance', 'Mystery',
@@ -47,22 +48,23 @@ const FAVORITES = [
 ];
 
 const STEPS = [
-  'Welcome', 'Story', 'Flavour', 'World rules', 'Voice & style',
+  'Welcome', 'AI keys', 'Story', 'Flavour', 'World rules', 'Voice & style',
   'Content boundaries', 'Pet peeves & loves', 'Style references',
   'Existing manuscript', 'Plot roadmap', 'AI & cadence', 'Begin',
 ];
 const TOTAL = STEPS.length;
 
 // Step index → schema id for per-section JSON I/O + traffic lights.
+// Indices shifted +1 after AI keys was inserted at step 1.
 const SECTION_FOR_STEP = {
-  1: 'story',
-  2: 'flavour',
-  3: 'worldRules',
-  4: 'voiceStyle',
-  5: 'contentBoundaries',
-  6: 'petPeeves',
-  9: 'plotRoadmap',
-  10: 'aiCadence',
+  2: 'story',
+  3: 'flavour',
+  4: 'worldRules',
+  5: 'voiceStyle',
+  6: 'contentBoundaries',
+  7: 'petPeeves',
+  10: 'plotRoadmap',
+  11: 'aiCadence',
 };
 
 export default function Onboarding({ onDone }) {
@@ -86,6 +88,7 @@ export default function Onboarding({ onDone }) {
     targetChapters: 25, outlineText: '',
     targetWords: 90000,
     aiProvider: 'auto', intrusion: 'medium',
+    extractionBudget: 'balanced',
   });
   const [busy, setBusy] = React.useState(false);
 
@@ -225,6 +228,7 @@ export default function Onboarding({ onDone }) {
       setPath('profile.premise', data.premise);
       setPath('profile.intrusion', data.intrusion);
       setPath('profile.aiProvider', data.aiProvider);
+      setPath('profile.extractionBudget', data.extractionBudget || 'balanced');
       // World rules: a free-form text plus a bulleted list (split on newlines).
       const ruleList = (data.worldRulesText || '').split('\n').map(s => s.trim()).filter(Boolean);
       setPath('profile.worldRules', ruleList);
@@ -340,10 +344,17 @@ export default function Onboarding({ onDone }) {
           <Section title="Welcome">
             <p style={pStyle(t)}>Loomwright is your writers room. As you write, the manuscript becomes a living wiki of people, places, items, quests, and voices — surfaced quietly in the margins.</p>
             <p style={pStyle(t)}>The next 10 minutes are a one-time setup. The deeper your answers, the smarter the room is from day one. Anything you skip you can fill in later from Settings.</p>
+            <p style={pStyle(t)}>The very first step wires up your AI keys — most are free, and nothing else here works without at least one.</p>
           </Section>
         )}
 
         {step === 1 && (
+          <Section title="AI keys">
+            <ApiKeysStep data={data} set={set} />
+          </Section>
+        )}
+
+        {step === 2 && (
           <Section title="What is your story?">
             <Field label="Working title">
               <input value={data.workingTitle} onChange={e => set({ workingTitle: e.target.value })} style={inp(t)} placeholder="Untitled" autoFocus />
@@ -366,7 +377,7 @@ export default function Onboarding({ onDone }) {
           </Section>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <Section title="What flavour?">
             <Field label="Genres (pick any that apply)">
               <Chips items={GENRES} selected={data.genres} onChange={v => set({ genres: v })} multi t={t} />
@@ -386,7 +397,7 @@ export default function Onboarding({ onDone }) {
           </Section>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <Section title="World rules">
             <p style={pStyle(t)}>The hard limits of your world — the laws of magic, technology, society, anything that would feel like cheating to break. The Loom uses these every time it suggests prose.</p>
             <Field label="Describe the world (one or two paragraphs)">
@@ -398,7 +409,7 @@ export default function Onboarding({ onDone }) {
           </Section>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <Section title="Voice & style">
             <Field label="Average chapter length">
               <Chips items={CHAPTER_LENGTHS} selected={[data.chapterLength]} onChange={v => set({ chapterLength: v[0] || 'standard (2.5-5k)' })} multi={false} t={t} />
@@ -412,7 +423,7 @@ export default function Onboarding({ onDone }) {
           </Section>
         )}
 
-        {step === 5 && (
+        {step === 6 && (
           <Section title="Content boundaries">
             <p style={pStyle(t)}>How far the AI is allowed to go when proposing prose.</p>
             <Field label="Profanity">
@@ -427,7 +438,7 @@ export default function Onboarding({ onDone }) {
           </Section>
         )}
 
-        {step === 6 && (
+        {step === 7 && (
           <Section title="Pet peeves & favourites">
             <p style={pStyle(t)}>Tell the Loom what to avoid and what to lean into.</p>
             <Field label="Avoid">
@@ -445,7 +456,7 @@ export default function Onboarding({ onDone }) {
           </Section>
         )}
 
-        {step === 7 && (
+        {step === 8 && (
           <Section title="Style references (optional)">
             <p style={pStyle(t)}>Upload passages from writers whose voice you want to study. Add as many as you like — drop more files at any time. The Loom compares drafts against them.</p>
             <FileDrop t={t} accept=".docx,.pdf,.txt,.md,.markdown,.zip" onFiles={onStyleFiles} busy={busy} />
@@ -460,7 +471,7 @@ export default function Onboarding({ onDone }) {
           </Section>
         )}
 
-        {step === 8 && (
+        {step === 9 && (
           <Section title="Bring in an existing manuscript? (optional)">
             <p style={pStyle(t)}>DOCX, PDF, TXT, Markdown, or a ZIP. Drop as many files as you like — each becomes its own chapter, in upload order. The Loom scans them in the background and surfaces characters, places, and items in the panel review queues.</p>
             <FileDrop t={t} accept=".docx,.pdf,.txt,.md,.markdown,.zip" onFiles={onFiles} busy={busy} />
@@ -476,7 +487,7 @@ export default function Onboarding({ onDone }) {
           </Section>
         )}
 
-        {step === 9 && (
+        {step === 10 && (
           <Section title="Plot roadmap (optional)">
             <Field label="Target chapter count">
               <input type="number" min={1} max={120} value={data.targetChapters}
@@ -490,13 +501,13 @@ export default function Onboarding({ onDone }) {
           </Section>
         )}
 
-        {step === 10 && (
+        {step === 11 && (
           <Section title="AI & cadence">
-            <Field label="Preferred AI provider">
-              <Chips items={['auto', 'anthropic', 'openai', 'gemini', 'groq', 'huggingface', 'offline']}
-                selected={[data.aiProvider]} onChange={v => set({ aiProvider: v[0] || 'auto' })} multi={false} t={t} />
-              <p style={{ ...pStyle(t), fontSize: 12, marginTop: 6 }}>Auto tries the free providers first. Add API keys later in Settings.</p>
-            </Field>
+            <p style={{ ...pStyle(t), fontSize: 12 }}>
+              Provider + keys live in step 1 (AI keys). This step controls how
+              eagerly the Loom speaks and how aggressively it scans your
+              imported chapters.
+            </p>
             <Field label="How vocal should the Loom be?">
               <Chips items={['quiet', 'medium', 'helpful', 'eager']}
                 selected={[data.intrusion]} onChange={v => set({ intrusion: v[0] || 'medium' })} multi={false} t={t} />
@@ -507,13 +518,22 @@ export default function Onboarding({ onDone }) {
                 {data.intrusion === 'eager' && 'Speaks freely. Best for brainstorming.'}
               </p>
             </Field>
+            <Field label="Background extraction budget">
+              <Chips items={['manual', 'balanced', 'eager']}
+                selected={[data.extractionBudget || 'balanced']} onChange={v => set({ extractionBudget: v[0] || 'balanced' })} multi={false} t={t} />
+              <p style={{ ...pStyle(t), fontSize: 12, marginTop: 6 }}>
+                {(!data.extractionBudget || data.extractionBudget === 'balanced') && 'Auto-scan every imported chapter once, then on each save. Recommended.'}
+                {data.extractionBudget === 'manual' && 'Never auto-scan. Use ⌘K → "Re-scan all chapters" when you want it. Cheapest.'}
+                {data.extractionBudget === 'eager' && 'Re-scan more often, including deeper passes. Burns more API credits.'}
+              </p>
+            </Field>
             <Field label="Total target words">
               <input type="number" value={data.targetWords} onChange={e => set({ targetWords: Math.max(1000, Number(e.target.value) || 0) })} style={inp(t)} />
             </Field>
           </Section>
         )}
 
-        {step === 11 && (
+        {step === 12 && (
           <Section title="Ready">
             <p style={pStyle(t)}>Hit Begin and the room opens with everything wired in.</p>
             <p style={pStyle(t)}>Tip: right-click in prose for the contextual radial. Type @ to mention any character / place / item.</p>

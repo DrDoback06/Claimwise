@@ -7,20 +7,11 @@ import { exportBackup, importBackup, clearAll, downloadBackup } from './store/pe
 import { isDevMode } from './devtools/dev-mode';
 import DeveloperPanel from './devtools/DeveloperPanel';
 import aiService from '../../services/aiService';
+import { KEY_PROVIDERS } from './api-keys/providers';
 
 const PROVIDERS = ['auto', 'anthropic', 'openai', 'gemini', 'groq', 'huggingface', 'offline'];
 const INTRUSION = ['quiet', 'medium', 'helpful', 'eager'];
 const ATLAS_AUTO = ['off', 'conservative', 'helpful', 'eager'];
-
-// API providers + canonical key URLs (same set the legacy Settings panel uses).
-const KEY_PROVIDERS = [
-  { id: 'groq',        label: 'Groq',         badge: 'FREE',     note: '14,400 req/day',     url: 'https://console.groq.com/keys' },
-  { id: 'huggingface', label: 'Hugging Face', badge: 'FREE',     note: 'No key sometimes',   url: 'https://huggingface.co/settings/tokens' },
-  { id: 'gemini',      label: 'Gemini',       badge: 'PAID',     note: 'Google AI Studio',   url: 'https://aistudio.google.com/apikey' },
-  { id: 'openai',      label: 'OpenAI',       badge: 'PAID',     note: 'GPT + DALL-E',       url: 'https://platform.openai.com/api-keys' },
-  { id: 'anthropic',   label: 'Anthropic',    badge: 'PAID',     note: 'Claude',             url: 'https://console.anthropic.com/settings/keys' },
-  { id: 'elevenlabs',  label: 'ElevenLabs',   badge: 'OPTIONAL', note: 'Premium TTS voices', url: 'https://elevenlabs.io/app/settings/api-keys' },
-];
 
 export default function Settings({ onClose }) {
   const t = useTheme();
