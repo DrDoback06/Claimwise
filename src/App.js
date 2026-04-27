@@ -112,6 +112,8 @@ import StatCorrelationAnalysis from './components/StatCorrelationAnalysis';
 import StatFormulaView from './components/StatFormulaView';
 import StatSignificanceMoments from './components/StatSignificanceMoments';
 import StatGamification from './components/StatGamification';
+import StoryHealthPanel from './components/StoryHealthPanel';
+import storyContiguityAgent from './services/storyContiguityAgent';
 import contextEngine from './services/contextEngine';
 import chapterOverviewService from './services/chapterOverviewService';
 import chapterNavigationService from './services/chapterNavigationService';
@@ -698,6 +700,23 @@ const OmniscienceV22 = () => {
   // Stats improvements state
   const [statFormulas, setStatFormulas] = useState({}); // { statKey: "STR + VIT * 2" }
   const [statUsage, setStatUsage] = useState({});
+
+  // Stat enhancement state
+  const [showDiceRoller, setShowDiceRoller] = useState(false);
+  const [diceRollerActor, setDiceRollerActor] = useState(null);
+  const [diceResult, setDiceResult] = useState(null);
+  const [diceRollStat, setDiceRollStat] = useState('');
+  const [showStatCompare, setShowStatCompare] = useState(false);
+  const [statCompareKey, setStatCompareKey] = useState('');
+
+  // Personnel enhancement state
+  const [showCharacterCompare, setShowCharacterCompare] = useState(false);
+  const [compareActorId, setCompareActorId] = useState(null);
+  const [characterNotes, setCharacterNotes] = useState({});
+  const [characterFactions, setCharacterFactions] = useState({});
+  const [allFactions, setAllFactions] = useState([]);
+  const [showMotivationEditor, setShowMotivationEditor] = useState(false);
+  const [actorMotivations, setActorMotivations] = useState({});
 
   // Initialize app with database
   useEffect(() => {
@@ -2836,6 +2855,8 @@ const OmniscienceV22 = () => {
                           { id: 'overview', label: 'Overview', icon: FileText },
                           { id: 'progression', label: 'Progression', icon: TrendingUp },
                           { id: 'timeline', label: 'Timeline', icon: Clock },
+                          { id: 'plot-timeline', label: 'Plot Timeline', icon: GitBranch },
+                          { id: 'master-timeline', label: 'Master Timeline', icon: History },
                           { id: 'relationships', label: 'Relationships', icon: Network },
                           { id: 'dialogue', label: 'Dialogue', icon: MessageSquare },
                           { id: 'arc', label: 'Arc', icon: BarChart2 },
@@ -3476,6 +3497,22 @@ const OmniscienceV22 = () => {
                             books={worldState?.books || {}}
                             items={worldState?.itemBank || []}
                             skills={worldState?.skillBank || []}
+                          />
+                        )}
+
+                        {actorDetailTab === 'plot-timeline' && (
+                          <PlotTimeline
+                            actors={worldState?.actors || []}
+                            books={worldState?.books || {}}
+                            filterActorId={rawActor?.id}
+                          />
+                        )}
+
+                        {actorDetailTab === 'master-timeline' && (
+                          <MasterTimeline
+                            actors={worldState?.actors || []}
+                            books={worldState?.books || {}}
+                            filterActorName={rawActor?.name}
                           />
                         )}
 
@@ -6195,6 +6232,12 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
               <span className="text-xs text-slate-400 flex items-center">
                 {worldState.statRegistry.length} stats ({coreStats.length} core, {additionalStatsList.length} additional)
               </span>
+              <button onClick={() => setShowStatCompare(v => !v)} className="flex items-center bg-blue-900/30 text-blue-400 px-3 py-2 rounded border border-blue-800 hover:bg-blue-900/50 transition-colors text-xs">
+                <BarChart2 className="w-4 h-4 mr-1"/> COMPARE
+              </button>
+              <button onClick={() => { setShowDiceRoller(v => !v); setDiceResult(null); }} className="flex items-center bg-yellow-900/30 text-yellow-400 px-3 py-2 rounded border border-yellow-800 hover:bg-yellow-900/50 transition-colors text-xs">
+                <Zap className="w-4 h-4 mr-1"/> DICE
+              </button>
               <Tooltip content="Create a new stat attribute that can be used by characters, items, and skills" position="left">
                 <button onClick={() => {
                   setEditingStat(null);
@@ -6205,7 +6248,76 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
               </Tooltip>
             </div>
           </div>
-          
+
+          {/* Dice Roller Panel */}
+          {showDiceRoller && (
+            <div className="mb-4 p-4 bg-yellow-950/30 border border-yellow-800 rounded">
+              <div className="text-sm font-bold text-yellow-400 mb-3">DICE ROLLER (d20)</div>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Character</label>
+                  <select value={diceRollerActor || ''} onChange={e => setDiceRollerActor(e.target.value)} className="bg-slate-800 text-white text-xs px-2 py-1 rounded border border-slate-600">
+                    <option value="">Select character...</option>
+                    {worldState.actors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Stat</label>
+                  <select value={diceRollStat} onChange={e => setDiceRollStat(e.target.value)} className="bg-slate-800 text-white text-xs px-2 py-1 rounded border border-slate-600">
+                    <option value="">None</option>
+                    {worldState.statRegistry.map(s => <option key={s.key} value={s.key}>{s.key} — {s.name}</option>)}
+                  </select>
+                </div>
+                <button onClick={() => {
+                  const roll = Math.floor(Math.random() * 20) + 1;
+                  const actor = worldState.actors.find(a => a.id === diceRollerActor);
+                  const modifier = diceRollStat && actor ? Math.floor(((actor.baseStats?.[diceRollStat] || actor.additionalStats?.[diceRollStat] || 10) - 10) / 2) : 0;
+                  setDiceResult({ roll, modifier, total: roll + modifier });
+                }} className="bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-4 py-1 rounded text-xs">ROLL d20</button>
+                {diceResult && (
+                  <div className="text-sm font-bold text-yellow-300">
+                    Roll: {diceResult.roll} {diceResult.modifier !== 0 && <span className="text-slate-400">({diceResult.modifier >= 0 ? '+' : ''}{diceResult.modifier})</span>} = <span className="text-yellow-400">{diceResult.total}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Cross-character Stat Comparison */}
+          {showStatCompare && (
+            <div className="mb-4 p-4 bg-blue-950/30 border border-blue-800 rounded">
+              <div className="text-sm font-bold text-blue-400 mb-3">CROSS-CHARACTER STAT COMPARISON</div>
+              <div className="flex gap-3 items-center mb-3">
+                <label className="text-xs text-slate-400">Stat:</label>
+                <select value={statCompareKey} onChange={e => setStatCompareKey(e.target.value)} className="bg-slate-800 text-white text-xs px-2 py-1 rounded border border-slate-600">
+                  <option value="">Select stat...</option>
+                  {worldState.statRegistry.map(s => <option key={s.key} value={s.key}>{s.key} — {s.name}</option>)}
+                </select>
+              </div>
+              {statCompareKey && (
+                <div className="space-y-2">
+                  {[...worldState.actors].sort((a, b) => {
+                    const av = a.baseStats?.[statCompareKey] || a.additionalStats?.[statCompareKey] || 0;
+                    const bv = b.baseStats?.[statCompareKey] || b.additionalStats?.[statCompareKey] || 0;
+                    return bv - av;
+                  }).map(actor => {
+                    const val = actor.baseStats?.[statCompareKey] || actor.additionalStats?.[statCompareKey] || 0;
+                    const maxVal = Math.max(...worldState.actors.map(a => a.baseStats?.[statCompareKey] || a.additionalStats?.[statCompareKey] || 0), 1);
+                    return (
+                      <div key={actor.id} className="flex items-center gap-2">
+                        <div className="text-xs text-slate-300 w-32 truncate">{actor.name}</div>
+                        <div className="flex-1 bg-slate-800 rounded h-4 overflow-hidden">
+                          <div className="h-full bg-blue-500 rounded transition-all" style={{ width: `${(val / maxVal) * 100}%` }} />
+                        </div>
+                        <div className="text-xs text-blue-300 w-8 text-right">{val}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Core Stats Section */}
           {coreStats.length > 0 && (
             <div className="mb-6">
@@ -6566,6 +6678,7 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
               <Search className="w-4 h-4" />
             </button>
           </Tooltip>
+          <StoryHealthPanel className="ml-2" />
             </div>
       </header>
       <div className="flex flex-1 overflow-hidden">
@@ -6708,11 +6821,15 @@ const EquipmentSlot = ({ slotType, slotIndex = null, itemId, onEquip, onUnequip,
                   {writingMode === 'pro' ? (
                     <WritingCanvasPro
                       onNavigate={(tab) => setActiveTab(tab)}
-                      onSave={async () => {
+                      onSave={async (chapter) => {
                         const books = await db.getAll('books');
                         const booksObj = books.reduce((acc, b) => ({ ...acc, [b.id]: b }), {});
                         setWorldState(prev => ({ ...prev, books: booksObj }));
                         setSessionStats(prev => ({ ...prev, chaptersEdited: prev.chaptersEdited + 1 }));
+                        if (chapter) {
+                          const currentBook = booksObj[bookTab];
+                          storyContiguityAgent.runAfterChapterSave({ chapter, book: currentBook, actors: worldState.actors, itemBank: worldState.itemBank, skillBank: worldState.skillBank });
+                        }
                       }}
                       onEntityUpdate={async () => {
                         // Refresh worldState when entities are created/updated
