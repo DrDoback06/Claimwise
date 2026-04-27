@@ -25,6 +25,7 @@ import VersionHistory from './utilities/VersionHistory';
 import aiService from '../../services/aiService';
 import { shouldAutoSnapshot, makeSnapshot, pushSnapshot } from './utilities/snapshots';
 import { scheduleAutonomousRun, clearAllRuns } from './ai/pipeline';
+import { ensureDefaultAuthor } from './authors/AuthorsPanel';
 
 import CastPanel from './panels/cast';
 import AtlasPanel from './panels/atlas';
@@ -38,14 +39,18 @@ import InterviewPanel from './panels/interview';
 import SeriesBible from './panels/series-bible';
 import SkillsPanel from './panels/skills';
 import ContinuityPanel from './panels/continuity';
+import ReferencesPanel from './panels/references';
 import SuggestionDrawer from './suggestions/SuggestionDrawer';
 import ExtractionWizard from './extraction/ExtractionWizard';
+import TodayPanel from './today/TodayPanel';
+import MobileTabBar from './MobileTabBar';
 
 const PANEL_COMPONENTS = {
   cast: CastPanel, atlas: AtlasPanel, quests: QuestsPanel, threads: QuestsPanel,
   voice: VoicePanel, items: ItemsPanel, language: LanguagePanel,
   tangle: TanglePanel, groupchat: GroupChatPanel, interview: InterviewPanel,
   skills: SkillsPanel, continuity: ContinuityPanel,
+  references: ReferencesPanel,
 };
 
 export default function Shell() {
@@ -79,6 +84,15 @@ export default function Shell() {
     const order = store.book?.chapterOrder || [];
     if (order.length === 0) createChapter(store, { title: 'Chapter 1', text: '' });
   }, [store._loading, store.profile?.onboarded]);
+
+  // Seed a default author so margin notes always have someone to attribute to.
+  React.useEffect(() => {
+    if (store._loading) return;
+    if (!store.profile?.onboarded) return;
+    try { ensureDefaultAuthor(store); } catch (err) {
+      console.warn('[shell] ensureDefaultAuthor failed', err?.message);
+    }
+  }, [store._loading, store.profile?.onboarded, store.authors?.length]);
 
   // Push any persisted API keys back into the legacy aiService so the
   // writing aid / proofreader / interview can reach the chosen provider
@@ -167,6 +181,17 @@ export default function Shell() {
     if (actionId === 'open.extraction') {
       const chId = store.ui?.activeChapterId || store.book?.currentChapterId;
       if (chId) setExtractionFor(chId);
+    }
+    if (actionId === 'rescan.all') {
+      const order = store.book?.chapterOrder || [];
+      let scheduled = 0;
+      for (const id of order) {
+        const ch = store.chapters?.[id];
+        if ((ch?.text || '').trim().length > 80) {
+          try { scheduleAutonomousRun(store, id); scheduled++; } catch {}
+        }
+      }
+      if (scheduled === 0) window.alert('No chapters with enough text to scan.');
     }
     if (actionId === 'open.skills') ensurePanelOpen('skills');
     if (actionId === 'open.continuity') ensurePanelOpen('continuity');
@@ -275,6 +300,14 @@ export default function Shell() {
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenWeaver={() => setWeaverOpen(true)}
           onOpenAid={() => setAidOpen(true)}
+          todayOpen={!!store.ui?.todayOpen}
+          onToggleToday={() => store.setPath('ui.todayOpen', !store.ui?.todayOpen)}
+        />
+      )}
+      {!focusMode && store.ui?.todayOpen && (
+        <TodayPanel
+          onOpenPanel={ensurePanelOpen}
+          onClose={() => store.setPath('ui.todayOpen', false)}
         />
       )}
       <div className="lw-center">
@@ -341,6 +374,13 @@ export default function Shell() {
         <ExtractionWizard
           chapterId={extractionFor}
           onClose={() => setExtractionFor(null)}
+        />
+      )}
+      {!focusMode && (
+        <MobileTabBar
+          openPanels={openPanels}
+          onTogglePanel={togglePanel}
+          onCloseAll={() => store.setPath('ui.panels', [])}
         />
       )}
     </div>

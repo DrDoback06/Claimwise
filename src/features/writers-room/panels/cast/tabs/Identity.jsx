@@ -4,6 +4,9 @@ import React from 'react';
 import { useTheme } from '../../../theme';
 import { useStore } from '../../../store';
 import { characterMetrics } from '../appearances';
+import { VoicePicker } from '../../../utilities/ReadAloud';
+import EntityImageButton from '../../../images/EntityImageButton';
+import EntityTimeline from '../../../entities/EntityTimeline';
 
 export default function IdentityTab({ character: c, update }) {
   const t = useTheme();
@@ -21,6 +24,17 @@ export default function IdentityTab({ character: c, update }) {
   };
   return (
     <div style={{ padding: '14px 16px' }}>
+      <div style={lbl}>Avatar</div>
+      <div style={{ marginTop: 4 }}>
+        <EntityImageButton
+          entity={c}
+          size={72}
+          field="avatar"
+          label="Character avatar"
+          onSave={(url) => update({ avatar: url })}
+        />
+      </div>
+
       <div style={lbl}>Aliases</div>
       <input style={inp} value={(c.aliases || []).join(', ')}
         onChange={e => update({ aliases: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} />
@@ -38,6 +52,15 @@ export default function IdentityTab({ character: c, update }) {
       <input style={inp} value={(c.traits || []).join(', ')}
         onChange={e => update({ traits: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} />
 
+      <div style={lbl}>Read-aloud voice</div>
+      <div style={{ marginTop: 4 }}>
+        <VoicePicker
+          value={c.readAloudVoiceId}
+          onChange={(v) => update({ readAloudVoiceId: v })}
+          label="Voice"
+        />
+      </div>
+
       <div style={{ marginTop: 18, padding: '10px 12px', background: t.paper2, borderLeft: `2px solid ${c.color || t.accent}`, borderRadius: 1 }}>
         <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 6 }}>
           Across the manuscript
@@ -53,6 +76,8 @@ export default function IdentityTab({ character: c, update }) {
           </div>
         )}
       </div>
+
+      <EntityTimeline entityType="character" entityId={c.id} title="Character log" />
     </div>
   );
 }

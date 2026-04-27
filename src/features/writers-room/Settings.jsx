@@ -7,20 +7,14 @@ import { exportBackup, importBackup, clearAll, downloadBackup } from './store/pe
 import { isDevMode } from './devtools/dev-mode';
 import DeveloperPanel from './devtools/DeveloperPanel';
 import aiService from '../../services/aiService';
+import { KEY_PROVIDERS } from './api-keys/providers';
+import AuthorsPanel from './authors/AuthorsPanel';
+import { VoicePicker } from './utilities/ReadAloud';
+import ExportPanel from './export/ExportPanel';
 
 const PROVIDERS = ['auto', 'anthropic', 'openai', 'gemini', 'groq', 'huggingface', 'offline'];
 const INTRUSION = ['quiet', 'medium', 'helpful', 'eager'];
 const ATLAS_AUTO = ['off', 'conservative', 'helpful', 'eager'];
-
-// API providers + canonical key URLs (same set the legacy Settings panel uses).
-const KEY_PROVIDERS = [
-  { id: 'groq',        label: 'Groq',         badge: 'FREE',     note: '14,400 req/day',     url: 'https://console.groq.com/keys' },
-  { id: 'huggingface', label: 'Hugging Face', badge: 'FREE',     note: 'No key sometimes',   url: 'https://huggingface.co/settings/tokens' },
-  { id: 'gemini',      label: 'Gemini',       badge: 'PAID',     note: 'Google AI Studio',   url: 'https://aistudio.google.com/apikey' },
-  { id: 'openai',      label: 'OpenAI',       badge: 'PAID',     note: 'GPT + DALL-E',       url: 'https://platform.openai.com/api-keys' },
-  { id: 'anthropic',   label: 'Anthropic',    badge: 'PAID',     note: 'Claude',             url: 'https://console.anthropic.com/settings/keys' },
-  { id: 'elevenlabs',  label: 'ElevenLabs',   badge: 'OPTIONAL', note: 'Premium TTS voices', url: 'https://elevenlabs.io/app/settings/api-keys' },
-];
 
 export default function Settings({ onClose }) {
   const t = useTheme();
@@ -117,6 +111,36 @@ export default function Settings({ onClose }) {
           </p>
         </Section>
 
+        <Section t={t} title="AI review automation">
+          <Toggle
+            t={t}
+            label="Enable autonomous extraction pipeline"
+            value={profile.autonomousPipeline !== false}
+            onChange={v => set('profile.autonomousPipeline', v)}
+          />
+          <Toggle
+            t={t}
+            label="Auto-apply BLUE (low-risk) findings"
+            value={profile.reviewAutomation?.autoApplyBlue !== false}
+            onChange={v => set('profile.reviewAutomation.autoApplyBlue', v)}
+          />
+          <Toggle
+            t={t}
+            label="Show BLUE auto-added items in queue"
+            value={profile.reviewAutomation?.showAutoAdded !== false}
+            onChange={v => set('profile.reviewAutomation.showAutoAdded', v)}
+          />
+          <Toggle
+            t={t}
+            label="Group queue by risk bands"
+            value={profile.reviewAutomation?.groupByRiskBand !== false}
+            onChange={v => set('profile.reviewAutomation.groupByRiskBand', v)}
+          />
+          <p style={pStyle(t)}>
+            Blue = Auto-added · Green = Suggested · Amber = Needs review · Red = Canon risk.
+          </p>
+        </Section>
+
         <Section t={t} title="Auto-track movement on the Atlas">
           <Chips t={t} items={ATLAS_AUTO} selected={[tweaks.atlasAuto || 'conservative']} onChange={v => set('ui.tweaks.atlasAuto', v[0])} />
           <Toggle t={t} label="Show every character's journey at once" value={tweaks.atlasShowAll === true} onChange={v => set('ui.tweaks.atlasShowAll', v)} />
@@ -134,6 +158,45 @@ export default function Settings({ onClose }) {
           <ApiKeys t={t} store={store} />
         </Section>
 
+        <Section t={t} title="Authors & collaborators">
+          <AuthorsPanel />
+        </Section>
+
+        <Section t={t} title="Image style (saga-wide)">
+          <p style={{ fontFamily: t.display, fontSize: 13, color: t.ink2, lineHeight: 1.5, marginTop: 0 }}>
+            Stitched onto every "Generate avatar" prompt so all entity art
+            shares a look. Try: <i>"oil-paint portrait, dramatic side
+            lighting, dark sepia palette"</i>.
+          </p>
+          <textarea
+            rows={3}
+            value={profile.imageStyle || ''}
+            onChange={e => set('profile.imageStyle', e.target.value)}
+            placeholder="e.g. ink illustration · watercolour · cinematic photo · pixel art…"
+            style={{
+              width: '100%', padding: '6px 8px', resize: 'vertical',
+              fontFamily: t.display, fontSize: 13, color: t.ink, lineHeight: 1.5,
+              background: t.paper, border: `1px solid ${t.rule}`, borderRadius: 1, outline: 'none',
+            }} />
+          <p style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.12, marginTop: 6 }}>
+            Tries DALL-E 3 first if your OpenAI key is set; falls back to free Hugging Face SDXL.
+          </p>
+        </Section>
+
+        <Section t={t} title="Read-aloud voices">
+          <p style={{ fontFamily: t.display, fontSize: 13, color: t.ink2, lineHeight: 1.5, marginTop: 0 }}>
+            The narrator voice handles all prose that isn't dialogue. Each
+            character can also have its own voice (set in Cast → Identity);
+            the read-aloud button in the top bar detects who's speaking
+            line-by-line.
+          </p>
+          <VoicePicker
+            value={store.book?.narratorVoiceId}
+            onChange={(v) => store.setPath('book.narratorVoiceId', v)}
+            label="Narrator"
+          />
+        </Section>
+
         <Section t={t} title="Margin & ribbons">
           <Toggle t={t} label="Show margin noticings" value={tweaks.showMargin !== false} onChange={v => set('ui.tweaks.showMargin', v)} />
           <Toggle t={t} label="Show ritual bar" value={tweaks.showRitualBar !== false} onChange={v => set('ui.tweaks.showRitualBar', v)} />
@@ -141,6 +204,10 @@ export default function Settings({ onClose }) {
           <Toggle t={t} label="Highlight named entities inline" value={tweaks.highlightMargin !== false} onChange={v => set('ui.tweaks.highlightMargin', v)} />
           <Toggle t={t} label="Show per-paragraph voice ribbon" value={tweaks.showVoiceRibbon === true} onChange={v => set('ui.tweaks.showVoiceRibbon', v)} />
           <Toggle t={t} label="Underline proofread issues inline" value={tweaks.showProofIssues !== false} onChange={v => set('ui.tweaks.showProofIssues', v)} />
+        </Section>
+
+        <Section t={t} title="Manuscript export & marketing">
+          <ExportPanel />
         </Section>
 
         <Section t={t} title="Backup">

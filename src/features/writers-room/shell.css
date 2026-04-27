@@ -113,9 +113,65 @@
 }
 @media (max-width: 720px) {
   .lw-app .lw-panel-stack > aside {
-    width: 96vw !important;
-    max-width: 96vw !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
   }
+  /* Mobile: collapse to single column. Left rail + margin hide; bottom
+     tab bar takes nav. */
+  .lw-app {
+    grid-template-columns: 1fr !important;
+  }
+  .lw-app .lw-leftrail { display: none !important; }
+  .lw-app .lw-prose-wrap aside { display: none !important; }
+  .lw-app .lw-panel-stack {
+    top: 0 !important;
+  }
+  .lw-app .lw-panel-stack > aside {
+    height: calc(100vh - 56px) !important;
+  }
+  .lw-mobile-tabbar {
+    display: flex !important;
+  }
+  .lw-app .lw-topbar {
+    padding: 4px 8px !important;
+  }
+  /* Today panel slides in over the editor on mobile rather than sitting
+     to the side. */
+  .lw-app > aside:first-of-type {
+    position: fixed;
+    inset: 48px 0 56px 0;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    z-index: 1400;
+  }
+}
+
+/* Mobile bottom tab bar — hidden by default; CSS above flips it on. */
+.lw-mobile-tabbar {
+  display: none;
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 56px;
+  background: var(--lw-paper, #f8f4ea);
+  border-top: 1px solid var(--lw-rule, rgba(0,0,0,0.12));
+  z-index: 1600;
+  align-items: stretch;
+  justify-content: space-around;
+  padding: 4px 4px env(safe-area-inset-bottom, 4px);
+}
+.lw-mobile-tabbar button {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px;
+  background: transparent; border: none; padding: 4px 2px;
+  font-family: ui-monospace, monospace; font-size: 10px;
+  color: var(--lw-ink2, #555);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.lw-mobile-tabbar button.active {
+  background: rgba(0,0,0,0.06);
+  color: var(--lw-accent, #8b2b1f);
 }
 
 .lw-leftrail {

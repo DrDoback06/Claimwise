@@ -11,6 +11,9 @@ import { itemById, characterById, chapterList, derivedStats, itemTotalMods, acti
 import CraftWizard from '../../items/CraftWizard';
 import Catalog from '../../items/Catalog';
 import SpecialistChat from '../../specialist/SpecialistChat';
+import QueuePanel from '../../review-queue/QueuePanel';
+import EntityImageButton from '../../images/EntityImageButton';
+import EntityTimeline from '../../entities/EntityTimeline';
 
 const RARITIES = ['common', 'magic', 'rare', 'legendary', 'unique', 'mythic'];
 const RARITY_COLOR = {
@@ -71,6 +74,8 @@ export default function ItemsPanel({ onClose }) {
           textTransform: 'uppercase', fontWeight: 600,
         }}>✦ Forge</button>
       </div>
+
+      <QueuePanel domain="items" accent={PANEL_ACCENT.items} title="Items review queue" />
 
       {tab === 'bank' && (
         <BankView t={t} store={store} sel={sel} select={select} addItem={addItem} item={item} />
@@ -258,6 +263,22 @@ function ItemDetail({ item }) {
           }}>{owner.name}</button>
         </div>
       )}
+
+      <div style={{ marginTop: 14 }}>
+        <div style={{
+          fontFamily: t.mono, fontSize: 9, color: t.ink3,
+          letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 4,
+        }}>Image</div>
+        <EntityImageButton
+          entity={item}
+          size={64}
+          field="image"
+          label="Item art"
+          onSave={(url) => update({ image: url })}
+        />
+      </div>
+
+      <EntityTimeline entityType="item" entityId={item.id} title="Item log" />
 
       {item.draftedByLoom && (
         <div style={{

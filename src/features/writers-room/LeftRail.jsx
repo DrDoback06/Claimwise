@@ -3,7 +3,6 @@
 import React from 'react';
 import { useTheme, ThemeToggle, PANEL_ACCENT } from './theme';
 import Icon from './entities/Icon';
-import { useStore } from './store';
 
 const PANELS = [
   { id: 'atlas',      label: 'Atlas',      icon: 'map',     accent: PANEL_ACCENT.atlas },
@@ -17,9 +16,10 @@ const PANELS = [
   { id: 'continuity', label: 'Continuity', icon: 'flag',    accent: PANEL_ACCENT.atlas },
   { id: 'interview',  label: 'Interview',  icon: 'chat',    accent: PANEL_ACCENT.cast },
   { id: 'groupchat',  label: 'Round table', icon: 'users',  accent: PANEL_ACCENT.cast },
+  { id: 'references', label: 'References', icon: 'book',    accent: PANEL_ACCENT.loom },
 ];
 
-export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onOpenWeaver, onOpenAid }) {
+export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onOpenWeaver, onOpenAid, todayOpen, onToggleToday }) {
   const t = useTheme();
   return (
     <div className="lw-leftrail" style={{
@@ -30,6 +30,18 @@ export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onO
         display: 'grid', placeItems: 'center',
         fontFamily: t.display, fontSize: 18, color: t.accent, fontWeight: 600,
       }}>L</div>
+
+      <button
+        title="Today (writing prompts, morning brief — opens on the LEFT)"
+        onClick={onToggleToday}
+        className={'lw-rail-btn' + (todayOpen ? ' active' : '')}
+        style={{
+          background: todayOpen ? PANEL_ACCENT.loom : 'transparent',
+          color: todayOpen ? t.onAccent : PANEL_ACCENT.loom,
+          border: `1px solid ${PANEL_ACCENT.loom}`, borderRadius: 2, marginBottom: 4,
+        }}>
+        <span style={{ fontFamily: t.mono, fontSize: 11, fontWeight: 600 }}>☀</span>
+      </button>
 
       <button
         title="Writing aid (⌘\\)"

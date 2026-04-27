@@ -11,6 +11,7 @@ import { useStore, createQuest } from '../../store';
 import { useSelection } from '../../selection';
 import { questById } from '../../store/selectors';
 import SpecialistChat from '../../specialist/SpecialistChat';
+import QueuePanel from '../../review-queue/QueuePanel';
 import { detectQuestProgress } from '../../quests/service';
 
 const KINDS = ['main-quest', 'side-quest', 'rivalry', 'thread'];
@@ -84,6 +85,7 @@ export default function QuestsPanel({ onClose }) {
       panelId="quests"
       onClose={onClose}
       width={520}>
+      <QueuePanel domain="quests" accent={PANEL_ACCENT.threads} title="Quests review queue" />
       <div style={{
         padding: '8px 12px', display: 'flex', gap: 6, borderBottom: `1px solid ${t.rule}`,
       }}>

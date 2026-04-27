@@ -10,6 +10,18 @@ function polyPoints(poly) {
   return (poly || []).map(([x, y]) => `${x},${y}`).join(' ');
 }
 
+function bbox(poly) {
+  if (!poly || !poly.length) return { x: 0, y: 0, w: 0, h: 0 };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of poly) {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
 export default function RegionLayer({ drafting, cursor }) {
   const t = useTheme();
   const store = useStore();
@@ -17,25 +29,43 @@ export default function RegionLayer({ drafting, cursor }) {
 
   return (
     <g>
-      {regions.map(r => (
-        <g key={r.id}>
-          <polygon
-            points={polyPoints(r.poly)}
-            fill={r.color || t.accent2}
-            fillOpacity={0.18}
-            stroke={r.color || t.accent2}
-            strokeWidth={1.2}
-          />
-          {r.poly?.length > 0 && (() => {
-            const cx = r.poly.reduce((s, p) => s + p[0], 0) / r.poly.length;
-            const cy = r.poly.reduce((s, p) => s + p[1], 0) / r.poly.length;
-            return (
-              <text x={cx} y={cy} fontSize={11} fontFamily={t.display}
-                fill={t.ink2} textAnchor="middle">{r.name}</text>
-            );
-          })()}
-        </g>
-      ))}
+      <defs>
+        {regions.filter(r => r.bgImage).map(r => (
+          <clipPath id={`rg-clip-${r.id}`} key={r.id}>
+            <polygon points={polyPoints(r.poly)} />
+          </clipPath>
+        ))}
+      </defs>
+      {regions.map(r => {
+        const b = bbox(r.poly);
+        return (
+          <g key={r.id}>
+            {r.bgImage && (
+              <image
+                href={r.bgImage}
+                x={b.x} y={b.y} width={b.w} height={b.h}
+                clipPath={`url(#rg-clip-${r.id})`}
+                opacity={0.7}
+              />
+            )}
+            <polygon
+              points={polyPoints(r.poly)}
+              fill={r.bgImage ? 'transparent' : (r.color || t.accent2)}
+              fillOpacity={r.bgImage ? 0 : 0.18}
+              stroke={r.color || t.accent2}
+              strokeWidth={1.2}
+            />
+            {r.poly?.length > 0 && (() => {
+              const cx = r.poly.reduce((s, p) => s + p[0], 0) / r.poly.length;
+              const cy = r.poly.reduce((s, p) => s + p[1], 0) / r.poly.length;
+              return (
+                <text x={cx} y={cy} fontSize={11} fontFamily={t.display}
+                  fill={t.ink2} textAnchor="middle">{r.name}</text>
+              );
+            })()}
+          </g>
+        );
+      })}
       {drafting?.poly?.length > 0 && (
         <g>
           <polygon

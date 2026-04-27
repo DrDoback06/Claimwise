@@ -54,6 +54,11 @@ export const EMPTY_PROFILE = {
   preferredProvider: 'auto',
   aiProvider: 'auto',
   apiKeys: {},
+  reviewAutomation: {
+    autoApplyBlue: true,
+    showAutoAdded: true,
+    groupByRiskBand: true,
+  },
 };
 
 export const EMPTY_BOOK = {
@@ -99,6 +104,11 @@ export const EMPTY_UI = {
   dossierOpen: {},            // { [charId]: { stats: bool, skills: bool, … } }
   // (NEW) suggestion drawer
   suggestionsOpen: false,     // is the right rail visible
+  // (NEW) which author is currently making margin notes / inline comments
+  activeAuthorId: null,
+  // (NEW) the Today page mounts on the LEFT side (vs panels which stack
+  // on the right). Tracks visibility independently.
+  todayOpen: false,
 };
 
 // (NEW) Suggestion engine preferences. Living on `profile` because it's
@@ -126,10 +136,28 @@ export function emptyState() {
     threads: [],              // legacy alias; persistence migrates to quests.
     items: [],
     skills: [],
+    // (NEW) Skill bank — confirmed individual skills (drag-source for trees).
+    skillBank: [],
+    // (NEW) Skill trees — multi-tree array; characters reference by id.
+    //   { id, name, color, description, nodes: [...], edges: [{from, to}] }
+    skillTrees: [],
+    // (NEW) Authors — writer + collaborators. Margin notes / inline comments
+    // are tagged with `authorId` so a writers room with an editor + a beta
+    // reader can see who said what.
+    //   { id, name, color, role: 'author'|'editor'|'beta', addedAt }
+    authors: [],
+    // (NEW) Margin notes — author-tagged comments anchored to a paragraph.
+    //   { id, chapterId, paragraphId?, authorId, text, createdAt, resolved? }
+    marginNotes: [],
     stats: [],
     statCatalog: [],          // [{key, description, max}] custom stats
     relationships: [],
     timelineEvents: [],
+    entityEvents: [],          // universal linked event graph
+    entityLinks: [],           // cross-entity links inferred or manual
+    entityMentions: [],        // mentions with chapter/paragraph evidence
+    entityAliases: [],         // alias records for merge/resolve support
+    entityAudit: [],           // append-only mutation/audit log
     voice: [],                // voice profiles
     tangle: { nodes: [], edges: [], layout: {} },
     ui: { ...EMPTY_UI },
@@ -152,6 +180,11 @@ export function emptyState() {
     extractionRuns: {},       // { [chapterId]: { ranAt, findings, deepPassRan } }
     reviewQueue: [],            // (NEW) autonomous-pipeline findings awaiting review
     autonomousJobs: [],         // (NEW) ephemeral; running pipeline jobs
+    // (NEW) reference manager — uploaded docs the writer wants the AI to use
+    // as worldbuilding / style / lore source material. Each entry:
+    //   { id, name, label, category, paragraphs[], importedAt, sizeBytes,
+    //     sourceKind: 'upload'|'paste', linkedTo: { sectionIds[], characterIds[] } }
+    references: [],
     snapshots: [],
     feedback: [],
     _loading: true,

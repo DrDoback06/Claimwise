@@ -47,6 +47,33 @@ export const BUILDERS = {
     brief(store.cast || [], c => `- ${c.id} :: ${c.name} role=${c.role || 'support'} oneliner="${c.oneliner || ''}"`),
   ].join('\n'),
 
+  // Interview mode — same canon view as cast plus a focused-character
+  // brief so the AI knows whose voice to wear. ServiceLayer also passes
+  // `focusCharId` via composeSystem; this builder makes the focal
+  // character explicit at the top of the context block.
+  'cast-interview': (store) => {
+    const charId = store.ui?.selection?.character;
+    const c = (store.cast || []).find(x => x.id === charId);
+    const brief1 = c
+      ? [
+          `You are speaking AS:`,
+          `  name: ${c.name}`,
+          `  role: ${c.role || 'support'}`,
+          `  pronouns: ${c.pronouns || '—'}`,
+          `  oneliner: ${c.oneliner || '—'}`,
+          `  voice: ${c.dossier?.voice || '—'}`,
+          `  bio: ${(c.dossier?.bio || '').slice(0, 400)}`,
+          `  current stats: ${Object.entries(c.stats || {}).map(([k, v]) => `${k}=${v}`).join(' ') || '—'}`,
+        ].join('\n')
+      : `(no character is currently selected — keep replies generic until the writer picks one)`;
+    return [
+      brief1,
+      '',
+      'Other cast in scope (' + (store.cast?.length || 0) + '):',
+      brief(store.cast || [], x => `- ${x.id} :: ${x.name} (${x.role || 'support'})`),
+    ].join('\n');
+  },
+
   atlas: (store) => [
     'Places (' + (store.places?.length || 0) + '):',
     brief(store.places || [], p => `- ${p.id} :: ${p.name} kind=${p.kind || 'place'} realm=${p.realm || '-'}`),

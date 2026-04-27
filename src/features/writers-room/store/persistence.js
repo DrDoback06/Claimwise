@@ -10,6 +10,7 @@ import {
   EMPTY_BOOK, EMPTY_PROFILE, EMPTY_UI, DEFAULT_TWEAKS, SCHEMA_VERSION,
   EMPTY_SUGGESTION_PREFS, EMPTY_ATLAS_SETTINGS,
 } from './schema';
+import { projectScope, projectFilter, stampProject, getCurrentProjectId } from '../projects/projects';
 
 // Store names (mirroring database.js v22).
 export const S = {
@@ -42,27 +43,68 @@ const META = {
   regions: 'lw.regions',
   continuity: 'lw.continuity',
   extractionRuns: 'lw.extractionRuns',
+  references: 'lw.references',
+  skillBank: 'lw.skillBank',
+  skillTrees: 'lw.skillTrees',
+  authors: 'lw.authors',
+  marginNotes: 'lw.marginNotes',
 };
 
 // ─── Safe wrappers ────────────────────────────────────────────────────
+//
+// Multi-saga: every entity-store record is filtered by `_projectId` on
+// read and stamped with the current project id on write. META records
+// have their key prefixed by `<projectId>:` so the same IDB keystore can
+// host many sagas without colliding.
 async function dbGetAll(store) {
-  try { await db.init(); return (await db.getAll(store)) || []; }
-  catch (e) { console.warn('[lw-persist] getAll', store, e?.message); return []; }
+  try {
+    await db.init();
+    const all = (await db.getAll(store)) || [];
+    return all.filter(projectFilter);
+  } catch (e) { console.warn('[lw-persist] getAll', store, e?.message); return []; }
 }
 async function dbGet(store, id, fallback = null) {
-  try { await db.init(); const r = await db.get(store, id); return r || fallback; }
-  catch (e) { console.warn('[lw-persist] get', store, id, e?.message); return fallback; }
+  try {
+    await db.init();
+    const scopedId = store === 'meta' ? projectScope(id) : id;
+    const r = await db.get(store, scopedId);
+    if (r) return r;
+    // Backwards-compat: legacy unprefixed META rows still resolve.
+    if (store === 'meta' && scopedId !== id) {
+      const legacy = await db.get(store, id);
+      if (legacy) return legacy;
+    }
+    return fallback;
+  } catch (e) { console.warn('[lw-persist] get', store, id, e?.message); return fallback; }
 }
 async function dbPut(store, record) {
-  try { await db.init(); await db.update(store, record); return record; }
-  catch (e) {
-    try { return await db.add(store, record); }
+  try {
+    await db.init();
+    let toWrite = record;
+    if (store === 'meta' && record?.id) {
+      toWrite = { ...record, id: projectScope(record.id) };
+    } else if (record && typeof record === 'object') {
+      toWrite = stampProject(record);
+    }
+    await db.update(store, toWrite);
+    return toWrite;
+  } catch (e) {
+    try {
+      let toWrite = record;
+      if (store === 'meta' && record?.id) toWrite = { ...record, id: projectScope(record.id) };
+      else if (record && typeof record === 'object') toWrite = stampProject(record);
+      return await db.add(store, toWrite);
+    }
     catch (e2) { console.warn('[lw-persist] put', store, e2?.message); return null; }
   }
 }
 async function dbDel(store, id) {
-  try { await db.init(); await db.delete(store, id); return true; }
-  catch (e) { console.warn('[lw-persist] del', store, id, e?.message); return false; }
+  try {
+    await db.init();
+    const scopedId = store === 'meta' ? projectScope(id) : id;
+    await db.delete(store, scopedId);
+    return true;
+  } catch (e) { console.warn('[lw-persist] del', store, id, e?.message); return false; }
 }
 
 // ─── Migrations ───────────────────────────────────────────────────────
@@ -128,7 +170,8 @@ export async function loadAllFromDB() {
     profileRaw, uiRaw, books, cast, places, threads, items, voices,
     nodes, edges, mapState, noticingsRaw, reviewQueueRaw, snapshotsRaw,
     suggestionDrawerRaw, pendingInsertionsRaw, atlasSettingsRaw, regionsRaw,
-    continuityRaw, extractionRunsRaw,
+    continuityRaw, extractionRunsRaw, referencesRaw,
+    skillBankRaw, skillTreesRaw, authorsRaw, marginNotesRaw,
   ] = await Promise.all([
     dbGet(S.meta, META.profile),
     dbGet(S.meta, META.ui),
@@ -150,6 +193,11 @@ export async function loadAllFromDB() {
     dbGet(S.meta, META.regions),
     dbGet(S.meta, META.continuity),
     dbGet(S.meta, META.extractionRuns),
+    dbGet(S.meta, META.references),
+    dbGet(S.meta, META.skillBank),
+    dbGet(S.meta, META.skillTrees),
+    dbGet(S.meta, META.authors),
+    dbGet(S.meta, META.marginNotes),
   ]);
 
   const profile = { ...EMPTY_PROFILE, ...(profileRaw?.data || profileRaw || {}) };
@@ -230,6 +278,11 @@ export async function loadAllFromDB() {
     regions: regionsRaw?.data || [],
     continuity: continuityRaw?.data || { findings: [], lastScanAt: null },
     extractionRuns: extractionRunsRaw?.data || {},
+    references: Array.isArray(referencesRaw?.data) ? referencesRaw.data : [],
+    skillBank: Array.isArray(skillBankRaw?.data) ? skillBankRaw.data : [],
+    skillTrees: Array.isArray(skillTreesRaw?.data) ? skillTreesRaw.data : [],
+    authors: Array.isArray(authorsRaw?.data) ? authorsRaw.data : [],
+    marginNotes: Array.isArray(marginNotesRaw?.data) ? marginNotesRaw.data : [],
     reviewQueue: reviewQueueRaw?.data || [],
     snapshots: snapshotsRaw?.data || [],
     feedback: [],
@@ -293,6 +346,26 @@ export async function persistSlice(slice, prev, next) {
   }
   if (slice === 'regions') {
     await dbPut(S.meta, { id: META.regions, data: next || [] });
+    return;
+  }
+  if (slice === 'references') {
+    await dbPut(S.meta, { id: META.references, data: Array.isArray(next) ? next : [] });
+    return;
+  }
+  if (slice === 'skillBank') {
+    await dbPut(S.meta, { id: META.skillBank, data: Array.isArray(next) ? next : [] });
+    return;
+  }
+  if (slice === 'skillTrees') {
+    await dbPut(S.meta, { id: META.skillTrees, data: Array.isArray(next) ? next : [] });
+    return;
+  }
+  if (slice === 'authors') {
+    await dbPut(S.meta, { id: META.authors, data: Array.isArray(next) ? next : [] });
+    return;
+  }
+  if (slice === 'marginNotes') {
+    await dbPut(S.meta, { id: META.marginNotes, data: Array.isArray(next) ? next : [] });
     return;
   }
   if (slice === 'continuity') {
