@@ -56,13 +56,38 @@ const SCHEMA = `Return ONLY this JSON, no commentary:
   ],
   "relationshipChanges": [
     {"a":"<character>","b":"<character>","kind":"<short>","strength":-1.0,"reason":"<short>","confidence":0.0}
+  ],
+  "inventoryChanges": [
+    {"character":"<exact name>","item":"<item>","action":"acquired|lost|equipped|transferred","location":"<optional place>","reason":"<short>","confidence":0.0}
+  ],
+  "locationChanges": [
+    {"character":"<exact name>","location":"<place>","action":"moved|arrived|left","reason":"<short>","confidence":0.0}
+  ],
+  "statusChanges": [
+    {"character":"<exact name>","status":"<short>","action":"gained|lost|changed","reason":"<short>","confidence":0.0}
+  ],
+  "knowledgeChanges": [
+    {"character":"<exact name>","knowledge":"<secret/fact>","action":"learned|revealed|forgot","reason":"<short>","confidence":0.0}
+  ],
+  "promiseChanges": [
+    {"character":"<exact name>","promise":"<short>","action":"made|kept|broke","reason":"<short>","confidence":0.0}
+  ],
+  "questStateChanges": [
+    {"quest":"<name>","state":"started|progressed|blocked|completed|failed","reason":"<short>","confidence":0.0}
+  ],
+  "itemStateChanges": [
+    {"item":"<name>","state":"found|upgraded|damaged|destroyed|hidden|revealed","reason":"<short>","confidence":0.0}
   ]
 }`;
 
 export async function runDeepCharacterPass(store, chapterId) {
   const chapter = chapterId ? store.chapters?.[chapterId] : null;
   if (!chapter?.text || chapter.text.length < 50) {
-    return { appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [] };
+    return {
+      appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [],
+      inventoryChanges: [], locationChanges: [], statusChanges: [], knowledgeChanges: [],
+      promiseChanges: [], questStateChanges: [], itemStateChanges: [],
+    };
   }
   const cast = store.cast || [];
   const knownNames = cast.map(c => c.name).join(', ') || '(none yet)';
@@ -75,7 +100,11 @@ export async function runDeepCharacterPass(store, chapterId) {
     extra: SCHEMA,
   });
 
-  const merged = { appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [] };
+  const merged = {
+    appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [],
+    inventoryChanges: [], locationChanges: [], statusChanges: [], knowledgeChanges: [],
+    promiseChanges: [], questStateChanges: [], itemStateChanges: [],
+  };
   const seen = new Set();
 
   for (let i = 0; i < chunks.length; i++) {
@@ -137,6 +166,13 @@ function resolveActors(merged, cast) {
       resolvedA: matchOne(a.a),
       resolvedB: matchOne(a.b),
     })),
+    inventoryChanges: merged.inventoryChanges.map(a => ({ ...a, resolved: matchOne(a.character) })),
+    locationChanges: merged.locationChanges.map(a => ({ ...a, resolved: matchOne(a.character) })),
+    statusChanges: merged.statusChanges.map(a => ({ ...a, resolved: matchOne(a.character) })),
+    knowledgeChanges: merged.knowledgeChanges.map(a => ({ ...a, resolved: matchOne(a.character) })),
+    promiseChanges: merged.promiseChanges.map(a => ({ ...a, resolved: matchOne(a.character) })),
+    questStateChanges: merged.questStateChanges,
+    itemStateChanges: merged.itemStateChanges,
   };
 }
 

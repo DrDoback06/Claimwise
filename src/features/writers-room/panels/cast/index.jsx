@@ -4,7 +4,6 @@ import React from 'react';
 import PanelFrame from '../PanelFrame';
 import Roster from './Roster';
 import Dossier from './Dossier';
-import SpecialistChat from '../../specialist/SpecialistChat';
 import QueuePanel from '../../review-queue/QueuePanel';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore, createCharacter } from '../../store';
@@ -62,6 +61,15 @@ export default function CastPanel({ onClose, onInterview, onWeave }) {
       panelId="dossier"
       onClose={onClose}
       width={460}>
+      <div style={{ padding: '8px 12px', borderBottom: `1px solid ${t.rule}`, background: t.paper }}>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('lw:open-weaver', {
+          detail: { tags: ['cast'], prompt: 'Generate 3 cast candidates with role, one-liner, and backstory hooks.' },
+        }))} style={{
+          padding: '4px 10px', background: t.accent, color: t.onAccent,
+          border: 'none', borderRadius: 999, cursor: 'pointer',
+          fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+        }}>✦ Character ideas</button>
+      </div>
       <QueuePanel domain="cast" accent={PANEL_ACCENT.cast} title="Cast review queue" />
       <Roster activeId={charId} onSelect={setSel} />
       <Dossier
@@ -69,7 +77,6 @@ export default function CastPanel({ onClose, onInterview, onWeave }) {
         onInterview={() => onInterview?.(charId)}
         onWeave={() => onWeave?.(charId)}
       />
-      <SpecialistChat domain="cast" accent={PANEL_ACCENT.cast} entityId={charId} />
     </PanelFrame>
   );
 }

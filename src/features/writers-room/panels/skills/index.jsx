@@ -9,7 +9,6 @@ import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore } from '../../store';
 import { generateTree } from '../../skills/treeService';
 import { ensureWikiEntry } from '../../wiki/service';
-import SpecialistChat from '../../specialist/SpecialistChat';
 import QueuePanel from '../../review-queue/QueuePanel';
 import { dragEntity } from '../../drag';
 
@@ -272,6 +271,13 @@ export default function SkillsPanel({ onClose }) {
           fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14,
           textTransform: 'uppercase', fontWeight: 600,
         }}>✦ Generate tree</button>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('lw:open-weaver', {
+          detail: { tags: ['skills'], prompt: 'Generate skill ideas with short descriptions and progression hooks.' },
+        }))} style={{
+          padding: '4px 10px', background: 'transparent', color: t.accent,
+          border: `1px solid ${t.accent}`, borderRadius: 999, cursor: 'pointer',
+          fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+        }}>✦ Skill ideas</button>
       </div>
 
       <div style={{ position: 'relative', height: 380, borderBottom: `1px solid ${t.rule}`, background: t.paper2 }}>
@@ -392,7 +398,6 @@ export default function SkillsPanel({ onClose }) {
         </div>
       )}
 
-      <SpecialistChat domain="skills" accent={PANEL_ACCENT.items} />
 
       <ContextMenu state={ctx.state} onClose={ctx.close} />
 

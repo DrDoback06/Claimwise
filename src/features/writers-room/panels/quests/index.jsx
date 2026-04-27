@@ -10,7 +10,6 @@ import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore, createQuest } from '../../store';
 import { useSelection } from '../../selection';
 import { questById } from '../../store/selectors';
-import SpecialistChat from '../../specialist/SpecialistChat';
 import QueuePanel from '../../review-queue/QueuePanel';
 import { detectQuestProgress } from '../../quests/service';
 
@@ -96,6 +95,11 @@ export default function QuestsPanel({ onClose }) {
         <button onClick={scan} disabled={scanning} style={ghost(t)}>
           {scanning ? 'Scanning…' : '⌬ Scan chapter'}
         </button>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('lw:open-weaver', {
+          detail: { tags: ['quests'], prompt: 'Generate 2-3 quest lines with sides, stakes, and likely chapter entry points.' },
+        }))} style={ghost(t)}>
+          ✦ Quest ideas
+        </button>
         <button onClick={newQuest} style={primary(t)}>+ Quest</button>
       </div>
 
@@ -176,7 +180,6 @@ export default function QuestsPanel({ onClose }) {
         </div>
       )}
 
-      <SpecialistChat domain="quests" accent={PANEL_ACCENT.threads} />
     </PanelFrame>
   );
 }
@@ -186,6 +189,18 @@ function QuestEditor({ quest }) {
   const store = useStore();
   const cast = store.cast || [];
   const update = (patch) => store.setSlice('quests', qs => qs.map(q => q.id === quest.id ? { ...q, ...patch } : q));
+  const trashQuest = () => {
+    if (!window.confirm(`Move "${quest.name || 'this quest'}" to trash?`)) return;
+    store.setSlice('trash', xs => ([...(xs || []), {
+      id: `trash_${Date.now()}`,
+      kind: 'quest',
+      payload: quest,
+      deletedAt: Date.now(),
+    }]));
+    store.setSlice('quests', qs => (qs || []).filter(q => q.id !== quest.id));
+    store.setPath('ui.selection.quest', null);
+    store.setPath('ui.selection.thread', null);
+  };
 
   const lbl = {
     fontFamily: t.mono, fontSize: 9, color: t.ink3,
@@ -231,6 +246,13 @@ function QuestEditor({ quest }) {
         <button onClick={() => update({ active: quest.active === false })} style={chip(t, quest.active !== false)}>
           {quest.active === false ? 'dormant' : 'active'}
         </button>
+        <span style={{ flex: 1 }} />
+        <button onClick={trashQuest} style={{
+          padding: '4px 10px', background: 'transparent',
+          color: t.bad || '#b33', border: `1px solid ${t.bad || '#b33}`,
+          borderRadius: 1, cursor: 'pointer',
+          fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12, textTransform: 'uppercase',
+        }}>Move to trash</button>
       </div>
 
       <div style={lbl}>Description</div>

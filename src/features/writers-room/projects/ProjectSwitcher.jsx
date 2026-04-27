@@ -74,7 +74,7 @@ export default function ProjectSwitcher() {
           position: 'absolute', top: 'calc(100% + 4px)', left: 0,
           background: t.paper, border: `1px solid ${t.rule}`, borderRadius: 2,
           boxShadow: '0 4px 18px rgba(0,0,0,0.18)',
-          minWidth: 240, padding: 4, zIndex: 100,
+          minWidth: 240, padding: 4, zIndex: 4200,
         }}>
           {projects.map(p => (
             <div key={p.id} style={{

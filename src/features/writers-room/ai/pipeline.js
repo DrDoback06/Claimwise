@@ -12,6 +12,9 @@ import { scanContinuity } from '../continuity/service';
 import { detectQuestProgress } from '../quests/service';
 import { bucket as bucketByConfidence } from './confidence';
 import { runDeepCharacterPass, runQuestInvolvementPass } from './deep-extract';
+import { classifyRiskBand, isAutoApplyBand } from './riskBands';
+import { autoApplyQueueItems } from '../review-queue/operations';
+import { buildEntityEventFromFinding } from '../entities/entityEventBuilder';
 
 const DEBOUNCE_MS = 2500;
 
@@ -38,7 +41,25 @@ function pushReview(store, chapterId, items, kind) {
   if (!items || items.length === 0) return;
   store.setSlice('reviewQueue', xs => {
     const arr = Array.isArray(xs) ? xs : [];
-    const stamped = items.map(f => ({ id: f.id || `rq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, kind, chapterId, addedAt: Date.now(), ...f }));
+    const stamped = items.map(f => {
+      const risk = classifyRiskBand({
+        confidence: f.confidence,
+        eventType: f.eventType || f.sourceType || f.kind,
+        consequence: f.consequence || 'low',
+        isCanonChanging: Boolean(f.canonRisk),
+      });
+      return {
+        id: f.id || `rq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        kind,
+        source: f.source || `autonomous-${kind}`,
+        chapterId,
+        addedAt: Date.now(),
+        riskBand: f.riskBand || risk.id,
+        riskLabel: risk.label,
+        autoApplyEligible: risk.autoApply,
+        ...f,
+      };
+    });
     const next = [...arr, ...stamped];
     // Cap from the front so the most recent stay surfaced.
     return next.length > REVIEW_CAP ? next.slice(next.length - REVIEW_CAP) : next;
@@ -61,11 +82,47 @@ async function runJob(store, chapterId) {
     // Auto-applies are saved straight to canon; suggested + background go
     // into the review queue as kind='extraction'.
     if (bucketed.auto.length) {
-      // Keep this surfaced to the writer too, so they see what was created.
-      pushReview(store, chapterId, bucketed.auto.map(f => ({ ...f, autoApplied: true })), 'extraction');
+      const stampedAuto = bucketed.auto.map(f => ({ ...f, autoApplied: true, status: 'auto-applied' }));
+      pushReview(store, chapterId, stampedAuto, 'extraction');
+      if (isAutoApplyBand('blue', store)) {
+        const queueItems = (store.reviewQueue || []).filter(it =>
+          it.chapterId === chapterId &&
+          it.source === 'autonomous-extraction' &&
+          it.status === 'auto-applied' &&
+          it.riskBand === 'blue'
+        );
+        autoApplyQueueItems(store, queueItems.map(x => x.id));
+      }
     }
     if (bucketed.suggested.length || bucketed.background.length) {
       pushReview(store, chapterId, [...bucketed.suggested, ...bucketed.background], 'extraction');
+    }
+    if (Array.isArray(findings.entityEvents) && findings.entityEvents.length) {
+      store.setSlice('entityEvents', xs => {
+        const arr = Array.isArray(xs) ? xs : [];
+        const built = findings.entityEvents.map(ev => buildEntityEventFromFinding({ ...ev, chapterId, source: 'extract-pass' }, store));
+        return [...arr, ...built];
+      });
+    }
+    if (Array.isArray(findings.proposedLinks) && findings.proposedLinks.length) {
+      store.setSlice('entityLinks', xs => {
+        const arr = Array.isArray(xs) ? xs : [];
+        const links = findings.proposedLinks.map(link => ({
+          id: link.id || `el_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+          fromEntityId: null,
+          fromEntityType: link.fromType || null,
+          fromLabel: link.from,
+          toEntityId: null,
+          toEntityType: link.toType || null,
+          toLabel: link.to,
+          relation: link.relation || 'related-to',
+          confidence: link.confidence ?? 0.7,
+          chapterId,
+          createdAt: Date.now(),
+          source: 'extract-pass',
+        }));
+        return [...arr, ...links];
+      });
     }
   } catch (err) {
     console.warn('[pipeline] extraction failed', err?.message);
@@ -189,6 +246,57 @@ function routeDeepFindings(store, chapterId, deep) {
       confidence: r.confidence ?? 0.6,
       sourceType: 'relationship-change',
       payload: { a: r.resolvedA?.id || r.a, b: r.resolvedB?.id || r.b, kind: r.kind, strength: r.strength },
+    });
+  }
+  for (const inv of deep.inventoryChanges || []) {
+    if (!inv.character || !inv.item) continue;
+    items.push({
+      kind: 'item',
+      status: inv.resolved?.id ? 'known' : 'new',
+      name: inv.item,
+      notes: `${inv.character} ${inv.action || 'changed inventory'}${inv.location ? ` in ${inv.location}` : ''} — ${inv.reason || ''}`.trim(),
+      confidence: inv.confidence ?? 0.7,
+      sourceType: 'inventory-change',
+      payload: { character: inv.resolved?.id || inv.character, action: inv.action, location: inv.location },
+    });
+  }
+  for (const l of deep.locationChanges || []) {
+    if (!l.character || !l.location) continue;
+    items.push({
+      kind: 'place',
+      status: 'new',
+      name: l.location,
+      notes: `${l.character} ${l.action || 'moved'} — ${l.reason || ''}`.trim(),
+      confidence: l.confidence ?? 0.68,
+      sourceType: 'location-change',
+      payload: { character: l.resolved?.id || l.character, action: l.action },
+    });
+  }
+  for (const q of deep.questStateChanges || []) {
+    if (!q.quest) continue;
+    items.push({
+      kind: 'quest',
+      status: 'known',
+      name: q.quest,
+      notes: `${q.state || 'progressed'} — ${q.reason || ''}`.trim(),
+      confidence: q.confidence ?? 0.67,
+      sourceType: 'quest-state-change',
+      payload: { state: q.state },
+      canonRisk: q.state === 'completed' || q.state === 'failed',
+      consequence: q.state === 'completed' || q.state === 'failed' ? 'high' : 'medium',
+    });
+  }
+  for (const it of deep.itemStateChanges || []) {
+    if (!it.item) continue;
+    items.push({
+      kind: 'item',
+      status: 'known',
+      name: it.item,
+      notes: `${it.state || 'changed'} — ${it.reason || ''}`.trim(),
+      confidence: it.confidence ?? 0.67,
+      sourceType: 'item-state-change',
+      canonRisk: it.state === 'destroyed',
+      consequence: it.state === 'destroyed' ? 'high' : 'medium',
     });
   }
   if (items.length) pushReview(store, chapterId, items, 'deep');

@@ -13,7 +13,7 @@
 
 import React from 'react';
 import { useTheme } from '../theme';
-import { useStore } from '../store';
+import { useStore, createChapter, removeChapter } from '../store';
 
 export default function ChapterStrip({
   mode = 'jump',          // 'jump' | 'scrub'
@@ -33,6 +33,7 @@ export default function ChapterStrip({
   const stripRef = React.useRef(null);
   const itemRefs = React.useRef({});
   const [hover, setHover] = React.useState(null); // { idx, ch, x, y }
+  const [metaOpenId, setMetaOpenId] = React.useState(null);
 
   // Auto-scroll the active pill into view whenever it changes.
   React.useEffect(() => {
@@ -60,6 +61,14 @@ export default function ChapterStrip({
     onChange?.(id);
   };
 
+  const addChapter = () => {
+    let id = null;
+    store.transaction(({ setSlice }) => {
+      id = createChapter({ setSlice, book: store.book }, {});
+    });
+    if (id) handlePick(id);
+  };
+
   return (
     <div style={frame(t)}>
       {label && <span style={labelStyle(t)}>{label}</span>}
@@ -83,6 +92,7 @@ export default function ChapterStrip({
               key={id}
               ref={el => { if (el) itemRefs.current[id] = el; else delete itemRefs.current[id]; }}
               onClick={() => handlePick(id)}
+              onDoubleClick={() => setMetaOpenId(id)}
               onMouseEnter={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
                 setHover({ idx: i, ch, wc, x: r.left + r.width / 2, y: r.bottom + 4 });
@@ -105,6 +115,19 @@ export default function ChapterStrip({
             </button>
           );
         })}
+        <button
+          onClick={addChapter}
+          title="Add chapter"
+          style={{
+            flex: '0 0 auto',
+            minWidth: 24, height: 24, padding: '0 6px',
+            borderRadius: 999,
+            background: 'transparent',
+            color: t.accent,
+            border: `1px dashed ${t.accent}`,
+            cursor: 'pointer',
+            fontFamily: t.mono, fontSize: 12, letterSpacing: 0.08,
+          }}>+</button>
       </div>
       {hover && (
         <div style={{
@@ -129,6 +152,106 @@ export default function ChapterStrip({
           )}
         </div>
       )}
+      {metaOpenId && (
+        <ChapterMetaModal
+          chapter={chapters[metaOpenId]}
+          index={order.indexOf(metaOpenId)}
+          onClose={() => setMetaOpenId(null)}
+          onDelete={() => {
+            const id = metaOpenId;
+            if (!id) return;
+            if (!window.confirm('Move this chapter to trash?')) return;
+            const doomed = chapters[id];
+            if (doomed) {
+              store.setSlice('trash', xs => ([...(xs || []), {
+                id: `trash_${Date.now()}`,
+                kind: 'chapter',
+                payload: doomed,
+                deletedAt: Date.now(),
+              }]));
+            }
+            removeChapter(store, id);
+            setMetaOpenId(null);
+          }}
+          onSave={(patch) => {
+            const id = metaOpenId;
+            store.setSlice('chapters', chs => ({
+              ...(chs || {}),
+              [id]: { ...(chs?.[id] || {}), ...patch },
+            }));
+            setMetaOpenId(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ChapterMetaModal({ chapter, index, onClose, onSave, onDelete }) {
+  const t = useTheme();
+  const [title, setTitle] = React.useState(chapter?.title || `Chapter ${index + 1}`);
+  const [color, setColor] = React.useState(chapter?.color || '#8b2b1f');
+  const [notes, setNotes] = React.useState(chapter?.notes || '');
+  const [todo, setTodo] = React.useState(chapter?.todo || []);
+  const [todoInput, setTodoInput] = React.useState('');
+  if (!chapter) return null;
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', zIndex: 3600,
+      display: 'grid', placeItems: 'center',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: 'min(92vw, 620px)', maxHeight: '88vh', overflowY: 'auto',
+        background: t.paper, border: `1px solid ${t.rule}`, borderRadius: 4, padding: 16,
+      }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input value={title} onChange={e => setTitle(e.target.value)} style={{
+            flex: 1, fontFamily: t.display, fontSize: 20, border: 'none', outline: 'none',
+            background: 'transparent', color: t.ink,
+          }} />
+          <input type="color" value={color} onChange={e => setColor(e.target.value)}
+            style={{ width: 28, height: 28, padding: 0, border: 'none', background: 'transparent' }} />
+        </div>
+        <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase' }}>
+          Chapter {chapter.n || index + 1} · double-click chapter pills to edit
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, textTransform: 'uppercase', marginBottom: 4 }}>Notes</div>
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={5} style={{
+            width: '100%', padding: '8px 10px', fontFamily: t.display, fontSize: 13, border: `1px solid ${t.rule}`, background: t.paper2,
+          }} />
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, textTransform: 'uppercase', marginBottom: 4 }}>To-do</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input value={todoInput} onChange={e => setTodoInput(e.target.value)} placeholder="Add checklist item"
+              style={{ flex: 1, padding: '6px 8px', border: `1px solid ${t.rule}`, background: t.paper2 }} />
+            <button onClick={() => {
+              if (!todoInput.trim()) return;
+              setTodo(xs => [...xs, { id: `todo_${Date.now()}`, text: todoInput.trim(), done: false }]);
+              setTodoInput('');
+            }} style={{ padding: '6px 10px', border: `1px solid ${t.accent}`, color: t.accent, background: 'transparent' }}>+ Add</button>
+          </div>
+          <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+            {todo.map(x => (
+              <label key={x.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" checked={!!x.done}
+                  onChange={e => setTodo(rows => rows.map(r => r.id === x.id ? { ...r, done: e.target.checked } : r))} />
+                <input value={x.text} onChange={e => setTodo(rows => rows.map(r => r.id === x.id ? { ...r, text: e.target.value } : r))}
+                  style={{ flex: 1, padding: '4px 6px', border: `1px solid ${t.rule}`, background: t.paper2 }} />
+                <button onClick={() => setTodo(rows => rows.filter(r => r.id !== x.id))}
+                  style={{ border: 'none', background: 'transparent', color: t.ink3, cursor: 'pointer' }}>×</button>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginTop: 14, display: 'flex', gap: 6 }}>
+          <button onClick={onDelete} style={{ padding: '6px 10px', border: `1px solid ${t.bad || '#b33'}`, color: t.bad || '#b33', background: 'transparent' }}>Move to trash</button>
+          <span style={{ flex: 1 }} />
+          <button onClick={onClose} style={{ padding: '6px 10px', border: `1px solid ${t.rule}`, background: 'transparent' }}>Cancel</button>
+          <button onClick={() => onSave({ title, color, notes, todo })} style={{ padding: '6px 12px', border: 'none', background: t.accent, color: t.onAccent }}>Save</button>
+        </div>
+      </div>
     </div>
   );
 }

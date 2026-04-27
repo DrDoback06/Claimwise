@@ -185,6 +185,11 @@
   position: relative;
 }
 
+.lw-topbar {
+  position: relative;
+  z-index: 2400;
+}
+
 .lw-prose-wrap {
   flex: 1;
   overflow-y: auto;
@@ -195,6 +200,13 @@
   flex-direction: row;
   height: 100vh;
   max-width: 1200px;
+  position: relative;
+  z-index: 1200;
+}
+
+.lw-prose-wrap,
+.lw-prose-wrap * {
+  z-index: auto;
 }
 
 .lw-rail-btn {

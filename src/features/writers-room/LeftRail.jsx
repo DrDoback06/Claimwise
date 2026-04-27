@@ -17,6 +17,7 @@ const PANELS = [
   { id: 'interview',  label: 'Interview',  icon: 'chat',    accent: PANEL_ACCENT.cast },
   { id: 'groupchat',  label: 'Round table', icon: 'users',  accent: PANEL_ACCENT.cast },
   { id: 'references', label: 'References', icon: 'book',    accent: PANEL_ACCENT.loom },
+  { id: 'trash',      label: 'Trash',      icon: 'x',       accent: PANEL_ACCENT.loom },
 ];
 
 export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onOpenWeaver, onOpenAid, todayOpen, onToggleToday }) {
@@ -54,11 +55,11 @@ export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onO
         <Icon name="sparkle" size={16} color={t.onAccent} />
       </button>
       <button
-        title="Weave noticings (⌘J)"
+        title="Weave Entity wizard (⌘J)"
         onClick={onOpenWeaver}
         className="lw-rail-btn"
         style={{ borderColor: t.rule, color: t.ink2, marginBottom: 4 }}>
-        <Icon name="seed" size={16} color={t.ink2} />
+        <Icon name="bag" size={16} color={t.ink2} />
       </button>
 
       <button

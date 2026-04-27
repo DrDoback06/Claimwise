@@ -243,6 +243,21 @@ export default function Dossier({ charId, onInterview, onWeave }) {
           fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12,
           textTransform: 'uppercase', cursor: 'pointer',
         }}>✦ Weave</button>
+        <button onClick={() => {
+          if (!window.confirm(`Move "${c.name || 'this character'}" to trash?`)) return;
+          store.setSlice('trash', xs => ([...(xs || []), {
+            id: `trash_${Date.now()}`,
+            kind: 'character',
+            payload: c,
+            deletedAt: Date.now(),
+          }]));
+          store.setSlice('cast', xs => (xs || []).filter(x => x.id !== c.id));
+          select('character', null);
+        }} style={{
+          padding: '7px 12px', background: 'transparent',
+          color: t.bad || '#b33', border: `1px solid ${t.bad || '#b33'}`, borderRadius: 1,
+          fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase', cursor: 'pointer',
+        }}>Trash</button>
         <span style={{ flex: 1 }} />
         <button onClick={() => {
           const allOpen = SECTIONS.reduce((m, s) => ({ ...m, [s.id]: true }), {});
