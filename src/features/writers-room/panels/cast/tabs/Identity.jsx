@@ -6,6 +6,7 @@ import { useStore } from '../../../store';
 import { characterMetrics } from '../appearances';
 import { VoicePicker } from '../../../utilities/ReadAloud';
 import EntityImageButton from '../../../images/EntityImageButton';
+import EntityTimeline from '../../../entities/EntityTimeline';
 
 export default function IdentityTab({ character: c, update }) {
   const t = useTheme();
@@ -75,6 +76,8 @@ export default function IdentityTab({ character: c, update }) {
           </div>
         )}
       </div>
+
+      <EntityTimeline entityType="character" entityId={c.id} title="Character log" />
     </div>
   );
 }
