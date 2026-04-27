@@ -5,6 +5,7 @@ import { useTheme } from '../../../theme';
 import { useStore } from '../../../store';
 import { characterMetrics } from '../appearances';
 import { VoicePicker } from '../../../utilities/ReadAloud';
+import EntityImageButton from '../../../images/EntityImageButton';
 
 export default function IdentityTab({ character: c, update }) {
   const t = useTheme();
@@ -22,6 +23,17 @@ export default function IdentityTab({ character: c, update }) {
   };
   return (
     <div style={{ padding: '14px 16px' }}>
+      <div style={lbl}>Avatar</div>
+      <div style={{ marginTop: 4 }}>
+        <EntityImageButton
+          entity={c}
+          size={72}
+          field="avatar"
+          label="Character avatar"
+          onSave={(url) => update({ avatar: url })}
+        />
+      </div>
+
       <div style={lbl}>Aliases</div>
       <input style={inp} value={(c.aliases || []).join(', ')}
         onChange={e => update({ aliases: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} />

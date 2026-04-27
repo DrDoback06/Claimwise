@@ -10,6 +10,7 @@ import aiService from '../../services/aiService';
 import { KEY_PROVIDERS } from './api-keys/providers';
 import AuthorsPanel from './authors/AuthorsPanel';
 import { VoicePicker } from './utilities/ReadAloud';
+import ExportPanel from './export/ExportPanel';
 
 const PROVIDERS = ['auto', 'anthropic', 'openai', 'gemini', 'groq', 'huggingface', 'offline'];
 const INTRUSION = ['quiet', 'medium', 'helpful', 'eager'];
@@ -131,6 +132,27 @@ export default function Settings({ onClose }) {
           <AuthorsPanel />
         </Section>
 
+        <Section t={t} title="Image style (saga-wide)">
+          <p style={{ fontFamily: t.display, fontSize: 13, color: t.ink2, lineHeight: 1.5, marginTop: 0 }}>
+            Stitched onto every "Generate avatar" prompt so all entity art
+            shares a look. Try: <i>"oil-paint portrait, dramatic side
+            lighting, dark sepia palette"</i>.
+          </p>
+          <textarea
+            rows={3}
+            value={profile.imageStyle || ''}
+            onChange={e => set('profile.imageStyle', e.target.value)}
+            placeholder="e.g. ink illustration · watercolour · cinematic photo · pixel art…"
+            style={{
+              width: '100%', padding: '6px 8px', resize: 'vertical',
+              fontFamily: t.display, fontSize: 13, color: t.ink, lineHeight: 1.5,
+              background: t.paper, border: `1px solid ${t.rule}`, borderRadius: 1, outline: 'none',
+            }} />
+          <p style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.12, marginTop: 6 }}>
+            Tries DALL-E 3 first if your OpenAI key is set; falls back to free Hugging Face SDXL.
+          </p>
+        </Section>
+
         <Section t={t} title="Read-aloud voices">
           <p style={{ fontFamily: t.display, fontSize: 13, color: t.ink2, lineHeight: 1.5, marginTop: 0 }}>
             The narrator voice handles all prose that isn't dialogue. Each
@@ -152,6 +174,10 @@ export default function Settings({ onClose }) {
           <Toggle t={t} label="Highlight named entities inline" value={tweaks.highlightMargin !== false} onChange={v => set('ui.tweaks.highlightMargin', v)} />
           <Toggle t={t} label="Show per-paragraph voice ribbon" value={tweaks.showVoiceRibbon === true} onChange={v => set('ui.tweaks.showVoiceRibbon', v)} />
           <Toggle t={t} label="Underline proofread issues inline" value={tweaks.showProofIssues !== false} onChange={v => set('ui.tweaks.showProofIssues', v)} />
+        </Section>
+
+        <Section t={t} title="Manuscript export & marketing">
+          <ExportPanel />
         </Section>
 
         <Section t={t} title="Backup">
