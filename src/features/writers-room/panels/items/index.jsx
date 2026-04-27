@@ -13,6 +13,7 @@ import Catalog from '../../items/Catalog';
 import SpecialistChat from '../../specialist/SpecialistChat';
 import QueuePanel from '../../review-queue/QueuePanel';
 import EntityImageButton from '../../images/EntityImageButton';
+import EntityTimeline from '../../entities/EntityTimeline';
 
 const RARITIES = ['common', 'magic', 'rare', 'legendary', 'unique', 'mythic'];
 const RARITY_COLOR = {
@@ -276,6 +277,8 @@ function ItemDetail({ item }) {
           onSave={(url) => update({ image: url })}
         />
       </div>
+
+      <EntityTimeline entityType="item" entityId={item.id} title="Item log" />
 
       {item.draftedByLoom && (
         <div style={{

@@ -224,6 +224,23 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     }
   });
 
+  // Evidence jump target: when queue/entity timeline asks for chapter evidence,
+  // scroll and briefly highlight the paragraph.
+  React.useEffect(() => {
+    const jump = store.ui?.evidenceJump;
+    if (!jump || jump.chapterId !== activeId || !ref.current) return;
+    let target = null;
+    if (jump.paragraphId != null) {
+      target = ref.current.querySelector(`[data-paragraph-id="${jump.paragraphId}"]`);
+      if (!target && Number.isInteger(jump.paragraphId)) target = ref.current.children[jump.paragraphId] || null;
+    }
+    if (!target) target = ref.current.firstElementChild;
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.setAttribute('data-lw-evidence', '1');
+    setTimeout(() => target?.removeAttribute('data-lw-evidence'), 1800);
+  }, [store.ui?.evidenceJump, activeId]);
+
   // Listen for accepted suggestions and inject as staged spans at the cursor.
   // CODE-INSIGHT §3.B.3 — Caveat font + ochre ink + left bracket while staged.
   React.useEffect(() => {
