@@ -38,6 +38,7 @@ import InterviewPanel from './panels/interview';
 import SeriesBible from './panels/series-bible';
 import SkillsPanel from './panels/skills';
 import ContinuityPanel from './panels/continuity';
+import ReferencesPanel from './panels/references';
 import SuggestionDrawer from './suggestions/SuggestionDrawer';
 import ExtractionWizard from './extraction/ExtractionWizard';
 
@@ -46,6 +47,7 @@ const PANEL_COMPONENTS = {
   voice: VoicePanel, items: ItemsPanel, language: LanguagePanel,
   tangle: TanglePanel, groupchat: GroupChatPanel, interview: InterviewPanel,
   skills: SkillsPanel, continuity: ContinuityPanel,
+  references: ReferencesPanel,
 };
 
 export default function Shell() {

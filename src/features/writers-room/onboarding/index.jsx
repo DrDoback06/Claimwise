@@ -5,8 +5,13 @@
 
 import React from 'react';
 import { useTheme, PANEL_ACCENT } from '../theme';
-import { useStore, createChapter, createCharacter } from '../store';
+import { useStore } from '../store';
+import { rid } from '../store/mutators';
 import { importFile } from './file-importers';
+import { scheduleAutonomousRun } from '../ai/pipeline';
+import { sectionById } from './schemas';
+import { evaluateSection } from './completeness';
+import SectionIO, { TrafficLight } from './SectionIO';
 
 const GENRES = [
   'Literary', 'Fantasy', 'Sci-fi', 'Thriller', 'Romance', 'Mystery',
@@ -48,6 +53,18 @@ const STEPS = [
 ];
 const TOTAL = STEPS.length;
 
+// Step index → schema id for per-section JSON I/O + traffic lights.
+const SECTION_FOR_STEP = {
+  1: 'story',
+  2: 'flavour',
+  3: 'worldRules',
+  4: 'voiceStyle',
+  5: 'contentBoundaries',
+  6: 'petPeeves',
+  9: 'plotRoadmap',
+  10: 'aiCadence',
+};
+
 export default function Onboarding({ onDone }) {
   const t = useTheme();
   const store = useStore();
@@ -76,6 +93,50 @@ export default function Onboarding({ onDone }) {
   const prev = () => setStep(s => Math.max(0, s - 1));
   const set = (patch) => setData(d => ({ ...d, ...patch }));
 
+  // The references slice lives on the store; the traffic-light score reads
+  // it to decide whether a section has matching reference docs.
+  const liveReferences = store.references || [];
+
+  // Build a thin "data + uploaded reference siblings" view for the schemas
+  // (so paste-in JSON applies to setData while traffic-lights also count
+  // file uploads done within the wizard but not yet committed to the store).
+  const renderSectionIO = (stepIdx) => {
+    const sectionId = SECTION_FOR_STEP[stepIdx];
+    if (!sectionId) return null;
+    const section = sectionById(sectionId);
+    if (!section) return null;
+    // For traffic-light: combine store-side refs with the wizard-local
+    // styleSamples so the writer sees green when they've dropped a file
+    // in step 7 even before finish().
+    const localRefs = (data.styleSamples || []).map(s => ({
+      id: 'local_' + s.name,
+      name: s.name,
+      category: 'style',
+      paragraphs: s.paragraphs,
+    }));
+    const evaluation = evaluateSection(section, data, [...liveReferences, ...localRefs]);
+    return (
+      <SectionIO
+        section={section}
+        data={data}
+        evaluation={evaluation}
+        onApply={(merged) => setData(d => ({ ...d, ...merged }))}
+      />
+    );
+  };
+
+  const renderTrafficLight = (stepIdx) => {
+    const sectionId = SECTION_FOR_STEP[stepIdx];
+    if (!sectionId) return null;
+    const section = sectionById(sectionId);
+    if (!section) return null;
+    const localRefs = (data.styleSamples || []).map(s => ({
+      id: 'local_' + s.name, name: s.name, category: 'style', paragraphs: s.paragraphs,
+    }));
+    const evaluation = evaluateSection(section, data, [...liveReferences, ...localRefs]);
+    return <TrafficLight status={evaluation.status} title={evaluation.reasons.join(' · ') || 'Complete'} />;
+  };
+
   const onFiles = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -88,7 +149,10 @@ export default function Onboarding({ onDone }) {
         else if (out.kind === 'archive') docs.push(...out.documents);
       } catch (err) { console.warn('Import failed', f.name, err); }
     }
-    set({ importedDocs: [...data.importedDocs, ...docs] });
+    // Functional update — never read `data` from closure (stale across async).
+    setData(d => ({ ...d, importedDocs: [...(d.importedDocs || []), ...docs] }));
+    // Reset the input so picking the same file again re-fires onChange.
+    if (e.target) e.target.value = '';
     setBusy(false);
   };
 
@@ -103,11 +167,46 @@ export default function Onboarding({ onDone }) {
         if (out.kind === 'document') samples.push({ name: f.name, paragraphs: out.paragraphs });
       } catch {}
     }
-    set({ styleSamples: [...data.styleSamples, ...samples] });
+    setData(d => ({ ...d, styleSamples: [...(d.styleSamples || []), ...samples] }));
+    if (e.target) e.target.value = '';
     setBusy(false);
   };
 
+  const removeImportedDoc = (idx) => {
+    setData(d => ({ ...d, importedDocs: (d.importedDocs || []).filter((_, i) => i !== idx) }));
+  };
+  const removeStyleSample = (idx) => {
+    setData(d => ({ ...d, styleSamples: (d.styleSamples || []).filter((_, i) => i !== idx) }));
+  };
+
   const finish = async () => {
+    // Pre-build chapter records so onboarded=true and the chapters land in
+    // the SAME state update. Otherwise Shell.jsx's "ensure at least one
+    // chapter" effect fires between setPath('profile.onboarded') and
+    // createChapter() and inserts a stray empty Chapter 1 ahead of the
+    // imported manuscript.
+    const chapterRecs = [];
+    if ((data.importedDocs || []).length > 0) {
+      data.importedDocs.forEach((doc, i) => {
+        const id = rid('chp');
+        const text = (doc.paragraphs || []).map(p => p.text).join('\n\n');
+        chapterRecs.push({
+          id,
+          n: i + 1,
+          title: (doc.name || `Chapter ${i + 1}`).replace(/\.[^.]+$/, ''),
+          text,
+          paragraphs: doc.paragraphs || null,
+          scenes: [],
+          lastEdit: Date.now(),
+        });
+      });
+    } else {
+      chapterRecs.push({
+        id: rid('chp'), n: 1, title: 'Chapter 1', text: '',
+        paragraphs: null, scenes: [], lastEdit: null,
+      });
+    }
+
     store.transaction(({ setSlice, setPath }) => {
       // Profile — comprehensive context for every AI call.
       setPath('profile.onboarded', true);
@@ -145,37 +244,66 @@ export default function Onboarding({ onDone }) {
         petPeeves: [...data.petPeeves, ...(data.customPetPeeves ? data.customPetPeeves.split(',').map(s => s.trim()).filter(Boolean) : [])],
         favorites: [...data.favorites, ...(data.customFavorites ? data.customFavorites.split(',').map(s => s.trim()).filter(Boolean) : [])],
       });
-      // Book.
+      // Book — including chapter order + currentChapterId so the editor
+      // immediately opens the first imported chapter.
       setPath('book.title', data.workingTitle || 'Untitled');
       setPath('book.series', data.seriesName || null);
       setPath('book.target', Math.round((data.targetWords || 80000) / 30) || 2500);
       setPath('book.totalChapters', data.targetChapters || 25);
       setPath('book.createdAt', Date.now());
+      setPath('book.chapterOrder', chapterRecs.map(c => c.id));
+      setPath('book.currentChapterId', chapterRecs[0].id);
+      // Chapters slice — all imported documents at once.
+      setSlice('chapters', () => {
+        const next = {};
+        for (const c of chapterRecs) next[c.id] = c;
+        return next;
+      });
+      // Mirror the active chapter into ui as well; Shell reads either path.
+      setPath('ui.activeChapterId', chapterRecs[0].id);
+
+      // Style samples → narrator voice profile (for the live AI prompt) and
+      // a parallel entry in `references` (for the manage-references panel).
+      if ((data.styleSamples || []).length > 0) {
+        const narratorSamples = data.styleSamples.flatMap(s => s.paragraphs).map(p => p.text);
+        setSlice('voice', vs => {
+          const arr = vs || [];
+          const i = arr.findIndex(v => v.characterId === 'narrator');
+          const next = {
+            id: 'voice_narrator',
+            characterId: 'narrator',
+            samples: narratorSamples.map(t => ({ text: t, at: Date.now() })),
+          };
+          if (i >= 0) return arr.map((x, j) => j === i ? { ...x, ...next } : x);
+          return [...arr, next];
+        });
+        setSlice('references', xs => {
+          const arr = Array.isArray(xs) ? xs : [];
+          const newOnes = data.styleSamples.map(s => ({
+            id: rid('ref'),
+            name: s.name || 'style sample',
+            label: (s.name || 'Style sample').replace(/\.[^.]+$/, ''),
+            category: 'style',
+            paragraphs: s.paragraphs || [],
+            sourceKind: 'upload',
+            importedAt: Date.now(),
+            linkedTo: { sectionIds: ['voice-style', 'pet-peeves'], characterIds: [] },
+          }));
+          return [...arr, ...newOnes];
+        });
+      }
     });
 
-    // Imported documents become chapters.
-    if (data.importedDocs.length > 0) {
-      data.importedDocs.forEach((doc, i) => {
-        const text = doc.paragraphs.map(p => p.text).join('\n\n');
-        createChapter(store, {
-          title: doc.name.replace(/\.[^.]+$/, '') || `Chapter ${i + 1}`,
-          text, paragraphs: doc.paragraphs,
-        });
-      });
-    } else {
-      createChapter(store, { title: 'Chapter 1', text: '' });
-    }
-
-    // Style samples → narrator voice profile.
-    if (data.styleSamples.length > 0) {
-      const narratorSamples = data.styleSamples.flatMap(s => s.paragraphs).map(p => p.text);
-      store.setSlice('voice', vs => {
-        const arr = vs || [];
-        const i = arr.findIndex(v => v.characterId === 'narrator');
-        const next = { id: 'voice_narrator', characterId: 'narrator', samples: narratorSamples.map(t => ({ text: t, at: Date.now() })) };
-        if (i >= 0) return arr.map((x, j) => j === i ? { ...x, ...next } : x);
-        return [...arr, next];
-      });
+    // Kick off background extraction for every imported chapter that has
+    // real content. The pipeline writes findings to `reviewQueue` per-tab.
+    if ((data.importedDocs || []).length > 0) {
+      for (const c of chapterRecs) {
+        if ((c.text || '').trim().length > 80) {
+          try { scheduleAutonomousRun(store, c.id); } catch (err) {
+            console.warn('[onboarding] scheduleAutonomousRun failed', c.id, err);
+          }
+        }
+      }
     }
 
     onDone?.();
@@ -189,9 +317,15 @@ export default function Onboarding({ onDone }) {
     }}>
       <div style={{ width: 'min(100%, 760px)', padding: '40px 24px 80px', color: t.ink, fontFamily: t.display }}>
         <div style={{
-          fontFamily: t.mono, fontSize: 9, color: PANEL_ACCENT.loom,
-          letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 6,
-        }}>Loomwright · Step {step + 1} of {TOTAL} · {STEPS[step]}</div>
+          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
+        }}>
+          <div style={{
+            fontFamily: t.mono, fontSize: 9, color: PANEL_ACCENT.loom,
+            letterSpacing: 0.16, textTransform: 'uppercase',
+          }}>Loomwright · Step {step + 1} of {TOTAL} · {STEPS[step]}</div>
+          <span style={{ flex: 1 }} />
+          {renderTrafficLight(step)}
+        </div>
         <div style={{ height: 2, background: t.rule, marginBottom: 24, borderRadius: 1 }}>
           <div style={{
             width: `${((step + 1) / TOTAL) * 100}%`, height: '100%',
@@ -310,25 +444,31 @@ export default function Onboarding({ onDone }) {
 
         {step === 7 && (
           <Section title="Style references (optional)">
-            <p style={pStyle(t)}>Upload a passage from a writer whose voice you want to study. The Loom can compare drafts against it.</p>
+            <p style={pStyle(t)}>Upload passages from writers whose voice you want to study. Add as many as you like — drop more files at any time. The Loom compares drafts against them.</p>
             <FileDrop t={t} accept=".docx,.pdf,.txt,.md,.markdown,.zip" onFiles={onStyleFiles} busy={busy} />
             {data.styleSamples.length > 0 && (
-              <div style={{ marginTop: 10, fontFamily: t.mono, fontSize: 10, color: t.ink2 }}>
-                {data.styleSamples.length} reference{data.styleSamples.length > 1 ? 's' : ''} loaded
-              </div>
+              <FileList
+                t={t}
+                items={data.styleSamples}
+                onRemove={removeStyleSample}
+                label="reference"
+              />
             )}
           </Section>
         )}
 
         {step === 8 && (
           <Section title="Bring in an existing manuscript? (optional)">
-            <p style={pStyle(t)}>DOCX, PDF, TXT, Markdown, or a ZIP. Imports become chapters; new entities surface as suggestions in the margin.</p>
+            <p style={pStyle(t)}>DOCX, PDF, TXT, Markdown, or a ZIP. Drop as many files as you like — each becomes its own chapter, in upload order. The Loom scans them in the background and surfaces characters, places, and items in the panel review queues.</p>
             <FileDrop t={t} accept=".docx,.pdf,.txt,.md,.markdown,.zip" onFiles={onFiles} busy={busy} />
             {data.importedDocs.length > 0 && (
-              <div style={{ marginTop: 10, fontFamily: t.mono, fontSize: 10, color: t.ink2 }}>
-                {data.importedDocs.length} document{data.importedDocs.length > 1 ? 's' : ''} ready ·{' '}
-                {data.importedDocs.reduce((n, d) => n + d.paragraphs.length, 0)} paragraphs
-              </div>
+              <FileList
+                t={t}
+                items={data.importedDocs}
+                onRemove={removeImportedDoc}
+                label="document"
+                paragraphCount
+              />
             )}
           </Section>
         )}
@@ -377,6 +517,8 @@ export default function Onboarding({ onDone }) {
             <p style={pStyle(t)}>You can revise anything you set here from the Settings panel.</p>
           </Section>
         )}
+
+        {renderSectionIO(step)}
 
         <div style={{ display: 'flex', gap: 8, marginTop: 30, alignItems: 'center' }}>
           {step > 0 && <button onClick={prev} style={btn(t)}>Back</button>}
@@ -432,6 +574,38 @@ function Chips({ items, selected, onChange, multi, t }) {
     </div>
   );
 }
+function FileList({ t, items, onRemove, label, paragraphCount }) {
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.16, textTransform: 'uppercase' }}>
+        {items.length} {label}{items.length > 1 ? 's' : ''} loaded
+      </div>
+      {items.map((it, i) => (
+        <div key={i} style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 10px', border: `1px solid ${t.rule}`, borderRadius: 1,
+          background: t.paper2,
+        }}>
+          <div style={{ flex: 1, minWidth: 0, fontFamily: t.display, fontSize: 13, color: t.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {it.name || `(unnamed ${label})`}
+          </div>
+          {paragraphCount && (
+            <div style={{ fontFamily: t.mono, fontSize: 10, color: t.ink3 }}>
+              {(it.paragraphs || []).length}p
+            </div>
+          )}
+          <button onClick={() => onRemove(i)} style={{
+            padding: '2px 8px', cursor: 'pointer',
+            background: 'transparent', color: t.ink3,
+            border: `1px solid ${t.rule}`, borderRadius: 1,
+            fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12, textTransform: 'uppercase',
+          }}>Remove</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FileDrop({ t, accept, onFiles, busy }) {
   return (
     <label style={{

@@ -42,6 +42,9 @@ const META = {
   regions: 'lw.regions',
   continuity: 'lw.continuity',
   extractionRuns: 'lw.extractionRuns',
+  references: 'lw.references',
+  skillBank: 'lw.skillBank',
+  skillTrees: 'lw.skillTrees',
 };
 
 // ─── Safe wrappers ────────────────────────────────────────────────────
@@ -128,7 +131,8 @@ export async function loadAllFromDB() {
     profileRaw, uiRaw, books, cast, places, threads, items, voices,
     nodes, edges, mapState, noticingsRaw, reviewQueueRaw, snapshotsRaw,
     suggestionDrawerRaw, pendingInsertionsRaw, atlasSettingsRaw, regionsRaw,
-    continuityRaw, extractionRunsRaw,
+    continuityRaw, extractionRunsRaw, referencesRaw,
+    skillBankRaw, skillTreesRaw,
   ] = await Promise.all([
     dbGet(S.meta, META.profile),
     dbGet(S.meta, META.ui),
@@ -150,6 +154,9 @@ export async function loadAllFromDB() {
     dbGet(S.meta, META.regions),
     dbGet(S.meta, META.continuity),
     dbGet(S.meta, META.extractionRuns),
+    dbGet(S.meta, META.references),
+    dbGet(S.meta, META.skillBank),
+    dbGet(S.meta, META.skillTrees),
   ]);
 
   const profile = { ...EMPTY_PROFILE, ...(profileRaw?.data || profileRaw || {}) };
@@ -230,6 +237,9 @@ export async function loadAllFromDB() {
     regions: regionsRaw?.data || [],
     continuity: continuityRaw?.data || { findings: [], lastScanAt: null },
     extractionRuns: extractionRunsRaw?.data || {},
+    references: Array.isArray(referencesRaw?.data) ? referencesRaw.data : [],
+    skillBank: Array.isArray(skillBankRaw?.data) ? skillBankRaw.data : [],
+    skillTrees: Array.isArray(skillTreesRaw?.data) ? skillTreesRaw.data : [],
     reviewQueue: reviewQueueRaw?.data || [],
     snapshots: snapshotsRaw?.data || [],
     feedback: [],
@@ -293,6 +303,18 @@ export async function persistSlice(slice, prev, next) {
   }
   if (slice === 'regions') {
     await dbPut(S.meta, { id: META.regions, data: next || [] });
+    return;
+  }
+  if (slice === 'references') {
+    await dbPut(S.meta, { id: META.references, data: Array.isArray(next) ? next : [] });
+    return;
+  }
+  if (slice === 'skillBank') {
+    await dbPut(S.meta, { id: META.skillBank, data: Array.isArray(next) ? next : [] });
+    return;
+  }
+  if (slice === 'skillTrees') {
+    await dbPut(S.meta, { id: META.skillTrees, data: Array.isArray(next) ? next : [] });
     return;
   }
   if (slice === 'continuity') {

@@ -126,6 +126,11 @@ export function emptyState() {
     threads: [],              // legacy alias; persistence migrates to quests.
     items: [],
     skills: [],
+    // (NEW) Skill bank — confirmed individual skills (drag-source for trees).
+    skillBank: [],
+    // (NEW) Skill trees — multi-tree array; characters reference by id.
+    //   { id, name, color, description, nodes: [...], edges: [{from, to}] }
+    skillTrees: [],
     stats: [],
     statCatalog: [],          // [{key, description, max}] custom stats
     relationships: [],
@@ -152,6 +157,11 @@ export function emptyState() {
     extractionRuns: {},       // { [chapterId]: { ranAt, findings, deepPassRan } }
     reviewQueue: [],            // (NEW) autonomous-pipeline findings awaiting review
     autonomousJobs: [],         // (NEW) ephemeral; running pipeline jobs
+    // (NEW) reference manager — uploaded docs the writer wants the AI to use
+    // as worldbuilding / style / lore source material. Each entry:
+    //   { id, name, label, category, paragraphs[], importedAt, sizeBytes,
+    //     sourceKind: 'upload'|'paste', linkedTo: { sectionIds[], characterIds[] } }
+    references: [],
     snapshots: [],
     feedback: [],
     _loading: true,

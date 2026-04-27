@@ -11,6 +11,7 @@ import { itemById, characterById, chapterList, derivedStats, itemTotalMods, acti
 import CraftWizard from '../../items/CraftWizard';
 import Catalog from '../../items/Catalog';
 import SpecialistChat from '../../specialist/SpecialistChat';
+import QueuePanel from '../../review-queue/QueuePanel';
 
 const RARITIES = ['common', 'magic', 'rare', 'legendary', 'unique', 'mythic'];
 const RARITY_COLOR = {
@@ -71,6 +72,8 @@ export default function ItemsPanel({ onClose }) {
           textTransform: 'uppercase', fontWeight: 600,
         }}>✦ Forge</button>
       </div>
+
+      <QueuePanel domain="items" accent={PANEL_ACCENT.items} title="Items review queue" />
 
       {tab === 'bank' && (
         <BankView t={t} store={store} sel={sel} select={select} addItem={addItem} item={item} />

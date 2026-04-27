@@ -17,6 +17,7 @@ const PANELS = [
   { id: 'continuity', label: 'Continuity', icon: 'flag',    accent: PANEL_ACCENT.atlas },
   { id: 'interview',  label: 'Interview',  icon: 'chat',    accent: PANEL_ACCENT.cast },
   { id: 'groupchat',  label: 'Round table', icon: 'users',  accent: PANEL_ACCENT.cast },
+  { id: 'references', label: 'References', icon: 'book',    accent: PANEL_ACCENT.loom },
 ];
 
 export default function LeftRail({ openPanels, onTogglePanel, onOpenPalette, onOpenWeaver, onOpenAid }) {

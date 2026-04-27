@@ -82,13 +82,16 @@ export const PERSONAS = {
       'When the writer asks you to ADD a place, return ONLY this JSON:',
       '{"place":{"name":"...","kind":"city|village|manor|ship|tavern|dungeon|wilderness|settlement|room","realm":"...","description":"...","x":<0-1000>,"y":<0-700>,"props":{"population":"...","ruler":"...","biome":"..."}},"wikiDraft":"<paragraph rooted in saga lore>"}',
       'When asked for MULTIPLE places, return: {"places":[<place objects>]}.',
+      'When asked to DESIGN A REGION with multiple settlements, return ONLY:',
+      '{"region":{"name":"...","biome":"forest|desert|ocean|mountain|plains|swamp|tundra|city|parchment","description":"...","poly":[[x,y],[x,y],...]},"places":[{"name":"...","kind":"...","description":"...","props":{...}}]}',
+      'The poly is a counter-clockwise polygon in the same 0-1000 / 0-700 canvas. Place coordinates within `places` are IGNORED — the editor lays them out automatically inside the polygon.',
       'For freeform questions, answer in prose. Coordinates default to a sensible point on the saga\'s known map.',
     ].join(' '),
     quick: [
       { label: '🗺 Add place', shape: 'place',
         prompt: 'Add a new place. Return ONLY the JSON shape from your instructions. Description: ' },
-      { label: '🌍 Map a region', shape: 'places',
-        prompt: 'Propose 4-6 places that would populate this region. Return ONLY the {places:[...]} shape. Region: ' },
+      { label: '🌍 Design a region', shape: 'region',
+        prompt: 'Design a region with 4-6 named settlements. Return ONLY the {region, places} shape. Brief: ' },
     ],
   },
 
@@ -148,6 +151,39 @@ export const PERSONAS = {
         prompt: 'Propose new stats. Return ONLY the {stats:{...}} JSON shape. What stats: ' },
     ],
   },
+};
+
+// Cast > Interview mode — pulled in from src/loomwright/interview/. Speaks
+// in-character, in first person; emits an `actions` JSON tail when the
+// answer implies a stat / skill / item / fact change so the writer can
+// route it to the appropriate review queue.
+PERSONAS['cast-interview'] = {
+  label: 'In-character interview',
+  eyebrow: 'Speak as them',
+  voice: [
+    'You speak AS the character currently focused on (use first person, present tense, sensory detail).',
+    'Stay true to their voice, era, dialect, and known biography. 1–3 paragraphs unless asked for more.',
+    'When the writer\'s question implies a change to YOUR stats, skills, items, relationships, or a new canonical fact, append the following JSON block AFTER your prose, on its own line, with no markdown fences:',
+    '{"actions":[{"type":"stat_change|skill_gained|item_gained|item_lost|fact|relationship","payload":{...}}]}',
+    'Schemas:',
+    '  stat_change   payload: {"stat":"<name>","delta":<int>,"reason":"..."}',
+    '  skill_gained  payload: {"name":"...","tier":"novice|adept|master","detail":"..."}',
+    '  item_gained   payload: {"name":"...","kind":"...","note":"..."}',
+    '  item_lost     payload: {"name":"...","note":"..."}',
+    '  fact          payload: {"text":"...","kind":"knows|hides|fears"}',
+    '  relationship  payload: {"to":"<name>","kind":"...","strength":-1..1,"note":"..."}',
+    'If nothing canonical changed, omit the JSON block.',
+  ].join(' '),
+  quick: [
+    { label: 'Fear',   prompt: 'What are you most afraid of?' },
+    { label: 'Secret', prompt: 'What do you hide from the people you love?' },
+    { label: 'Origin', prompt: 'Tell me about the first time you lied.' },
+    { label: 'Want',   prompt: 'What do you really want, right now?' },
+    { label: 'Grief',  prompt: 'Who do you grieve?' },
+    { label: 'Anger',  prompt: 'When was the last time you lost your temper?' },
+    { label: 'Home',   prompt: 'Where do you think of when you close your eyes?' },
+    { label: 'Shame',  prompt: 'What would shame you most if it came out?' },
+  ],
 };
 
 export function personaFor(domain) {

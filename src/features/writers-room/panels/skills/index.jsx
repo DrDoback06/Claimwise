@@ -10,6 +10,7 @@ import { useStore } from '../../store';
 import { generateTree } from '../../skills/treeService';
 import { ensureWikiEntry } from '../../wiki/service';
 import SpecialistChat from '../../specialist/SpecialistChat';
+import QueuePanel from '../../review-queue/QueuePanel';
 import { dragEntity } from '../../drag';
 
 const TIERS = ['novice', 'adept', 'master', 'unique'];
@@ -219,6 +220,8 @@ export default function SkillsPanel({ onClose }) {
       panelId="skills"
       onClose={onClose}
       width={520}>
+      <QueuePanel domain="skills" accent={PANEL_ACCENT.items} title="Skills review queue" />
+      <SkillBank store={store} t={t} />
       <div style={{
         padding: '8px 12px', borderBottom: `1px solid ${t.rule}`,
         display: 'flex', gap: 6, alignItems: 'center',
@@ -615,4 +618,139 @@ function iconBtnSk(t) {
     color: t.ink2, cursor: 'pointer',
     fontFamily: t.mono, fontSize: 13, lineHeight: 1, padding: 0,
   };
+}
+
+// Skill bank — confirmed individual skills (not yet placed in any tree).
+// Drag a chip onto any character's Skills tab or onto the tree canvas to
+// commit the skill there. Migrates legacy `skills[]` items into the bank
+// the first time the section opens (preserving the visual tree above).
+function SkillBank({ store, t }) {
+  const bank = store.skillBank || [];
+  const trees = store.skillTrees || [];
+  const [open, setOpen] = React.useState(true);
+  const [name, setName] = React.useState('');
+
+  const addToBank = () => {
+    if (!name.trim()) return;
+    const id = `skb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    store.setSlice('skillBank', xs => [
+      ...(Array.isArray(xs) ? xs : []),
+      { id, name: name.trim(), tier: 'novice', description: '', createdAt: Date.now() },
+    ]);
+    setName('');
+  };
+
+  const removeFromBank = (id) => {
+    store.setSlice('skillBank', xs => (xs || []).filter(s => s.id !== id));
+  };
+
+  const newTree = () => {
+    const id = `tr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    store.setSlice('skillTrees', xs => [
+      ...(Array.isArray(xs) ? xs : []),
+      { id, name: 'New tree', color: 'oklch(60% 0.13 80)', description: '', nodeIds: [], edges: [] },
+    ]);
+  };
+
+  return (
+    <div style={{ borderBottom: `1px solid ${t.rule}`, background: t.paper }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', padding: '8px 12px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          fontFamily: t.mono, fontSize: 9, color: t.ink2,
+          letterSpacing: 0.16, textTransform: 'uppercase',
+        }}>
+        <span style={{ color: t.accent }}>{open ? '▾' : '▸'}</span>
+        <span>Skill bank · {bank.length}</span>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3 }}>
+          {trees.length} tree{trees.length === 1 ? '' : 's'}
+        </span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 12px 12px' }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addToBank(); }}
+              placeholder="New skill name"
+              style={{
+                flex: 1, padding: '4px 8px',
+                fontFamily: t.display, fontSize: 13, color: t.ink,
+                background: t.paper2, border: `1px solid ${t.rule}`, borderRadius: 1, outline: 'none',
+              }} />
+            <button onClick={addToBank} disabled={!name.trim()} style={{
+              padding: '4px 10px', background: t.accent, color: t.onAccent,
+              border: 'none', borderRadius: 1, cursor: 'pointer',
+              fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+              fontWeight: 600, opacity: name.trim() ? 1 : 0.5,
+            }}>+ Bank</button>
+            <button onClick={newTree} style={{
+              padding: '4px 10px', background: 'transparent', color: t.accent,
+              border: `1px dashed ${t.accent}`, borderRadius: 1, cursor: 'pointer',
+              fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+              fontWeight: 600,
+            }}>+ Tree</button>
+          </div>
+          {bank.length === 0 && (
+            <div style={{
+              padding: '10px 0',
+              fontFamily: t.display, fontSize: 12, color: t.ink3, fontStyle: 'italic', lineHeight: 1.5,
+            }}>
+              The bank is empty. Add skills above, route them via the
+              specialist (<code>@skills:</code>), or accept items from the
+              review queue. Bank skills can be dragged onto a character.
+            </div>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {bank.map(s => (
+              <div key={s.id}
+                draggable
+                onDragStart={e => {
+                  e.dataTransfer.setData('application/x-lw-bank-skill', s.id);
+                  e.dataTransfer.effectAllowed = 'copy';
+                }}
+                style={{
+                  padding: '3px 10px', background: t.paper2,
+                  border: `1px solid ${t.rule}`, borderRadius: 999,
+                  fontFamily: t.mono, fontSize: 10, color: t.ink2,
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  cursor: 'grab',
+                }}>
+                {s.name}
+                <button onClick={() => removeFromBank(s.id)} style={{
+                  background: 'transparent', border: 'none', color: t.ink3,
+                  cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1,
+                }}>×</button>
+              </div>
+            ))}
+          </div>
+          {trees.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{
+                fontFamily: t.mono, fontSize: 9, color: t.ink3,
+                letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 4,
+              }}>Trees</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {trees.map(tr => (
+                  <span key={tr.id} style={{
+                    padding: '3px 10px', borderRadius: 999,
+                    background: 'transparent', color: tr.color || t.accent,
+                    border: `1px solid ${tr.color || t.accent}`,
+                    fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+                  }}>
+                    {tr.name} · {(tr.nodeIds || []).length}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
