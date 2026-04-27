@@ -249,7 +249,7 @@ function QuestEditor({ quest }) {
         <span style={{ flex: 1 }} />
         <button onClick={trashQuest} style={{
           padding: '4px 10px', background: 'transparent',
-          color: t.bad || '#b33', border: `1px solid ${t.bad || '#b33}`,
+          color: t.bad || '#b33', border: `1px solid ${t.bad || '#b33'}`,
           borderRadius: 1, cursor: 'pointer',
           fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12, textTransform: 'uppercase',
         }}>Move to trash</button>
