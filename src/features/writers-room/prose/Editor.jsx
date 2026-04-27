@@ -40,45 +40,49 @@ function escapeHtml(s) {
 }
 
 // In-place squiggle wrapping: walk text nodes inside `paragraph`, replace
-// the first occurrence of each known proofread `quote` with a span. We do
-// not nest into existing wrappers (so entity spans stay clean).
+// each occurrence of every known proofread `quote` with a span. We do not
+// nest into existing wrappers (so entity spans and already-wrapped issue
+// spans stay clean).
 function wrapProofIssuesInPlace(paragraph, proofMap) {
-  // First strip any stale squiggle spans we previously placed.
+  if (!paragraph || !proofMap || proofMap.size === 0) return;
   unwrapProofIssues(paragraph);
-  const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT, {
-    acceptNode(n) {
-      // Skip text inside an entity span or an existing proof span.
-      if (n.parentElement?.closest('[data-lw-proof-issue], [data-lw-entity-id]')) {
-        return NodeFilter.FILTER_REJECT;
+  // Re-run the walker after each mutation. The walker filter rejects text
+  // inside existing proof / entity spans, so wrapped quotes are not
+  // re-visited. Cap iterations as a safety belt.
+  for (let pass = 0; pass < 200; pass++) {
+    const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) {
+        if (n.parentElement?.closest('[data-lw-proof-issue], [data-lw-entity-id]')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    let mutated = false;
+    let node;
+    outer: while ((node = walker.nextNode())) {
+      const text = node.nodeValue;
+      for (const [quote, info] of proofMap) {
+        if (!quote) continue;
+        const idx = text.indexOf(quote);
+        if (idx < 0) continue;
+        const before = text.slice(0, idx);
+        const after = text.slice(idx + quote.length);
+        const span = document.createElement('span');
+        span.setAttribute('data-lw-proof-issue', '1');
+        span.setAttribute('data-lw-proof-kind', info.kind || 'spelling');
+        span.setAttribute('title', info.label || 'Issue');
+        span.textContent = quote;
+        const parent = node.parentNode;
+        parent.insertBefore(document.createTextNode(before), node);
+        parent.insertBefore(span, node);
+        parent.insertBefore(document.createTextNode(after), node);
+        parent.removeChild(node);
+        mutated = true;
+        break outer;
       }
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-  const nodes = [];
-  let n;
-  while ((n = walker.nextNode())) nodes.push(n);
-  for (const node of nodes) {
-    let text = node.nodeValue;
-    for (const [quote, info] of proofMap) {
-      const idx = text.indexOf(quote);
-      if (idx < 0) continue;
-      const before = text.slice(0, idx);
-      const after = text.slice(idx + quote.length);
-      const span = document.createElement('span');
-      span.setAttribute('data-lw-proof-issue', '1');
-      span.setAttribute('data-lw-proof-kind', info.kind || 'spelling');
-      span.setAttribute('title', info.label || 'Issue');
-      span.textContent = quote;
-      const beforeNode = document.createTextNode(before);
-      const afterNode = document.createTextNode(after);
-      const parent = node.parentNode;
-      parent.insertBefore(beforeNode, node);
-      parent.insertBefore(span, node);
-      parent.insertBefore(afterNode, node);
-      parent.removeChild(node);
-      // Restart with the trailing text node so we don't infinite-loop.
-      return wrapProofIssuesInPlace(paragraph, proofMap);
     }
+    if (!mutated) return;
   }
 }
 

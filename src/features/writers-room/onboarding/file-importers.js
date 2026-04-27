@@ -4,10 +4,12 @@ import mammoth from 'mammoth';
 import * as pdfjs from 'pdfjs-dist';
 import JSZip from 'jszip';
 
-// Configure pdfjs worker for CRA: use the CDN-hosted worker matching our version.
+// Configure pdfjs worker for CRA: serve the worker from /public/ so it
+// always matches the installed pdfjs-dist version. The cdnjs CDN doesn't
+// host every pdf.js patch release, so version-pinned CDN URLs 404.
 if (typeof window !== 'undefined' && pdfjs.GlobalWorkerOptions) {
   try {
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+    pdfjs.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.min.mjs`;
   } catch {}
 }
 
