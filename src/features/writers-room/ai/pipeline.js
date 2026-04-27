@@ -11,6 +11,7 @@ import { runExtractPass } from '../extraction/service';
 import { scanContinuity } from '../continuity/service';
 import { detectQuestProgress } from '../quests/service';
 import { bucket as bucketByConfidence } from './confidence';
+import { runDeepCharacterPass, runQuestInvolvementPass } from './deep-extract';
 
 const DEBOUNCE_MS = 2500;
 
@@ -103,9 +104,125 @@ async function runJob(store, chapterId) {
   } catch (err) {
     console.warn('[pipeline] quest detect failed', err?.message);
   }
+  if (cancelled.abort) { clearRunning(store, chapterId); return; }
+
+  // Deep character pass — appearances, stat changes, skill changes,
+  // relationship changes. Each finding routes to the appropriate review
+  // queue based on its kind so the writer can confirm in-context.
+  try {
+    markRunning(store, chapterId, 'deep-character');
+    const deep = await runDeepCharacterPass(store, chapterId);
+    if (cancelled.abort) return;
+    routeDeepFindings(store, chapterId, deep);
+  } catch (err) {
+    console.warn('[pipeline] deep-character failed', err?.message);
+  }
+  if (cancelled.abort) { clearRunning(store, chapterId); return; }
+
+  // Quest involvement pass — for each known active quest, decide which
+  // characters were involved in this chapter. High-confidence matches
+  // auto-attach to quest.characters; the rest go into the quests queue.
+  try {
+    markRunning(store, chapterId, 'quest-actors');
+    const quests = (store.quests || []).filter(q => q.active !== false).slice(0, 8);
+    for (const quest of quests) {
+      if (cancelled.abort) break;
+      const involved = await runQuestInvolvementPass(store, chapterId, quest);
+      if (cancelled.abort) break;
+      routeQuestInvolvement(store, chapterId, quest, involved);
+    }
+  } catch (err) {
+    console.warn('[pipeline] quest-actors failed', err?.message);
+  }
 
   inflight.delete(chapterId);
   clearRunning(store, chapterId);
+}
+
+// Convert deep-extract findings into review-queue items keyed by domain.
+function routeDeepFindings(store, chapterId, deep) {
+  const items = [];
+  for (const a of deep.appearances || []) {
+    if (!a.character) continue;
+    items.push({
+      kind: 'character',
+      status: a.resolved ? 'known' : 'new',
+      name: a.character,
+      resolvesTo: a.resolved?.id || null,
+      notes: a.firstMention ? 'First on-page appearance.' : 'Appears in this chapter.',
+      confidence: a.confidence ?? 0.7,
+      sourceType: 'appearance',
+    });
+  }
+  for (const s of deep.statChanges || []) {
+    if (!s.character || !s.stat) continue;
+    items.push({
+      kind: 'character',
+      status: 'known',
+      name: s.character,
+      resolvesTo: s.resolved?.id || null,
+      notes: `${s.stat} ${(s.delta ?? 0) >= 0 ? '+' : ''}${s.delta ?? '?'} — ${s.reason || ''}`.trim(),
+      confidence: s.confidence ?? 0.65,
+      sourceType: 'stat-change',
+      payload: { stat: s.stat, delta: s.delta, reason: s.reason },
+    });
+  }
+  for (const sk of deep.skillChanges || []) {
+    if (!sk.skill) continue;
+    items.push({
+      kind: 'skill',
+      status: 'new',
+      name: sk.skill,
+      notes: `${sk.action || 'gained'} by ${sk.character || '?'} (level ${sk.level || 1}) — ${sk.reason || ''}`.trim(),
+      confidence: sk.confidence ?? 0.7,
+      sourceType: 'skill-change',
+      payload: { character: sk.resolved?.id || sk.character, action: sk.action, level: sk.level },
+    });
+  }
+  for (const r of deep.relationshipChanges || []) {
+    if (!r.a || !r.b) continue;
+    items.push({
+      kind: 'relationship',
+      status: 'new',
+      name: `${r.a} ↔ ${r.b}`,
+      notes: `${r.kind || 'shift'}${typeof r.strength === 'number' ? ` (${r.strength.toFixed(1)})` : ''} — ${r.reason || ''}`,
+      confidence: r.confidence ?? 0.6,
+      sourceType: 'relationship-change',
+      payload: { a: r.resolvedA?.id || r.a, b: r.resolvedB?.id || r.b, kind: r.kind, strength: r.strength },
+    });
+  }
+  if (items.length) pushReview(store, chapterId, items, 'deep');
+}
+
+function routeQuestInvolvement(store, chapterId, quest, involved) {
+  if (!Array.isArray(involved) || involved.length === 0) return;
+  const HIGH = 0.8;
+  const auto = involved.filter(i => (i.confidence ?? 0) >= HIGH);
+  const suggest = involved.filter(i => (i.confidence ?? 0) < HIGH);
+
+  // Auto-attach high-confidence actors directly to the quest.
+  if (auto.length) {
+    store.setSlice('quests', qs => (qs || []).map(q => {
+      if (q.id !== quest.id) return q;
+      const cur = new Set(q.characters || []);
+      for (const i of auto) if (i.resolved?.id) cur.add(i.resolved.id);
+      return { ...q, characters: [...cur] };
+    }));
+  }
+
+  // Suggest the rest via the quests review queue.
+  if (suggest.length) {
+    pushReview(store, chapterId, suggest.map(i => ({
+      kind: 'quest',
+      status: 'known',
+      name: `${i.resolved?.name || i.character} → ${quest.name || quest.title}`,
+      resolvesTo: quest.id,
+      notes: `Possible involvement (${i.role || 'actor'}): ${i.reason || ''}`,
+      confidence: i.confidence ?? 0,
+      sourceType: 'quest-involvement',
+      payload: { questId: quest.id, characterId: i.resolved?.id || null, role: i.role },
+    })), 'deep');
+  }
 }
 
 // Public API: schedule a debounced run for a chapter id. If the writer

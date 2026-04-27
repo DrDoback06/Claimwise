@@ -4,6 +4,7 @@ import React from 'react';
 import { useTheme } from '../../../theme';
 import { useStore } from '../../../store';
 import { characterMetrics } from '../appearances';
+import { VoicePicker } from '../../../utilities/ReadAloud';
 
 export default function IdentityTab({ character: c, update }) {
   const t = useTheme();
@@ -37,6 +38,15 @@ export default function IdentityTab({ character: c, update }) {
       <div style={lbl}>Tags</div>
       <input style={inp} value={(c.traits || []).join(', ')}
         onChange={e => update({ traits: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} />
+
+      <div style={lbl}>Read-aloud voice</div>
+      <div style={{ marginTop: 4 }}>
+        <VoicePicker
+          value={c.readAloudVoiceId}
+          onChange={(v) => update({ readAloudVoiceId: v })}
+          label="Voice"
+        />
+      </div>
 
       <div style={{ marginTop: 18, padding: '10px 12px', background: t.paper2, borderLeft: `2px solid ${c.color || t.accent}`, borderRadius: 1 }}>
         <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 6 }}>

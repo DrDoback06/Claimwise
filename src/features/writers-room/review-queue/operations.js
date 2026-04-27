@@ -18,6 +18,14 @@ function patchQueueItem(setSlice, itemId, patch) {
   ));
 }
 
+function tierFor(level) {
+  const n = Number(level) || 1;
+  if (n >= 5) return 'unique';
+  if (n >= 4) return 'master';
+  if (n >= 2) return 'adept';
+  return 'novice';
+}
+
 function appendTimelineEvent(setSlice, event) {
   setSlice('timelineEvents', xs => [
     ...(Array.isArray(xs) ? xs : []),
@@ -50,6 +58,93 @@ export function commitQueueItem(store, itemId) {
   let createdEntityId = null;
 
   store.transaction(({ setSlice, get }) => {
+    // Deep-extract payload commits — these mutate an existing entity
+    // rather than creating a new one. Keep this branch first so it wins
+    // before the generic 'known' / 'new' branches.
+    if (item.sourceType === 'stat-change' && item.payload && item.resolvesTo) {
+      const { stat, delta, reason } = item.payload;
+      const charId = item.resolvesTo;
+      setSlice('cast', cs => (cs || []).map(c => {
+        if (c.id !== charId) return c;
+        const stats = { ...(c.stats || {}) };
+        stats[stat] = (stats[stat] || 0) + (Number(delta) || 0);
+        return { ...c, stats };
+      }));
+      appendTimelineEvent(setSlice, {
+        actorId: charId, eventType: 'stat_change', chapterId: item.chapterId,
+        data: { stat, delta, reason },
+      });
+      patchQueueItem(setSlice, itemId, { status: 'committed', resolvedAs: charId });
+      createdEntityId = charId;
+      return;
+    }
+    if (item.sourceType === 'skill-change' && item.payload) {
+      const { character, action, level } = item.payload;
+      const skillName = item.draft?.name || item.name;
+      const skillId = rid('skb');
+      // Push into skillBank for later tree placement.
+      setSlice('skillBank', xs => [
+        ...(Array.isArray(xs) ? xs : []),
+        { id: skillId, name: skillName, tier: tierFor(level), description: item.notes || '', createdAt: Date.now() },
+      ]);
+      // Stamp on the character as a personal skill too.
+      if (character) {
+        setSlice('cast', cs => (cs || []).map(c => {
+          if (c.id !== character) return c;
+          const personal = [...(c.personalSkills || c.skills || [])];
+          personal.push({ id: 'sk_' + Date.now(), k: skillName, lvl: level || 1, origin: action || 'gained', detail: item.notes || '' });
+          return { ...c, personalSkills: personal, skills: personal };
+        }));
+        appendTimelineEvent(setSlice, {
+          actorId: character, eventType: 'skill_acquired', chapterId: item.chapterId,
+          data: { skillName, action, level },
+        });
+      }
+      patchQueueItem(setSlice, itemId, { status: 'committed', resolvedAs: skillId });
+      createdEntityId = skillId;
+      return;
+    }
+    if (item.sourceType === 'relationship-change' && item.payload) {
+      const { a, b, kind, strength } = item.payload;
+      if (a && b) {
+        setSlice('cast', cs => (cs || []).map(c => {
+          if (c.id !== a) return c;
+          const rels = [...(c.relationships || [])];
+          const existing = rels.find(r => r.to === b);
+          if (existing) {
+            Object.assign(existing, { kind: kind || existing.kind, strength: strength ?? existing.strength });
+          } else {
+            rels.push({ to: b, kind: kind || 'connected', strength: strength ?? 0, note: item.notes });
+          }
+          return { ...c, relationships: rels };
+        }));
+        appendTimelineEvent(setSlice, {
+          actorId: a, eventType: 'relationship_change', chapterId: item.chapterId,
+          data: { other: b, kind, strength, reason: item.notes },
+        });
+      }
+      patchQueueItem(setSlice, itemId, { status: 'committed' });
+      return;
+    }
+    if (item.sourceType === 'quest-involvement' && item.payload) {
+      const { questId, characterId, role } = item.payload;
+      if (questId && characterId) {
+        setSlice('quests', qs => (qs || []).map(q => {
+          if (q.id !== questId) return q;
+          const cur = new Set(q.characters || []);
+          cur.add(characterId);
+          return { ...q, characters: [...cur] };
+        }));
+        appendTimelineEvent(setSlice, {
+          actorId: characterId, eventType: 'quest_involvement', chapterId: item.chapterId,
+          data: { questId, role },
+        });
+      }
+      patchQueueItem(setSlice, itemId, { status: 'committed', resolvedAs: questId });
+      createdEntityId = questId;
+      return;
+    }
+
     // 'known' findings are cross-chapter mentions of an existing entity →
     // record a timeline event rather than creating a duplicate.
     if (item.status === 'known' && item.resolvesTo) {

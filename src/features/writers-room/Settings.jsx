@@ -9,6 +9,7 @@ import DeveloperPanel from './devtools/DeveloperPanel';
 import aiService from '../../services/aiService';
 import { KEY_PROVIDERS } from './api-keys/providers';
 import AuthorsPanel from './authors/AuthorsPanel';
+import { VoicePicker } from './utilities/ReadAloud';
 
 const PROVIDERS = ['auto', 'anthropic', 'openai', 'gemini', 'groq', 'huggingface', 'offline'];
 const INTRUSION = ['quiet', 'medium', 'helpful', 'eager'];
@@ -128,6 +129,20 @@ export default function Settings({ onClose }) {
 
         <Section t={t} title="Authors & collaborators">
           <AuthorsPanel />
+        </Section>
+
+        <Section t={t} title="Read-aloud voices">
+          <p style={{ fontFamily: t.display, fontSize: 13, color: t.ink2, lineHeight: 1.5, marginTop: 0 }}>
+            The narrator voice handles all prose that isn't dialogue. Each
+            character can also have its own voice (set in Cast → Identity);
+            the read-aloud button in the top bar detects who's speaking
+            line-by-line.
+          </p>
+          <VoicePicker
+            value={store.book?.narratorVoiceId}
+            onChange={(v) => store.setPath('book.narratorVoiceId', v)}
+            label="Narrator"
+          />
         </Section>
 
         <Section t={t} title="Margin & ribbons">
