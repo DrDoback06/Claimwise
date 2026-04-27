@@ -10,6 +10,7 @@ import {
   EMPTY_BOOK, EMPTY_PROFILE, EMPTY_UI, DEFAULT_TWEAKS, SCHEMA_VERSION,
   EMPTY_SUGGESTION_PREFS, EMPTY_ATLAS_SETTINGS,
 } from './schema';
+import { projectScope, projectFilter, stampProject, getCurrentProjectId } from '../projects/projects';
 
 // Store names (mirroring database.js v22).
 export const S = {
@@ -50,24 +51,60 @@ const META = {
 };
 
 // ─── Safe wrappers ────────────────────────────────────────────────────
+//
+// Multi-saga: every entity-store record is filtered by `_projectId` on
+// read and stamped with the current project id on write. META records
+// have their key prefixed by `<projectId>:` so the same IDB keystore can
+// host many sagas without colliding.
 async function dbGetAll(store) {
-  try { await db.init(); return (await db.getAll(store)) || []; }
-  catch (e) { console.warn('[lw-persist] getAll', store, e?.message); return []; }
+  try {
+    await db.init();
+    const all = (await db.getAll(store)) || [];
+    return all.filter(projectFilter);
+  } catch (e) { console.warn('[lw-persist] getAll', store, e?.message); return []; }
 }
 async function dbGet(store, id, fallback = null) {
-  try { await db.init(); const r = await db.get(store, id); return r || fallback; }
-  catch (e) { console.warn('[lw-persist] get', store, id, e?.message); return fallback; }
+  try {
+    await db.init();
+    const scopedId = store === 'meta' ? projectScope(id) : id;
+    const r = await db.get(store, scopedId);
+    if (r) return r;
+    // Backwards-compat: legacy unprefixed META rows still resolve.
+    if (store === 'meta' && scopedId !== id) {
+      const legacy = await db.get(store, id);
+      if (legacy) return legacy;
+    }
+    return fallback;
+  } catch (e) { console.warn('[lw-persist] get', store, id, e?.message); return fallback; }
 }
 async function dbPut(store, record) {
-  try { await db.init(); await db.update(store, record); return record; }
-  catch (e) {
-    try { return await db.add(store, record); }
+  try {
+    await db.init();
+    let toWrite = record;
+    if (store === 'meta' && record?.id) {
+      toWrite = { ...record, id: projectScope(record.id) };
+    } else if (record && typeof record === 'object') {
+      toWrite = stampProject(record);
+    }
+    await db.update(store, toWrite);
+    return toWrite;
+  } catch (e) {
+    try {
+      let toWrite = record;
+      if (store === 'meta' && record?.id) toWrite = { ...record, id: projectScope(record.id) };
+      else if (record && typeof record === 'object') toWrite = stampProject(record);
+      return await db.add(store, toWrite);
+    }
     catch (e2) { console.warn('[lw-persist] put', store, e2?.message); return null; }
   }
 }
 async function dbDel(store, id) {
-  try { await db.init(); await db.delete(store, id); return true; }
-  catch (e) { console.warn('[lw-persist] del', store, id, e?.message); return false; }
+  try {
+    await db.init();
+    const scopedId = store === 'meta' ? projectScope(id) : id;
+    await db.delete(store, scopedId);
+    return true;
+  } catch (e) { console.warn('[lw-persist] del', store, id, e?.message); return false; }
 }
 
 // ─── Migrations ───────────────────────────────────────────────────────

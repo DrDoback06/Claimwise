@@ -8,6 +8,7 @@ import ReadAloud from './utilities/ReadAloud';
 import SelectionPill from './selection/SelectionPill';
 import ChapterStrip from './primitives/ChapterStrip';
 import { AuthorChip } from './authors/AuthorsPanel';
+import ProjectSwitcher from './projects/ProjectSwitcher';
 
 export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpenSettings, onOpenBible, onOpenHistory, onOpenProof, onOpenAid }) {
   const t = useTheme();
@@ -76,6 +77,7 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
       padding: '6px 12px', borderBottom: `1px solid ${t.rule}`,
       background: t.paper, height: 48, minWidth: 0, overflow: 'hidden',
     }}>
+      <ProjectSwitcher />
       {/* Left cluster — shrinkable, ellipsises when tight */}
       <div style={{
         display: 'flex', alignItems: 'baseline', gap: 6,

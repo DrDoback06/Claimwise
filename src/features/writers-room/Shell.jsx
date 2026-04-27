@@ -43,6 +43,7 @@ import ReferencesPanel from './panels/references';
 import SuggestionDrawer from './suggestions/SuggestionDrawer';
 import ExtractionWizard from './extraction/ExtractionWizard';
 import TodayPanel from './today/TodayPanel';
+import MobileTabBar from './MobileTabBar';
 
 const PANEL_COMPONENTS = {
   cast: CastPanel, atlas: AtlasPanel, quests: QuestsPanel, threads: QuestsPanel,
@@ -371,6 +372,13 @@ export default function Shell() {
         <ExtractionWizard
           chapterId={extractionFor}
           onClose={() => setExtractionFor(null)}
+        />
+      )}
+      {!focusMode && (
+        <MobileTabBar
+          openPanels={openPanels}
+          onTogglePanel={togglePanel}
+          onCloseAll={() => store.setPath('ui.panels', [])}
         />
       )}
     </div>
