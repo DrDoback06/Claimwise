@@ -7,6 +7,8 @@ import { useTheme, PANEL_ACCENT } from '../theme';
 import { useStore, createCharacter, createPlace, createThread, createItem } from '../store';
 import { suggest } from '../services/suggest';
 import { detectInParagraph } from '../services/marginExtract';
+import { getActiveAuthor } from '../authors/AuthorsPanel';
+import { rid } from '../store/mutators';
 
 const KIND_ACCENT = {
   character: PANEL_ACCENT.cast,
@@ -196,6 +198,9 @@ const MarginNoticings = React.forwardRef(function MarginNoticings({ onWalkThroug
       }}>
         Margin · {running ? 'listening…' : `${visible.length} noticing${visible.length === 1 ? '' : 's'}`}
       </div>
+
+      <AuthorNotesSection chapterId={activeId} />
+      <ContinuityFindingsSection chapterId={activeId} />
       {visible.length === 0 && !running && Object.values(detections).every(d => !d?.length) && (
         <div style={{
           fontFamily: t.display, fontSize: 13, color: t.ink3, fontStyle: 'italic',
@@ -338,6 +343,244 @@ function DetectionChip({ detection: d, t, onAdd, onDismiss }) {
       }}>×</button>
     </span>
   );
+}
+
+// AuthorNotesSection — chapter-level author-tagged notes pinned in the
+// margin. The active author tag (color + name) is auto-applied to any
+// new note. Notes survive across sessions in `store.marginNotes`.
+function AuthorNotesSection({ chapterId }) {
+  const t = useTheme();
+  const store = useStore();
+  const all = store.marginNotes || [];
+  const author = getActiveAuthor(store);
+  const authors = store.authors || [];
+  const notes = all.filter(n => n.chapterId === chapterId);
+  const [drafting, setDrafting] = React.useState(false);
+  const [text, setText] = React.useState('');
+
+  const authorById = (id) => authors.find(a => a.id === id);
+
+  const submit = () => {
+    if (!text.trim()) return;
+    const note = {
+      id: rid('note'),
+      chapterId,
+      authorId: author?.id || null,
+      text: text.trim(),
+      createdAt: Date.now(),
+      resolved: false,
+    };
+    store.setSlice('marginNotes', xs => [...(Array.isArray(xs) ? xs : []), note]);
+    setText('');
+    setDrafting(false);
+  };
+
+  const remove = (id) => {
+    store.setSlice('marginNotes', xs => (xs || []).filter(n => n.id !== id));
+  };
+  const toggleResolved = (id) => {
+    store.setSlice('marginNotes', xs => (xs || []).map(n =>
+      n.id === id ? { ...n, resolved: !n.resolved } : n));
+  };
+
+  if (!chapterId) return null;
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
+      }}>
+        <div style={{
+          fontFamily: t.mono, fontSize: 9, color: t.ink3,
+          letterSpacing: 0.16, textTransform: 'uppercase',
+        }}>Author notes · {notes.length}</div>
+        <span style={{ flex: 1 }} />
+        {!drafting && (
+          <button onClick={() => setDrafting(true)}
+            title={author ? `Add note as ${author.name}` : 'Add note'}
+            style={{
+              padding: '2px 8px', background: 'transparent',
+              color: author?.color || t.accent,
+              border: `1px dashed ${author?.color || t.accent}`,
+              borderRadius: 999, cursor: 'pointer',
+              fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+            }}>+ Note</button>
+        )}
+      </div>
+
+      {drafting && (
+        <div style={{
+          padding: 8, marginBottom: 8,
+          border: `1px solid ${author?.color || t.rule}`,
+          borderLeft: `3px solid ${author?.color || t.accent}`,
+          borderRadius: 2, background: t.paper2,
+        }}>
+          <div style={{
+            fontFamily: t.mono, fontSize: 9, color: t.ink3,
+            letterSpacing: 0.14, marginBottom: 4,
+          }}>as <b style={{ color: t.ink2 }}>{author?.name || 'Anonymous'}</b></div>
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit(); }}
+            placeholder="Note for this chapter…"
+            autoFocus
+            rows={3}
+            style={{
+              width: '100%', padding: '4px 6px', resize: 'vertical',
+              fontFamily: t.display, fontSize: 12, color: t.ink, lineHeight: 1.4,
+              background: t.paper, border: `1px solid ${t.rule}`, borderRadius: 1, outline: 'none',
+            }} />
+          <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button onClick={() => { setDrafting(false); setText(''); }} style={miniBtn(t)}>Cancel</button>
+            <button onClick={submit} disabled={!text.trim()} style={{
+              ...miniBtn(t), background: author?.color || t.accent, color: t.onAccent,
+              borderColor: author?.color || t.accent,
+              opacity: text.trim() ? 1 : 0.5,
+            }}>Save</button>
+          </div>
+        </div>
+      )}
+
+      {notes.map(n => {
+        const a = authorById(n.authorId);
+        return (
+          <div key={n.id} style={{
+            padding: 8, marginBottom: 6,
+            background: n.resolved ? 'transparent' : t.paper2,
+            border: `1px solid ${t.rule}`,
+            borderLeft: `3px solid ${a?.color || t.ink3}`,
+            borderRadius: 2,
+            opacity: n.resolved ? 0.5 : 1,
+            textDecoration: n.resolved ? 'line-through' : 'none',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+              <span style={{
+                fontFamily: t.mono, fontSize: 9, color: a?.color || t.ink3,
+                letterSpacing: 0.14, textTransform: 'uppercase', fontWeight: 600,
+              }}>{a?.name || 'Unknown'}</span>
+              <span style={{
+                fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.1,
+              }}>· {timeAgoShort(n.createdAt)}</span>
+              <span style={{ flex: 1 }} />
+              <button onClick={() => toggleResolved(n.id)}
+                title={n.resolved ? 'Reopen' : 'Mark resolved'}
+                style={{
+                  background: 'transparent', border: 'none', color: t.ink3,
+                  cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1,
+                }}>{n.resolved ? '↺' : '✓'}</button>
+              <button onClick={() => remove(n.id)} title="Delete" style={{
+                background: 'transparent', border: 'none', color: t.ink3,
+                cursor: 'pointer', padding: '0 4px', fontSize: 14, lineHeight: 1,
+              }}>×</button>
+            </div>
+            <div style={{ fontFamily: t.display, fontSize: 12, color: t.ink2, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+              {n.text}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ContinuityFindingsSection — pins all continuity findings (from the
+// extraction pipeline) that touch the active chapter into the right
+// margin. Click jumps the editor to the chapter+paragraph; severity
+// drives the color stripe.
+function ContinuityFindingsSection({ chapterId }) {
+  const t = useTheme();
+  const store = useStore();
+  const cont = store.continuity || { findings: [] };
+  const findings = (cont.findings || []).filter(f =>
+    (f.manuscriptLocations || []).some(loc => loc.chapterId === chapterId));
+
+  const sevColor = (sev) =>
+    sev === 'error' ? (t.bad || '#c44')
+    : sev === 'warn' ? (t.warn || '#d80')
+    : t.ink3;
+
+  const jump = (loc) => {
+    if (loc.chapterId && store.chapters?.[loc.chapterId]) {
+      store.setPath('ui.activeChapterId', loc.chapterId);
+      store.setPath('book.currentChapterId', loc.chapterId);
+    }
+    if (loc.paragraphId) {
+      store.setPath('ui.selection.paragraph', loc.paragraphId);
+      // Best-effort scroll: editor's paragraph elements expose
+      // data-paragraph-id; if present, scroll into view.
+      setTimeout(() => {
+        const el = document.querySelector(`[data-paragraph-id="${loc.paragraphId}"]`);
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 50);
+    }
+  };
+
+  if (findings.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{
+        fontFamily: t.mono, fontSize: 9, color: t.ink3,
+        letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 6,
+      }}>Continuity · {findings.length}</div>
+      {findings.map(f => {
+        const loc = (f.manuscriptLocations || [])[0] || { chapterId };
+        const color = sevColor(f.severity);
+        return (
+          <div key={f.id || f.description}
+            onClick={() => jump(loc)}
+            title="Click to jump to the chapter / paragraph"
+            style={{
+              padding: 8, marginBottom: 6, cursor: 'pointer',
+              border: `1px solid ${t.rule}`,
+              borderLeft: `3px solid ${color}`,
+              borderRadius: 2, background: t.paper2,
+              transition: 'background 120ms',
+            }}
+            onMouseOver={e => { e.currentTarget.style.background = t.paper; }}
+            onMouseOut={e => { e.currentTarget.style.background = t.paper2; }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+              <span style={{
+                padding: '1px 5px', background: color, color: t.onAccent,
+                fontFamily: t.mono, fontSize: 8, letterSpacing: 0.16, textTransform: 'uppercase',
+                borderRadius: 1,
+              }}>{f.severity || 'info'}</span>
+              {typeof f.confidence === 'number' && (
+                <span style={{
+                  fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.1,
+                }}>{Math.round(f.confidence * 100)}%</span>
+              )}
+            </div>
+            <div style={{ fontFamily: t.display, fontSize: 12, color: t.ink, lineHeight: 1.5 }}>
+              {f.description || f.text}
+            </div>
+            {f.suggestedFix && (
+              <div style={{
+                marginTop: 4, fontFamily: t.display, fontSize: 11, color: t.ink2,
+                fontStyle: 'italic', lineHeight: 1.5,
+              }}>↪ {f.suggestedFix}</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function miniBtn(t) {
+  return {
+    padding: '3px 10px', background: 'transparent', color: t.ink2,
+    border: `1px solid ${t.rule}`, borderRadius: 1, cursor: 'pointer',
+    fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+  };
+}
+function timeAgoShort(ms) {
+  const d = Date.now() - ms;
+  if (d < 60_000) return 'now';
+  if (d < 3600_000) return Math.round(d / 60_000) + 'm';
+  if (d < 86_400_000) return Math.round(d / 3600_000) + 'h';
+  return Math.round(d / 86_400_000) + 'd';
 }
 
 export default MarginNoticings;

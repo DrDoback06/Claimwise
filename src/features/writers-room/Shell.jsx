@@ -25,6 +25,7 @@ import VersionHistory from './utilities/VersionHistory';
 import aiService from '../../services/aiService';
 import { shouldAutoSnapshot, makeSnapshot, pushSnapshot } from './utilities/snapshots';
 import { scheduleAutonomousRun, clearAllRuns } from './ai/pipeline';
+import { ensureDefaultAuthor } from './authors/AuthorsPanel';
 
 import CastPanel from './panels/cast';
 import AtlasPanel from './panels/atlas';
@@ -41,6 +42,7 @@ import ContinuityPanel from './panels/continuity';
 import ReferencesPanel from './panels/references';
 import SuggestionDrawer from './suggestions/SuggestionDrawer';
 import ExtractionWizard from './extraction/ExtractionWizard';
+import TodayPanel from './today/TodayPanel';
 
 const PANEL_COMPONENTS = {
   cast: CastPanel, atlas: AtlasPanel, quests: QuestsPanel, threads: QuestsPanel,
@@ -81,6 +83,13 @@ export default function Shell() {
     const order = store.book?.chapterOrder || [];
     if (order.length === 0) createChapter(store, { title: 'Chapter 1', text: '' });
   }, [store._loading, store.profile?.onboarded]);
+
+  // Seed a default author so margin notes always have someone to attribute to.
+  React.useEffect(() => {
+    if (store._loading) return;
+    if (!store.profile?.onboarded) return;
+    ensureDefaultAuthor(store);
+  }, [store._loading, store.profile?.onboarded, store.authors?.length]);
 
   // Push any persisted API keys back into the legacy aiService so the
   // writing aid / proofreader / interview can reach the chosen provider
@@ -288,6 +297,14 @@ export default function Shell() {
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenWeaver={() => setWeaverOpen(true)}
           onOpenAid={() => setAidOpen(true)}
+          todayOpen={!!store.ui?.todayOpen}
+          onToggleToday={() => store.setPath('ui.todayOpen', !store.ui?.todayOpen)}
+        />
+      )}
+      {!focusMode && store.ui?.todayOpen && (
+        <TodayPanel
+          onOpenPanel={ensurePanelOpen}
+          onClose={() => store.setPath('ui.todayOpen', false)}
         />
       )}
       <div className="lw-center">

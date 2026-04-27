@@ -45,6 +45,8 @@ const META = {
   references: 'lw.references',
   skillBank: 'lw.skillBank',
   skillTrees: 'lw.skillTrees',
+  authors: 'lw.authors',
+  marginNotes: 'lw.marginNotes',
 };
 
 // ─── Safe wrappers ────────────────────────────────────────────────────
@@ -132,7 +134,7 @@ export async function loadAllFromDB() {
     nodes, edges, mapState, noticingsRaw, reviewQueueRaw, snapshotsRaw,
     suggestionDrawerRaw, pendingInsertionsRaw, atlasSettingsRaw, regionsRaw,
     continuityRaw, extractionRunsRaw, referencesRaw,
-    skillBankRaw, skillTreesRaw,
+    skillBankRaw, skillTreesRaw, authorsRaw, marginNotesRaw,
   ] = await Promise.all([
     dbGet(S.meta, META.profile),
     dbGet(S.meta, META.ui),
@@ -157,6 +159,8 @@ export async function loadAllFromDB() {
     dbGet(S.meta, META.references),
     dbGet(S.meta, META.skillBank),
     dbGet(S.meta, META.skillTrees),
+    dbGet(S.meta, META.authors),
+    dbGet(S.meta, META.marginNotes),
   ]);
 
   const profile = { ...EMPTY_PROFILE, ...(profileRaw?.data || profileRaw || {}) };
@@ -240,6 +244,8 @@ export async function loadAllFromDB() {
     references: Array.isArray(referencesRaw?.data) ? referencesRaw.data : [],
     skillBank: Array.isArray(skillBankRaw?.data) ? skillBankRaw.data : [],
     skillTrees: Array.isArray(skillTreesRaw?.data) ? skillTreesRaw.data : [],
+    authors: Array.isArray(authorsRaw?.data) ? authorsRaw.data : [],
+    marginNotes: Array.isArray(marginNotesRaw?.data) ? marginNotesRaw.data : [],
     reviewQueue: reviewQueueRaw?.data || [],
     snapshots: snapshotsRaw?.data || [],
     feedback: [],
@@ -315,6 +321,14 @@ export async function persistSlice(slice, prev, next) {
   }
   if (slice === 'skillTrees') {
     await dbPut(S.meta, { id: META.skillTrees, data: Array.isArray(next) ? next : [] });
+    return;
+  }
+  if (slice === 'authors') {
+    await dbPut(S.meta, { id: META.authors, data: Array.isArray(next) ? next : [] });
+    return;
+  }
+  if (slice === 'marginNotes') {
+    await dbPut(S.meta, { id: META.marginNotes, data: Array.isArray(next) ? next : [] });
     return;
   }
   if (slice === 'continuity') {

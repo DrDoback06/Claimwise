@@ -99,6 +99,11 @@ export const EMPTY_UI = {
   dossierOpen: {},            // { [charId]: { stats: bool, skills: bool, … } }
   // (NEW) suggestion drawer
   suggestionsOpen: false,     // is the right rail visible
+  // (NEW) which author is currently making margin notes / inline comments
+  activeAuthorId: null,
+  // (NEW) the Today page mounts on the LEFT side (vs panels which stack
+  // on the right). Tracks visibility independently.
+  todayOpen: false,
 };
 
 // (NEW) Suggestion engine preferences. Living on `profile` because it's
@@ -131,6 +136,14 @@ export function emptyState() {
     // (NEW) Skill trees — multi-tree array; characters reference by id.
     //   { id, name, color, description, nodes: [...], edges: [{from, to}] }
     skillTrees: [],
+    // (NEW) Authors — writer + collaborators. Margin notes / inline comments
+    // are tagged with `authorId` so a writers room with an editor + a beta
+    // reader can see who said what.
+    //   { id, name, color, role: 'author'|'editor'|'beta', addedAt }
+    authors: [],
+    // (NEW) Margin notes — author-tagged comments anchored to a paragraph.
+    //   { id, chapterId, paragraphId?, authorId, text, createdAt, resolved? }
+    marginNotes: [],
     stats: [],
     statCatalog: [],          // [{key, description, max}] custom stats
     relationships: [],

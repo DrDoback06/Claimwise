@@ -7,6 +7,7 @@ import Icon from './entities/Icon';
 import ReadAloud from './utilities/ReadAloud';
 import SelectionPill from './selection/SelectionPill';
 import ChapterStrip from './primitives/ChapterStrip';
+import { AuthorChip } from './authors/AuthorsPanel';
 
 export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpenSettings, onOpenBible, onOpenHistory, onOpenProof, onOpenAid }) {
   const t = useTheme();
@@ -20,6 +21,21 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
   const activeId = store.ui?.activeChapterId || book?.currentChapterId;
   const activeIdx = order.indexOf(activeId);
   const activeCh = activeId ? store.chapters?.[activeId] : null;
+
+  // Save indicator — reflects the most recent edit + persistence cycle.
+  // The store auto-persists 400ms after a change; we show "Saving…" while
+  // a recent edit is within that window, otherwise "Saved · 2m ago".
+  const lastEdit = activeCh?.lastEdit || 0;
+  const [now, setNow] = React.useState(Date.now());
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const sinceEdit = now - lastEdit;
+  const saving = lastEdit > 0 && sinceEdit < 800;
+  const saveLabel = !lastEdit ? '—'
+    : saving ? 'Saving…'
+    : 'Saved ' + relTime(sinceEdit);
 
   const jump = (idx) => {
     const id = order[idx];
@@ -88,6 +104,7 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
 
       {/* Selection pill — always rightmost-content. */}
       <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <AuthorChip onClickSettings={onOpenSettings} />
         <SelectionPill />
         {runningJobs.length > 0 && (
           <span title={`Pipeline running: ${runningJobs.map(j => j.label).join(' · ')}`}
@@ -153,6 +170,26 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
         ))}
       </div>
 
+      {/* Save indicator — clickable, opens version history. */}
+      <button
+        onClick={onOpenHistory}
+        title="Click to view version history"
+        style={{
+          padding: '2px 8px', borderRadius: 999,
+          background: 'transparent',
+          color: saving ? (t.warn || '#d80') : t.ink3,
+          border: `1px solid ${t.rule}`,
+          fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
+          whiteSpace: 'nowrap', flex: '0 0 auto', cursor: 'pointer',
+        }}>
+        <span style={{
+          display: 'inline-block', width: 6, height: 6, borderRadius: 999,
+          background: saving ? (t.warn || '#d80') : (t.good || '#2a8'),
+          marginRight: 6, verticalAlign: 1,
+        }} />
+        {saveLabel}
+      </button>
+
       {/* Word counter — drops out at narrow widths via overflow hidden on header. */}
       <span style={{
         fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.12,
@@ -160,5 +197,12 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
       }}>{book.wordsToday || 0}/{book.target || 0}·{book.streak || 0}🔥</span>
     </header>
   );
+}
+
+function relTime(ms) {
+  if (ms < 60_000) return 'just now';
+  if (ms < 3600_000) return Math.round(ms / 60_000) + 'm ago';
+  if (ms < 86_400_000) return Math.round(ms / 3600_000) + 'h ago';
+  return Math.round(ms / 86_400_000) + 'd ago';
 }
 

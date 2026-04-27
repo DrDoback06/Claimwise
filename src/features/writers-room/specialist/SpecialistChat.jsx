@@ -89,6 +89,16 @@ export default function SpecialistChat({ domain, accent, entityId }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [open, messages.length, busy]);
 
+  // Pre-staged drafts from the Today panel (interview cues etc) seed the
+  // input box so the writer can edit before sending.
+  React.useEffect(() => {
+    const draft = store.ui?.specialistDraft?.[historyKey];
+    if (!draft) return;
+    setInput(draft);
+    setOpen(true);
+    store.setPath(`ui.specialistDraft.${historyKey}`, '');
+  }, [historyKey, store.ui?.specialistDraft]);
+
   const setHistory = (next) =>
     store.setPath(`ui.specialistHistory.${historyKey}`,
       typeof next === 'function' ? next(messages) : next);

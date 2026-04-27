@@ -8,6 +8,7 @@ import { isDevMode } from './devtools/dev-mode';
 import DeveloperPanel from './devtools/DeveloperPanel';
 import aiService from '../../services/aiService';
 import { KEY_PROVIDERS } from './api-keys/providers';
+import AuthorsPanel from './authors/AuthorsPanel';
 
 const PROVIDERS = ['auto', 'anthropic', 'openai', 'gemini', 'groq', 'huggingface', 'offline'];
 const INTRUSION = ['quiet', 'medium', 'helpful', 'eager'];
@@ -123,6 +124,10 @@ export default function Settings({ onClose }) {
 
         <Section t={t} title="API keys & integrations">
           <ApiKeys t={t} store={store} />
+        </Section>
+
+        <Section t={t} title="Authors & collaborators">
+          <AuthorsPanel />
         </Section>
 
         <Section t={t} title="Margin & ribbons">

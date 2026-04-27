@@ -39,13 +39,22 @@ export default function ContinuityPanel({ onClose }) {
   const dismiss = (id) =>
     setContinuity(c => ({ ...c, findings: (c.findings || []).filter(f => f.id !== id) }));
 
-  const accept = (f) => {
-    // Jump to the manuscript ref; if there's an activeChapterId, set it.
+  const jumpToFinding = (f) => {
     const ref = (f.manuscriptLocations || [])[0];
     if (ref?.chapterId) {
       store.setPath('ui.activeChapterId', ref.chapterId);
       store.setPath('book.currentChapterId', ref.chapterId);
     }
+    if (ref?.paragraphId) {
+      store.setPath('ui.selection.paragraph', ref.paragraphId);
+      setTimeout(() => {
+        const el = document.querySelector(`[data-paragraph-id="${ref.paragraphId}"]`);
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 50);
+    }
+  };
+  const accept = (f) => {
+    jumpToFinding(f);
     // Mark as accepted via dismissal (full per-fix tracked-change pipeline is Tier 3).
     dismiss(f.id);
   };

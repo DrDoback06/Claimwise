@@ -345,6 +345,43 @@ export default function Onboarding({ onDone }) {
             <p style={pStyle(t)}>Loomwright is your writers room. As you write, the manuscript becomes a living wiki of people, places, items, quests, and voices — surfaced quietly in the margins.</p>
             <p style={pStyle(t)}>The next 10 minutes are a one-time setup. The deeper your answers, the smarter the room is from day one. Anything you skip you can fill in later from Settings.</p>
             <p style={pStyle(t)}>The very first step wires up your AI keys — most are free, and nothing else here works without at least one.</p>
+            <div style={{
+              marginTop: 24, padding: 12,
+              background: t.paper2, border: `1px dashed ${t.rule}`, borderRadius: 2,
+            }}>
+              <div style={{
+                fontFamily: t.mono, fontSize: 9, color: t.ink3,
+                letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 6,
+              }}>In a hurry?</div>
+              <p style={{ ...pStyle(t), fontSize: 13, marginBottom: 8 }}>
+                Jump straight in with sensible defaults. You can fine-tune everything from Settings later — but the deeper your answers here, the smarter the room is from day one.
+              </p>
+              <button
+                onClick={async () => {
+                  const ok = window.confirm(
+                    "Skip the setup with defaults?\n\n" +
+                    "Going through the wizard genuinely makes the AI better at your specific saga — voice, world rules, pet peeves, references.\n\n" +
+                    "Skipping means generic prose suggestions until you fill these in from Settings later. Continue?"
+                  );
+                  if (!ok) return;
+                  const ok2 = window.confirm(
+                    "Final check: skip with defaults?\n\n" +
+                    "Click OK to begin with a blank Chapter 1 and default settings."
+                  );
+                  if (!ok2) return;
+                  // Clear file uploads so finish() takes the empty-room path.
+                  setData(d => ({ ...d, importedDocs: [], styleSamples: [] }));
+                  // Skip ahead to the final step; finish() will create
+                  // Chapter 1 and apply current state (mostly defaults).
+                  setStep(TOTAL - 1);
+                }}
+                style={{
+                  padding: '6px 14px', background: 'transparent', color: t.ink2,
+                  border: `1px solid ${t.rule}`, borderRadius: 2, cursor: 'pointer',
+                  fontFamily: t.mono, fontSize: 10, letterSpacing: 0.14,
+                  textTransform: 'uppercase',
+                }}>↷ Skip to defaults</button>
+            </div>
           </Section>
         )}
 
