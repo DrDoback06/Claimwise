@@ -10,7 +10,6 @@ import { dragEntity } from '../../drag';
 import { itemById, characterById, chapterList, derivedStats, itemTotalMods, activeRuneword } from '../../store/selectors';
 import CraftWizard from '../../items/CraftWizard';
 import Catalog from '../../items/Catalog';
-import SpecialistChat from '../../specialist/SpecialistChat';
 import QueuePanel from '../../review-queue/QueuePanel';
 import EntityImageButton from '../../images/EntityImageButton';
 
@@ -99,7 +98,6 @@ export default function ItemsPanel({ onClose }) {
       )}
       {tab === 'catalog' && <Catalog />}
 
-      <SpecialistChat domain="items" accent={PANEL_ACCENT.items} />
 
       {craftOpen && <CraftWizard onClose={() => setCraftOpen(false)} />}
     </PanelFrame>

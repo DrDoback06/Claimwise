@@ -12,7 +12,7 @@ import Editor from './prose/Editor';
 import MarginNoticings from './prose/MarginNoticings';
 import Tethers from './prose/Tethers';
 import CommandPalette from './CommandPalette';
-import InlineWeaver from './InlineWeaver';
+import EntityWeaveWizard from './entities/EntityWeaveWizard';
 import SummoningRing from './radial/SummoningRing';
 import WalkThroughWizard from './wizard/WalkThroughWizard';
 import Onboarding from './onboarding';
@@ -360,7 +360,7 @@ export default function Shell() {
       )}
 
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onAction={onAction} />}
-      {weaverOpen && <InlineWeaver onClose={() => setWeaverOpen(false)} onWalkThrough={onWalkThrough} />}
+      {weaverOpen && <EntityWeaveWizard onClose={() => setWeaverOpen(false)} />}
       {aidOpen && <WritingAid onClose={() => setAidOpen(false)} />}
       {proofOpen && <Proofreader onClose={() => setProofOpen(false)} />}
       {!focusMode && <WhatsNew onOpenAid={() => setAidOpen(true)} onOpenProof={() => setProofOpen(true)} />}

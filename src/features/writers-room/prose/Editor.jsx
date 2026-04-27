@@ -10,6 +10,7 @@ import { decorateText, buildKnownEntities } from './highlights';
 import { characterById } from '../store/selectors';
 import { localProofread } from '../utilities/proofread';
 import MentionPicker from './MentionPicker';
+import aiService from '../../../services/aiService';
 
 function parseParagraphsFromDOM(root) {
   if (!root) return [];
@@ -371,22 +372,18 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     e.preventDefault();
     const data = readDrop(e, MIME.ENTITY);
     if (!data) return;
-    let label = data.id;
-    if (data.kind === 'character') {
-      const c = (store.cast || []).find(x => x.id === data.id);
-      if (c) label = c.name;
-    } else if (data.kind === 'place') {
-      const p = (store.places || []).find(x => x.id === data.id);
-      if (p) label = p.name;
-    }
-    const sel2 = window.getSelection();
-    if (sel2?.rangeCount) {
-      const r = sel2.getRangeAt(0);
-      r.deleteContents();
-      r.insertNode(document.createTextNode(label));
-      r.collapse(false);
-    }
-    onInput();
+    const label = resolveEntityLabel(store, data);
+    const choice = window.prompt(
+      `Drop action for ${label}:\n` +
+      '1 = Write a new paragraph\n' +
+      '2 = Include in last paragraph\n' +
+      '3 = Include in this paragraph\n' +
+      '4 = Include in next paragraph',
+      '3'
+    );
+    const mode = String(choice || '3').trim();
+    const hostParagraph = e.target?.closest?.('[data-paragraph-id]') || null;
+    injectEntityParagraph({ ref, label, mode, hostParagraph, store, chapter: activeId, onInput });
   };
 
   const onDragOver = (e) => {
@@ -435,4 +432,65 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
       <MentionPicker editorRef={ref} />
     </>
   );
+}
+
+function resolveEntityLabel(store, data) {
+  if (!data?.id) return 'entity';
+  const map = {
+    character: store.cast || [],
+    place: store.places || [],
+    item: store.items || [],
+    quest: store.quests || [],
+    skill: store.skills || [],
+  };
+  const arr = map[data.kind] || [];
+  const hit = arr.find(x => x.id === data.id);
+  return hit?.name || hit?.title || data.id;
+}
+
+async function injectEntityParagraph({ ref, label, mode, hostParagraph, store, chapter, onInput }) {
+  const root = ref.current;
+  if (!root) return;
+  const makeParagraph = async () => {
+    const fallback = `【${label}】 enters the scene, reshaping the moment with immediate consequence.`;
+    try {
+      const prompt = `Write one short prose paragraph (40-80 words) that naturally includes this entity: ${label}. Return plain text only.`;
+      const raw = await aiService.callAI(prompt, 'creative', null, { useCache: false });
+      const text = String(raw || '').replace(/^```[a-z]*\n?/i, '').replace(/```$/i, '').trim();
+      return text || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const text = await makeParagraph();
+  const p = document.createElement('p');
+  p.dataset.paragraphId = `p_${Date.now().toString(36)}`;
+  p.textContent = text;
+  p.style.outline = '1px dashed rgba(212,146,82,0.7)';
+  p.style.outlineOffset = '2px';
+  setTimeout(() => {
+    p.style.outline = '';
+    p.style.outlineOffset = '';
+  }, 2200);
+
+  const paragraphs = [...root.children];
+  const hostIdx = hostParagraph ? paragraphs.indexOf(hostParagraph) : -1;
+  if (mode === '1' || hostIdx < 0) {
+    root.appendChild(p);
+  } else if (mode === '2') {
+    const target = paragraphs[Math.max(0, hostIdx - 1)] || paragraphs[paragraphs.length - 1];
+    if (target) target.textContent = `${target.textContent || ''} ${text}`.trim();
+    else root.appendChild(p);
+  } else if (mode === '4') {
+    const after = paragraphs[Math.min(paragraphs.length - 1, hostIdx + 1)];
+    if (after) after.insertAdjacentElement('afterend', p);
+    else root.appendChild(p);
+  } else {
+    const target = paragraphs[hostIdx] || null;
+    if (target) target.textContent = `${target.textContent || ''} ${text}`.trim();
+    else root.appendChild(p);
+  }
+  onInput?.();
+  try { store.setPath('ui.activeChapterId', chapter); } catch {}
 }

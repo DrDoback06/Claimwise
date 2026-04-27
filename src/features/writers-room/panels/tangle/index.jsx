@@ -2,7 +2,6 @@
 
 import React from 'react';
 import PanelFrame from '../PanelFrame';
-import SpecialistChat from '../../specialist/SpecialistChat';
 import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore } from '../../store';
 import { useSelection } from '../../selection';
@@ -225,7 +224,6 @@ export default function TanglePanel({ onClose }) {
           </div>
         )}
       </div>}
-      <SpecialistChat domain="tangle" accent={PANEL_ACCENT.tangle} />
     </PanelFrame>
   );
 }
