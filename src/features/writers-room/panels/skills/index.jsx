@@ -231,6 +231,41 @@ export default function SkillsPanel({ onClose }) {
           letterSpacing: 0.16, textTransform: 'uppercase',
         }}>{skills.length} nodes · shift-drag links</span>
         <span style={{ flex: 1 }} />
+        <button
+          disabled={skills.length === 0}
+          title="Snapshot the current canvas into a named tree (the canvas keeps editing the working set)"
+          onClick={() => {
+            const name = window.prompt('Name for this skill tree:', 'New tree');
+            if (!name) return;
+            const treeId = `tr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+            const nodeIds = skills.map(s => s.id);
+            const edges = [];
+            for (const target of skills) {
+              for (const fromId of (target.unlockReqs?.prereqIds || [])) {
+                edges.push({ from: fromId, to: target.id });
+              }
+            }
+            store.setSlice('skillTrees', xs => [
+              ...(Array.isArray(xs) ? xs : []),
+              {
+                id: treeId,
+                name,
+                color: 'oklch(60% 0.13 80)',
+                description: '',
+                nodeIds,
+                edges,
+                snapshotOf: skills.map(s => ({ ...s })),
+                createdAt: Date.now(),
+              },
+            ]);
+          }}
+          style={{
+            padding: '4px 10px', background: 'transparent', color: skills.length === 0 ? t.ink3 : t.accent,
+            border: `1px dashed ${skills.length === 0 ? t.rule : t.accent}`, borderRadius: 999,
+            cursor: skills.length === 0 ? 'not-allowed' : 'pointer',
+            fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14, textTransform: 'uppercase',
+            fontWeight: 600, opacity: skills.length === 0 ? 0.5 : 1,
+          }}>⌬ Save canvas → tree</button>
         <button onClick={() => setGenOpen(true)} style={{
           padding: '4px 10px', background: t.accent, color: t.onAccent,
           border: 'none', borderRadius: 999, cursor: 'pointer',

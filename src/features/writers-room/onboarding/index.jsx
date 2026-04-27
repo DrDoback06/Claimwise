@@ -296,7 +296,10 @@ export default function Onboarding({ onDone }) {
 
     // Kick off background extraction for every imported chapter that has
     // real content. The pipeline writes findings to `reviewQueue` per-tab.
-    if ((data.importedDocs || []).length > 0) {
+    // Guard: when extractionBudget === 'manual' (writer's choice), don't
+    // auto-fire — they can scan from the panels' "Re-scan" buttons.
+    const budget = data.extractionBudget || 'balanced';
+    if (budget !== 'manual' && (data.importedDocs || []).length > 0) {
       for (const c of chapterRecs) {
         if ((c.text || '').trim().length > 80) {
           try { scheduleAutonomousRun(store, c.id); } catch (err) {

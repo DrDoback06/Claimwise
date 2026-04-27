@@ -170,6 +170,17 @@ export default function Shell() {
       const chId = store.ui?.activeChapterId || store.book?.currentChapterId;
       if (chId) setExtractionFor(chId);
     }
+    if (actionId === 'rescan.all') {
+      const order = store.book?.chapterOrder || [];
+      let scheduled = 0;
+      for (const id of order) {
+        const ch = store.chapters?.[id];
+        if ((ch?.text || '').trim().length > 80) {
+          try { scheduleAutonomousRun(store, id); scheduled++; } catch {}
+        }
+      }
+      if (scheduled === 0) window.alert('No chapters with enough text to scan.');
+    }
     if (actionId === 'open.skills') ensurePanelOpen('skills');
     if (actionId === 'open.continuity') ensurePanelOpen('continuity');
     if (actionId === 'focus.toggle') store.setPath('ui.focusMode', !focusMode);

@@ -33,9 +33,13 @@ export default function CommandPalette({ onClose, onAction }) {
     { id: 'panel.quests', label: 'Open Quests' },
     { id: 'panel.voice', label: 'Open Voice' },
     { id: 'panel.items', label: 'Open Items' },
+    { id: 'panel.skills', label: 'Open Skills' },
+    { id: 'panel.references', label: 'Open References' },
     { id: 'panel.language', label: 'Open Language' },
     { id: 'panel.tangle', label: 'Open Tangle' },
     { id: 'open.weaver', label: 'Open the Weaver (⌘J)' },
+    { id: 'open.extraction', label: 'Re-scan this chapter (deep extraction)' },
+    { id: 'rescan.all', label: 'Re-scan all chapters in the background' },
     { id: 'focus.toggle', label: 'Toggle focus mode (F9)' },
     { id: 'theme.toggle', label: 'Toggle theme' },
   ].filter(a => !ql || a.label.toLowerCase().includes(ql));
