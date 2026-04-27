@@ -10,10 +10,15 @@ const SCHEMA = `{
     "lyricism": "plain" | "balanced" | "lyrical",
     "subordination": "low" | "medium" | "high"
   },
-  "voiceTics": string[],            // signature speech / prose tics; 3-8 entries
-  "voiceHooks": string[],           // characteristic openings / sentence shapes
+  "voiceTics": string[],            // 4-8 signature prose tics they actually do (or want to)
+  "voiceHooks": string[],           // 4-8 example opening sentences in this voice
   "narrativeDistance": "intimate" | "close" | "balanced" | "distant",
-  "comparableAuthors": string[]     // 1-5 writers whose voice you want to lean on
+  "comparableAuthors": string[],    // 1-5 writers the voice leans on
+  "rhythmExamples": string[],       // 3 example sentences showing the rhythm
+  "registerLevel": "conversational" | "literary" | "formal-baroque",
+  "metaphorPalette": string[],      // 4-8 source domains for imagery (e.g. "mining", "weaving", "ledgers")
+  "syntaxQuirks": string,           // 1-2 sentences on syntax habits the AI should mimic
+  "voiceDont": string[]             // 3-5 things this voice MUST NOT do
 }`;
 
 const SECTION = {
@@ -22,18 +27,32 @@ const SECTION = {
   referenceCategories: ['style'],
   prompt(state) {
     return [
-      'Seed the **Voice & style** section. Return ONLY this JSON:',
-      '',
+      `You are a voice coach. The novelist has set baseline preferences; expand them`,
+      `into a richly-specified voice fingerprint the AI writing assistant can mimic.`,
+      ``,
+      `Preserve their explicit picks. Generate concrete examples (rhythmExamples,`,
+      `voiceHooks) the AI can rhythm-match against later.`,
+      ``,
+      `Return ONLY this JSON:`,
+      ``,
       SCHEMA,
-      '',
-      'Guidance:',
-      '- voiceTics: short list — "uses semicolons heavily", "sensory openings",',
-      '  "sparse adjectives" etc',
-      '- voiceHooks: example openings the AI should mimic ("It began the way it always did.")',
-      '- comparableAuthors: real or fictional, but specific',
-      '',
-      'Style references currently uploaded:',
+      ``,
+      `--- Current state ---`,
+      `Genres: ${(state.genres || []).join(', ') || '(none)'}`,
+      `Tone: ${(state.tone || []).join(', ') || '(none)'}`,
+      `POV / tense: ${state.pov || '?'} / ${state.tense || '?'}`,
+      ``,
+      `Style references they uploaded:`,
       ((state.styleSamples || []).map(s => '• ' + s.name).join('\n') || '(none)'),
+      ``,
+      `Constraints:`,
+      `- "rhythmExamples" must be three FULL SENTENCES — not adjectives. They serve`,
+      `  as cadence templates the AI rhythm-matches.`,
+      `- "voiceHooks" are example opening sentences (not abstract patterns).`,
+      `- "voiceDont" is the prohibited zone — "no semicolons", "never use 'suddenly'",`,
+      `  "no internal monologue in dialogue scenes", etc.`,
+      `- "metaphorPalette" gives the AI source domains for imagery so all metaphors`,
+      `  feel of a piece.`,
     ].join('\n');
   },
   validate(parsed) {
@@ -54,6 +73,11 @@ const SECTION = {
       voiceHooks: parsed.voiceHooks ?? state.voiceHooks,
       narrativeDistance: parsed.narrativeDistance ?? state.narrativeDistance,
       comparableAuthors: parsed.comparableAuthors ?? state.comparableAuthors,
+      rhythmExamples: parsed.rhythmExamples ?? state.rhythmExamples,
+      registerLevel: parsed.registerLevel ?? state.registerLevel,
+      metaphorPalette: parsed.metaphorPalette ?? state.metaphorPalette,
+      syntaxQuirks: parsed.syntaxQuirks ?? state.syntaxQuirks,
+      voiceDont: parsed.voiceDont ?? state.voiceDont,
     };
   },
   required: ['chapterLength', 'dialogueStyle', 'descriptionDensity'],

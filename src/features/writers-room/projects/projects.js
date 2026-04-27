@@ -24,19 +24,15 @@ let _cached = null;
 
 export function getCurrentProjectId() {
   if (_cached) return _cached;
-  // URL takes priority — supports ?#/p/<id> deep links.
-  if (typeof window !== 'undefined') {
-    const m = (window.location.hash || '').match(/#\/p\/([\w-]+)/);
-    if (m) {
-      _cached = m[1];
-      try { localStorage.setItem(STORAGE_KEY, _cached); } catch {}
-      return _cached;
-    }
-    try {
-      const ls = localStorage.getItem(STORAGE_KEY);
+  // Pure read — no localStorage writes during render.
+  try {
+    if (typeof window !== 'undefined') {
+      const m = (window.location.hash || '').match(/#\/p\/([\w-]+)/);
+      if (m) { _cached = m[1]; return _cached; }
+      const ls = (typeof localStorage !== 'undefined') ? localStorage.getItem(STORAGE_KEY) : null;
       if (ls) { _cached = ls; return _cached; }
-    } catch {}
-  }
+    }
+  } catch {}
   _cached = DEFAULT_ID;
   return _cached;
 }

@@ -89,7 +89,9 @@ export default function Shell() {
   React.useEffect(() => {
     if (store._loading) return;
     if (!store.profile?.onboarded) return;
-    ensureDefaultAuthor(store);
+    try { ensureDefaultAuthor(store); } catch (err) {
+      console.warn('[shell] ensureDefaultAuthor failed', err?.message);
+    }
   }, [store._loading, store.profile?.onboarded, store.authors?.length]);
 
   // Push any persisted API keys back into the legacy aiService so the
