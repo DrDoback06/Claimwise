@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, TrendingUp, X, Filter, BarChart3, Sparkles, Save, Clock, ChevronRight, MapPin } from 'lucide-react';
+import { Users, TrendingUp, X, Filter, BarChart3, Sparkles, Save, Clock, ChevronRight, MapPin, Download, AlertTriangle, RefreshCw, Edit3 } from 'lucide-react';
 import db from '../services/database';
 import aiService from '../services/aiService';
 import toastService from '../services/toastService';
@@ -10,6 +10,14 @@ import aiSuggestionService from '../services/aiSuggestionService';
 /**
  * Character Arc Mapper - Visualize and track character development arcs
  */
+// Arc template presets
+const ARC_TEMPLATES = {
+  "Hero's Journey":    ['ordinary_world', 'call_to_adventure', 'crossing_threshold', 'ordeal', 'reward', 'return'],
+  "Redemption Arc":   ['fall', 'rock_bottom', 'realization', 'struggle', 'redemption'],
+  "Tragic Fall":       ['peak', 'first_flaw', 'escalation', 'point_of_no_return', 'downfall'],
+  "Coming of Age":    ['innocence', 'first_challenge', 'mentorship', 'loss', 'maturity'],
+};
+
 const CharacterArcMapper = ({ actors, books, onClose }) => {
   const [selectedActors, setSelectedActors] = useState([]);
   const [arcStages, setArcStages] = useState(['introduction', 'development', 'conflict', 'resolution']);
@@ -24,6 +32,13 @@ const CharacterArcMapper = ({ actors, books, onClose }) => {
   const [aiSuggestions, setAiSuggestions] = useState([]);
   const [showAISuggestions, setShowAISuggestions] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+
+  // ---- Enhancements ----
+  const [customStageLabels, setCustomStageLabels] = useState({}); // { stage: label }
+  const [editingStageLabel, setEditingStageLabel] = useState(null);
+  const [stageLabelInput, setStageLabelInput] = useState('');
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const [unstartedAlerts, setUnstartedAlerts] = useState([]); // characters in 3+ chapters with no arc
 
   useEffect(() => {
     loadArcData();
@@ -95,6 +110,50 @@ const CharacterArcMapper = ({ actors, books, onClose }) => {
     } finally {
       setIsLoadingSuggestions(false);
     }
+  };
+
+  // ---- Enhancement: detect unstarted arcs ----
+  const detectUnstartedArcs = () => {
+    const booksArray = Array.isArray(books) ? books : (books ? Object.values(books) : []);
+    const alerts = actors.filter(actor => {
+      const appearsIn = booksArray.flatMap(b => b.chapters || []).filter(ch =>
+        (ch.content || ch.script || '').toLowerCase().includes(actor.name.toLowerCase())
+      ).length;
+      const arc = arcData[actor.id];
+      const hasArc = arc && Object.values(arc.stages || {}).some(s => s.completion > 0);
+      return appearsIn >= 3 && !hasArc;
+    });
+    setUnstartedAlerts(alerts);
+  };
+
+  // ---- Enhancement: Apply arc template ----
+  const applyTemplate = (templateName) => {
+    const stages = ARC_TEMPLATES[templateName];
+    if (!stages) return;
+    setArcStages(stages);
+    setShowTemplateMenu(false);
+    toastService.info(`Applied "${templateName}" arc template`);
+  };
+
+  // ---- Enhancement: Export arc chart data as text ----
+  const exportArcs = () => {
+    const lines = ['# Character Arc Export', ''];
+    selectedActors.forEach(actorId => {
+      const actor = actors.find(a => a.id === actorId);
+      const arc = arcData[actorId];
+      if (!actor || !arc) return;
+      lines.push(`## ${actor.name}`);
+      arcStages.forEach(stage => {
+        const s = arc.stages?.[stage];
+        const label = customStageLabels[stage] || stage;
+        lines.push(`  ${label}: ${s?.completion || 0}% — ${s?.description || ''}`);
+      });
+      lines.push('');
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'character_arcs.txt'; a.click();
+    URL.revokeObjectURL(url);
   };
 
   const loadArcData = async () => {
@@ -583,6 +642,38 @@ const CharacterArcMapper = ({ actors, books, onClose }) => {
             <Sparkles className="w-4 h-4" />
             Auto-Assign Stages
           </button>
+          {/* Arc template picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowTemplateMenu(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded text-sm"
+              title="Apply an arc template"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Templates
+            </button>
+            {showTemplateMenu && (
+              <div className="absolute top-full left-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1 min-w-48">
+                {Object.keys(ARC_TEMPLATES).map(t => (
+                  <button key={t} onClick={() => applyTemplate(t)} className="block w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700">{t}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Unstarted arc alerts */}
+          <button
+            onClick={detectUnstartedArcs}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm border ${unstartedAlerts.length > 0 ? 'bg-yellow-900/40 border-yellow-700/50 text-yellow-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
+            title="Find characters in 3+ chapters with no arc defined"
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            {unstartedAlerts.length > 0 ? `${unstartedAlerts.length} unstarted` : 'Check Arcs'}
+          </button>
+          {/* Export */}
+          <button onClick={exportArcs} disabled={selectedActors.length === 0} className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded text-sm disabled:opacity-40">
+            <Download className="w-3.5 h-3.5" />
+            Export
+          </button>
           <div className="flex items-center gap-2 border-l border-slate-700 pl-4">
             <button
               onClick={() => setViewMode('stages')}
@@ -913,7 +1004,26 @@ const CharacterArcMapper = ({ actors, books, onClose }) => {
                                     className="w-3 h-3 rounded-full"
                                     style={{ backgroundColor: getStageColor(stage) }}
                                   />
-                                  <div className="text-sm font-bold text-white">{getStageLabel(stage)}</div>
+                                  {editingStageLabel === stage ? (
+                                    <input
+                                      className="text-sm font-bold text-white bg-slate-800 border border-indigo-500 rounded px-1 py-0.5 w-32"
+                                      value={stageLabelInput}
+                                      autoFocus
+                                      onChange={e => setStageLabelInput(e.target.value)}
+                                      onBlur={() => {
+                                        if (stageLabelInput.trim()) setCustomStageLabels(prev => ({ ...prev, [stage]: stageLabelInput.trim() }));
+                                        setEditingStageLabel(null);
+                                      }}
+                                      onKeyDown={e => { if (e.key === 'Enter') { if (stageLabelInput.trim()) setCustomStageLabels(prev => ({ ...prev, [stage]: stageLabelInput.trim() })); setEditingStageLabel(null); } }}
+                                    />
+                                  ) : (
+                                    <div className="text-sm font-bold text-white flex items-center gap-1">
+                                      {customStageLabels[stage] || getStageLabel(stage)}
+                                      <button onClick={() => { setEditingStageLabel(stage); setStageLabelInput(customStageLabels[stage] || getStageLabel(stage)); }} className="text-slate-600 hover:text-slate-400 ml-0.5" title="Rename this stage">
+                                        <Edit3 className="w-2.5 h-2.5" />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="text-xs text-slate-400">{stageData.completion}%</div>
                               </div>

@@ -48,7 +48,7 @@ class AIService {
         endpoint: "https://api.groq.com/openai/v1/chat/completions",
         requiresKey: true,
         free: true, // Free tier: 14,400 requests/day
-        model: "llama-3.1-70b-versatile"
+        model: "llama-3.3-70b-versatile"
       },
       huggingface: {
         key: "",
@@ -480,7 +480,7 @@ class AIService {
    * Groq API call (FREE - 14,400 requests/day)
    * Very fast inference with Llama models
    */
-  async callGroq(prompt, systemContext = "", model = "llama-3.1-70b-versatile", abortController = null) {
+  async callGroq(prompt, systemContext = "", model = "llama-3.3-70b-versatile", abortController = null) {
     if (this.useServerProxy) {
       return this.callProviderProxy('groq', { prompt, systemContext, model }, abortController);
     }
@@ -1018,7 +1018,7 @@ class AIService {
       case "anthropic":
         return this.callClaude(prompt, systemContext, model || "claude-sonnet-4-20250514", abortController);
       case "groq":
-        return this.callGroq(prompt, systemContext, model || "llama-3.1-70b-versatile", abortController);
+        return this.callGroq(prompt, systemContext, model || "llama-3.3-70b-versatile", abortController);
       case "huggingface":
         return this.callHuggingFace(prompt, systemContext, abortController);
       default:

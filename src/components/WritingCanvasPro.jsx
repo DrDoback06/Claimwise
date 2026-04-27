@@ -3,11 +3,11 @@ import LoadingSkeleton from './LoadingSkeleton';
 import {
   Save, FileText, Wand2, Check, X, ChevronDown, ChevronUp, ChevronRight, ChevronLeft,
   Users, Package, Sparkles, BookOpen, Clock, CheckCircle,
-  Loader2, AlertCircle, Mic, MicOff, Volume2, RotateCcw,
+  Loader2, AlertCircle, AlertTriangle, Activity, Mic, MicOff, Volume2, RotateCcw,
   Maximize2, Minimize2, Settings, RefreshCw, Eye, EyeOff,
   Edit3, Lock, Unlock, Undo2, Redo2, Zap, Palette,
   PenTool, MessageSquare, Image, UserPlus, MoreHorizontal, BarChart3,
-  MapPin, Calendar, Heart, Briefcase
+  MapPin, Calendar, Heart, Briefcase, Download
 } from 'lucide-react';
 import FloatingPanel from './FloatingPanel';
 import MoodMeter from './MoodMeter';
@@ -37,6 +37,7 @@ import dataConsistencyService from '../services/dataConsistencyService';
 import EntityExtractionWizard from './EntityExtractionWizard';
 import EntityInterjectionModal from './EntityInterjectionModal';
 import writingEnhancementServices from '../services/writingEnhancementServices';
+import betaReaderService from '../services/betaReaderService';
 
 /**
  * WritingCanvasPro - The ultimate AI-powered writing environment
@@ -166,6 +167,30 @@ const WritingCanvasPro = ({
   const [customPromptDescription, setCustomPromptDescription] = useState('');
   const [customPromptCharacter, setCustomPromptCharacter] = useState('');
   const [customPromptReview, setCustomPromptReview] = useState('');
+
+  // ---- Enhancement: Chapter summary ----
+  const [chapterSummary, setChapterSummary] = useState('');
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [showSummaryPanel, setShowSummaryPanel] = useState(false);
+
+  // ---- Enhancement: Pacing analyzer ----
+  const [showPacingPanel, setShowPacingPanel] = useState(false);
+
+  // ---- Enhancement: Plot hole alerts ----
+  const [plotHoleAlerts, setPlotHoleAlerts] = useState([]);
+  const [showPlotHolePanel, setShowPlotHolePanel] = useState(false);
+
+  // ---- Enhancement: Scene starter templates ----
+  const [showSceneStarters, setShowSceneStarters] = useState(false);
+
+  // ---- Enhancement: Inline entity quick-edit ----
+  const [inlineEditEntity, setInlineEditEntity] = useState(null); // { type, id, name }
+  const [showInlineEdit, setShowInlineEdit] = useState(false);
+
+  // ---- Beta Reader Portal ----
+  const [showBetaExportModal, setShowBetaExportModal] = useState(false);
+  const [betaImportAnnotations, setBetaImportAnnotations] = useState([]);
+  const [showBetaAnnotations, setShowBetaAnnotations] = useState(false);
   
   // Memoized filtered plot beats (uncompleted)
   const uncompletedBeats = useMemo(() => {
@@ -547,6 +572,11 @@ const WritingCanvasPro = ({
       setLastSaved(new Date());
       onSave?.();
       
+      // Generate chapter summary in background
+      generateChapterSummary(finalContent);
+      // Check for plot holes in background
+      checkForPlotHoles(finalContent);
+
       // Extract events using Master Timeline's proven method
       if (finalContent && finalContent.trim().length >= 50) {
         try {
@@ -598,6 +628,90 @@ const WritingCanvasPro = ({
     console.log('[WritingCanvasPro] Entity wizard completed, visualizations will update from timelineEvents');
   };
   
+  // ============================================
+  // ENHANCEMENT: Chapter Summary Auto-Generation
+  // ============================================
+  const generateChapterSummary = async (content) => {
+    if (!content || content.trim().length < 100) return;
+    setIsGeneratingSummary(true);
+    try {
+      const system = 'You are a story analyst. Write a concise 2–3 sentence summary of this chapter focusing on the key story events and character moments. Be factual, not poetic.';
+      const summary = await aiService.callAI(content.slice(0, 4000), 'analytical', system);
+      if (summary) {
+        setChapterSummary(summary.trim());
+        setShowSummaryPanel(true);
+        // Persist summary to chapter metadata
+        if (currentChapter && currentBook) {
+          try {
+            await contextEngine.updateChapterContent(currentBook.id, currentChapter.id, content, { summary: summary.trim() });
+          } catch (_) {}
+        }
+      }
+    } catch (err) {
+      console.warn('[WritingCanvasPro] Summary generation failed:', err);
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+  // ============================================
+  // ENHANCEMENT: Pacing Analysis
+  // ============================================
+  const getPacingStats = () => {
+    if (!plainContent || plainContent.trim().length < 20) return null;
+    const sentences = plainContent.match(/[^.!?]+[.!?]+/g) || [];
+    let dialogueWords = 0;
+    let actionWords = 0;
+    let descriptionWords = 0;
+
+    plainContent.split('\n').forEach(line => {
+      const words = line.split(/\s+/).filter(w => w.length > 0).length;
+      const trimmed = line.trim();
+      if (trimmed.startsWith('"') || trimmed.startsWith('\u2018') || trimmed.startsWith('\u201C')) {
+        dialogueWords += words;
+      } else if (/\b(ran|jumped|hit|grabbed|pulled|pushed|fired|fought|struck|moved|ran)\b/i.test(trimmed)) {
+        actionWords += words;
+      } else {
+        descriptionWords += words;
+      }
+    });
+
+    const total = dialogueWords + actionWords + descriptionWords || 1;
+    return {
+      dialogue: Math.round((dialogueWords / total) * 100),
+      action: Math.round((actionWords / total) * 100),
+      description: Math.round((descriptionWords / total) * 100),
+      avgSentenceLen: sentences.length > 0 ? Math.round(plainContent.split(/\s+/).length / sentences.length) : 0,
+    };
+  };
+
+  // ============================================
+  // ENHANCEMENT: Plot Hole Detection (lightweight post-save check)
+  // ============================================
+  const checkForPlotHoles = async (content) => {
+    if (!content || content.trim().length < 200) return;
+    try {
+      const knownCharacters = actors.map(a => a.name).join(', ');
+      const system = `You are a story continuity checker. Given the list of known characters (${knownCharacters}), check the chapter text for:
+1. Characters appearing who haven't been introduced yet
+2. Contradictions in character actions or abilities
+3. Timeline inconsistencies
+Return ONLY a JSON array of issues like: [{"issue":"...", "severity":"warning|critical"}] or [] if none found. Max 5 issues.`;
+      const result = await aiService.callAI(content.slice(0, 3000), 'analytical', system);
+      if (result) {
+        try {
+          const issues = JSON.parse(result.replace(/```json|```/g, '').trim());
+          if (Array.isArray(issues) && issues.length > 0) {
+            setPlotHoleAlerts(issues);
+            setShowPlotHolePanel(true);
+          }
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.warn('[WritingCanvasPro] Plot hole check failed:', err);
+    }
+  };
+
   // Compile content from segments (accepted content + locked changes)
   const compileContent = () => {
     let compiled = plainContent;
@@ -1751,6 +1865,64 @@ Rewrite with the mood adjustments. Only return the rewritten text:`;
             >
               <Sparkles className="w-4 h-4" />
             </button>
+            {/* Pacing Analyzer button */}
+            <button
+              onClick={() => setShowPacingPanel(v => !v)}
+              className={`p-2 rounded transition-colors ${showPacingPanel ? 'bg-orange-500/20 text-orange-400' : 'text-slate-500 hover:text-white'}`}
+              title="Pacing Analyzer — dialogue/action/description ratio"
+            >
+              <Activity className="w-4 h-4" />
+            </button>
+            {/* Scene Starters */}
+            <button
+              onClick={() => setShowSceneStarters(v => !v)}
+              className={`p-2 rounded transition-colors ${showSceneStarters ? 'bg-green-500/20 text-green-400' : 'text-slate-500 hover:text-white'}`}
+              title="Scene Starter Templates"
+            >
+              <BookOpen className="w-4 h-4" />
+            </button>
+            {/* Chapter Summary */}
+            <button
+              onClick={() => chapterSummary ? setShowSummaryPanel(v => !v) : generateChapterSummary(plainContent)}
+              disabled={isGeneratingSummary}
+              className={`p-2 rounded transition-colors ${showSummaryPanel ? 'bg-teal-500/20 text-teal-400' : 'text-slate-500 hover:text-white'}`}
+              title={chapterSummary ? 'Toggle Chapter Summary' : 'Generate Chapter Summary (AI)'}
+            >
+              <FileText className="w-4 h-4" />
+            </button>
+            {/* Plot Hole Alerts */}
+            {plotHoleAlerts.length > 0 && (
+              <button
+                onClick={() => setShowPlotHolePanel(v => !v)}
+                className="p-2 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 relative"
+                title={`${plotHoleAlerts.length} potential plot issues detected`}
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  {plotHoleAlerts.length}
+                </span>
+              </button>
+            )}
+            {/* Beta Reader Export */}
+            <button
+              onClick={() => setShowBetaExportModal(true)}
+              className="p-2 rounded transition-colors text-slate-500 hover:text-indigo-400"
+              title="Beta Reader Portal — export chapter for beta readers"
+            >
+              <Users className="w-4 h-4" />
+            </button>
+            {betaImportAnnotations.length > 0 && (
+              <button
+                onClick={() => setShowBetaAnnotations(v => !v)}
+                className={`p-2 rounded transition-colors relative ${showBetaAnnotations ? 'bg-indigo-500/20 text-indigo-400' : 'text-slate-500 hover:text-white'}`}
+                title={`${betaImportAnnotations.length} beta reader comment${betaImportAnnotations.length > 1 ? 's' : ''}`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span className="absolute -top-1 -right-1 bg-indigo-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  {betaImportAnnotations.length}
+                </span>
+              </button>
+            )}
             <button
               onClick={toggleFocusMode}
               className={`p-2 rounded transition-colors ${focusMode ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-500 hover:text-white'}`}
@@ -2359,6 +2531,145 @@ Rewrite with the mood adjustments. Only return the rewritten text:`;
             )}
           </FloatingPanel>
         )}
+
+        {/* ---- Enhancement: Pacing Analyzer Panel ---- */}
+        {showPacingPanel && (() => {
+          const pacing = getPacingStats();
+          return (
+            <FloatingPanel
+              id="pacing-panel"
+              title="Pacing Analyzer"
+              icon={Activity}
+              defaultPosition={{ x: 20, y: 400 }}
+              defaultSize={{ width: 280, height: 220 }}
+              onClose={() => setShowPacingPanel(false)}
+              collapsible
+            >
+              {pacing ? (
+                <div className="space-y-3 p-1">
+                  {[
+                    { label: 'Dialogue', value: pacing.dialogue, color: 'bg-blue-500' },
+                    { label: 'Action', value: pacing.action, color: 'bg-red-500' },
+                    { label: 'Description', value: pacing.description, color: 'bg-amber-500' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label}>
+                      <div className="flex justify-between text-xs text-slate-400 mb-1">
+                        <span>{label}</span>
+                        <span className="text-white font-bold">{value}%</span>
+                      </div>
+                      <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${value}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                  <div className="text-xs text-slate-500 mt-2">
+                    Avg sentence length: <span className="text-slate-300">{pacing.avgSentenceLen} words</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 p-2">Write more content to analyse pacing.</p>
+              )}
+            </FloatingPanel>
+          );
+        })()}
+
+        {/* ---- Enhancement: Scene Starter Templates ---- */}
+        {showSceneStarters && (
+          <FloatingPanel
+            id="scene-starters-panel"
+            title="Scene Starter Templates"
+            icon={BookOpen}
+            defaultPosition={{ x: 20, y: 200 }}
+            defaultSize={{ width: 320, height: 380 }}
+            onClose={() => setShowSceneStarters(false)}
+            collapsible
+          >
+            <div className="space-y-2 text-xs overflow-y-auto max-h-64">
+              {[
+                { label: 'Confrontation', text: 'The air between them crackled with tension as [Character A] stepped forward, fists clenched. [Character B] held their ground, voice cold and measured.' },
+                { label: 'Discovery', text: 'The door swung open to reveal something [Character] had never expected to find — a [item/secret] that changed everything.' },
+                { label: 'Quiet Reflection', text: 'Alone at last, [Character] let the silence settle around them. The events of the past [hours/days] replayed in their mind like a film stuck on loop.' },
+                { label: 'Transition / Travel', text: 'The road stretched ahead, grey and featureless. [Character] pulled their coat tighter and focused on the horizon, leaving [place] behind.' },
+                { label: 'Flashback', text: 'The smell of [sensory detail] brought it back in an instant — [year/time ago], when everything was different.' },
+                { label: 'Chase / Action', text: 'There was no time to think. [Character] ran, lungs burning, the sound of [pursuit] closing fast behind them.' },
+                { label: 'Revelation / Twist', text: '"I know what you did," [Character A] said quietly. The room went still. [Character B] felt the blood drain from their face.' },
+              ].map(({ label, text }) => (
+                <div key={label} className="border border-slate-700 rounded p-2 hover:border-green-500 cursor-pointer group"
+                  onClick={() => {
+                    if (textareaRef.current) {
+                      const pos = textareaRef.current.selectionStart;
+                      const newContent = plainContent.slice(0, pos) + '\n\n' + text + '\n\n' + plainContent.slice(pos);
+                      setPlainContent(newContent);
+                    }
+                    setShowSceneStarters(false);
+                  }}
+                >
+                  <div className="text-green-400 font-bold mb-1 group-hover:text-green-300">{label}</div>
+                  <div className="text-slate-400 group-hover:text-slate-300 leading-relaxed line-clamp-2">{text}</div>
+                </div>
+              ))}
+            </div>
+          </FloatingPanel>
+        )}
+
+        {/* ---- Enhancement: Chapter Summary Panel ---- */}
+        {showSummaryPanel && chapterSummary && (
+          <FloatingPanel
+            id="chapter-summary-panel"
+            title="Chapter Summary (AI)"
+            icon={FileText}
+            defaultPosition={{ x: window.innerWidth - 420, y: 400 }}
+            defaultSize={{ width: 340, height: 180 }}
+            onClose={() => setShowSummaryPanel(false)}
+            collapsible
+          >
+            <div className="space-y-2">
+              <p className="text-xs text-slate-300 leading-relaxed">{chapterSummary}</p>
+              <button
+                onClick={() => generateChapterSummary(plainContent)}
+                disabled={isGeneratingSummary}
+                className="text-xs text-teal-400 hover:text-teal-300 flex items-center gap-1"
+              >
+                <RefreshCw className={`w-3 h-3 ${isGeneratingSummary ? 'animate-spin' : ''}`} />
+                {isGeneratingSummary ? 'Regenerating...' : 'Regenerate'}
+              </button>
+            </div>
+          </FloatingPanel>
+        )}
+
+        {/* ---- Enhancement: Plot Hole Alerts Panel ---- */}
+        {showPlotHolePanel && plotHoleAlerts.length > 0 && (
+          <FloatingPanel
+            id="plot-hole-panel"
+            title={`Plot Issues (${plotHoleAlerts.length})`}
+            icon={AlertTriangle}
+            defaultPosition={{ x: window.innerWidth - 420, y: 200 }}
+            defaultSize={{ width: 340, height: 260 }}
+            onClose={() => setShowPlotHolePanel(false)}
+            collapsible
+          >
+            <div className="space-y-2 overflow-y-auto max-h-48">
+              {plotHoleAlerts.map((alert, i) => (
+                <div key={i} className={`p-2 rounded border text-xs ${
+                  alert.severity === 'critical'
+                    ? 'bg-red-900/30 border-red-700 text-red-300'
+                    : 'bg-amber-900/30 border-amber-700 text-amber-300'
+                }`}>
+                  <span className="uppercase font-bold text-[10px] mr-1">
+                    {alert.severity === 'critical' ? '⚠ Critical:' : '⚑ Warning:'}
+                  </span>
+                  {alert.issue}
+                </div>
+              ))}
+              <button
+                onClick={() => setPlotHoleAlerts([])}
+                className="text-xs text-slate-500 hover:text-slate-300 mt-1"
+              >
+                Dismiss all
+              </button>
+            </div>
+          </FloatingPanel>
+        )}
       </div>
 
       {/* ============================================ */}
@@ -2905,6 +3216,114 @@ Rewrite with the mood adjustments. Only return the rewritten text:`;
           }}
           onClose={() => setShowInterjectionModal(false)}
         />
+      )}
+
+      {/* ============================================ */}
+      {/* BETA READER EXPORT MODAL                     */}
+      {/* ============================================ */}
+      {showBetaExportModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-400" />
+                Beta Reader Export
+              </h3>
+              <button onClick={() => setShowBetaExportModal(false)} className="text-slate-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-slate-400 text-sm mb-4">
+              Export this chapter as a standalone HTML file that beta readers can open, highlight passages, and leave inline comments. They return a JSON file you can import back below.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  if (currentChapter && currentBook) {
+                    betaReaderService.exportChapters(
+                      [{ ...currentChapter, bookTitle: currentBook.title }],
+                      'Author',
+                      currentBook.title || 'My Story'
+                    );
+                  }
+                  setShowBetaExportModal(false);
+                }}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export Current Chapter
+              </button>
+              <div className="border-t border-slate-700 pt-3">
+                <p className="text-slate-400 text-xs mb-2">Import beta reader comments (JSON file from reader):</p>
+                <label className="block w-full cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const comments = await betaReaderService.importComments(file);
+                        setBetaImportAnnotations(prev => {
+                          const merged = [...prev];
+                          comments.forEach(c => {
+                            if (!merged.find(x => x.id === c.id)) merged.push(c);
+                          });
+                          return merged;
+                        });
+                        setShowBetaAnnotations(true);
+                        setShowBetaExportModal(false);
+                        toastService.success(`Imported ${comments.length} beta reader comment${comments.length !== 1 ? 's' : ''}`);
+                      } catch (err) {
+                        toastService.error(err.message);
+                      }
+                    }}
+                  />
+                  <span className="block w-full border border-dashed border-slate-600 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 text-center py-2.5 rounded-lg transition-colors text-sm">
+                    Choose Comments JSON File
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* BETA READER ANNOTATIONS PANEL               */}
+      {/* ============================================ */}
+      {showBetaAnnotations && betaImportAnnotations.length > 0 && (
+        <div className="fixed bottom-4 right-4 w-80 bg-slate-900 border border-indigo-700 rounded-xl shadow-2xl z-40 flex flex-col max-h-96">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800 flex-shrink-0">
+            <span className="font-bold text-indigo-300 text-sm flex items-center gap-1.5">
+              <MessageSquare className="w-4 h-4" />
+              Beta Reader Comments ({betaImportAnnotations.length})
+            </span>
+            <button onClick={() => setShowBetaAnnotations(false)} className="text-slate-500 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="overflow-y-auto flex-1 divide-y divide-slate-800">
+            {betaImportAnnotations.map(ann => (
+              <div key={ann.id} className="p-3">
+                <div className="text-[10px] text-slate-500 mb-1">{new Date(ann.timestamp).toLocaleString()}</div>
+                {ann.selectedText && (
+                  <div className="text-xs bg-yellow-900/30 border border-yellow-700/50 text-yellow-200 rounded px-2 py-1 mb-1.5 italic">
+                    "{ann.selectedText.slice(0, 80)}{ann.selectedText.length > 80 ? '…' : ''}"
+                  </div>
+                )}
+                <div className="text-xs text-slate-300 leading-relaxed">{ann.comment}</div>
+                <button
+                  onClick={() => setBetaImportAnnotations(prev => prev.filter(a => a.id !== ann.id))}
+                  className="mt-1.5 text-[10px] text-slate-600 hover:text-red-400 transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -4,7 +4,7 @@ import './index.css';
 // Ensure RPG styles are loaded
 import './styles/rpgComponents.css';
 import './styles/rpgAnimations.css';
-import App from './App';
+import App from './AppRouter';
 import ErrorBoundary from './components/ErrorBoundary';
 import reportWebVitals from './reportWebVitals';
 

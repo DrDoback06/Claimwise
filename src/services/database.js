@@ -4,7 +4,11 @@
  */
 
 const DB_NAME = 'ClaimwiseOmniscience';
-const DB_VERSION = 22; // Story Brain: chapter memories for forward context
+// Bumped 2026-04 to v26 — older builds shipped with the IDB pushed up to
+// v25, so opening at a lower version causes a VersionError. All historical
+// upgrade blocks below are guarded with `oldVersion < N`, so opening from
+// v25 → v26 is a no-op (just nudges the recorded version forward).
+const DB_VERSION = 26;
 
 class ClaimwiseDB {
   constructor() {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, X, RefreshCw, Sparkles, Filter, Download } from 'lucide-react';
+import { AlertTriangle, CheckCircle, X, RefreshCw, Sparkles, Filter, Download, Zap, Settings, FileText, Target } from 'lucide-react';
 import db from '../services/database';
 import aiService from '../services/aiService';
 import toastService from '../services/toastService';
@@ -15,6 +15,14 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [resolvedIssues, setResolvedIssues] = useState(new Set());
 
+  // ---- Enhancements ----
+  const [aiFixes, setAiFixes] = useState({}); // { issueId: 'suggestion text' }
+  const [loadingFix, setLoadingFix] = useState(null); // issueId being fetched
+  const [customRules, setCustomRules] = useState([]); // [{ id, rule }]
+  const [showCustomRules, setShowCustomRules] = useState(false);
+  const [newRuleText, setNewRuleText] = useState('');
+  const [resolvedHistory, setResolvedHistory] = useState([]); // [{ id, resolvedAt, title }]
+
   useEffect(() => {
     loadResolvedIssues();
   }, []);
@@ -26,6 +34,66 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
     } catch (error) {
       console.error('Error loading resolved issues:', error);
     }
+  };
+
+  // ---- Enhancement: Story Health Score ----
+  const getHealthScore = () => {
+    if (issues.length === 0) return 100;
+    const criticals = issues.filter(i => i.severity === 'critical' && !resolvedIssues.has(i.id)).length;
+    const warnings = issues.filter(i => i.severity === 'warning' && !resolvedIssues.has(i.id)).length;
+    const infos = issues.filter(i => i.severity === 'info' && !resolvedIssues.has(i.id)).length;
+    const penalty = (criticals * 10) + (warnings * 3) + (infos * 1);
+    return Math.max(0, 100 - penalty);
+  };
+
+  // ---- Enhancement: AI Fix Suggestion ----
+  const getAIFix = async (issue) => {
+    if (aiFixes[issue.id] || loadingFix === issue.id) return;
+    setLoadingFix(issue.id);
+    try {
+      const system = 'You are a story editor. Given a consistency issue, suggest a specific, actionable fix in 1-2 sentences.';
+      const prompt = `Issue: "${issue.title}"\nDescription: "${issue.description}"\nLocation: "${issue.location}"\n\nSuggest a concrete fix:`;
+      const fix = await aiService.callAI(prompt, 'analytical', system);
+      if (fix) setAiFixes(prev => ({ ...prev, [issue.id]: fix.trim() }));
+    } catch (e) {
+      console.warn('AI fix failed:', e);
+    } finally {
+      setLoadingFix(null);
+    }
+  };
+
+  // ---- Enhancement: Export issues as CSV ----
+  const exportCSV = () => {
+    const header = 'ID,Type,Severity,Title,Description,Location,Resolved';
+    const rows = issues.map(i =>
+      `"${i.id}","${i.type}","${i.severity}","${i.title.replace(/"/g, '""')}","${(i.description || '').replace(/"/g, '""')}","${i.location}","${resolvedIssues.has(i.id) ? 'Yes' : 'No'}"`
+    );
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `consistency_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toastService.success('Exported consistency report as CSV');
+  };
+
+  // ---- Enhancement: Custom rules check ----
+  const runCustomRulesCheck = (allIssues) => {
+    customRules.forEach(rule => {
+      allIssues.push({
+        id: `custom_${rule.id}`,
+        type: 'custom',
+        severity: 'warning',
+        title: 'Custom Rule',
+        description: `Custom rule: "${rule.rule}"`,
+        location: 'Story-wide',
+        suggestion: 'Review this custom rule against your story content.',
+        entityId: null,
+        entityType: 'general'
+      });
+    });
   };
 
   const markResolved = async (issueId) => {
@@ -166,6 +234,9 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
         // Continue without AI check
       }
 
+      // Run custom rules
+      runCustomRulesCheck(allIssues);
+
       setIssues(allIssues);
       toastService.success(`Found ${allIssues.length} potential issues`);
     } catch (error) {
@@ -219,7 +290,31 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
           </h2>
           <p className="text-sm text-slate-400 mt-1">AI-powered inconsistency detection across your story</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          {issues.length > 0 && (
+            <div className="flex flex-col items-center">
+              <div className={`text-3xl font-black ${getHealthScore() >= 80 ? 'text-green-400' : getHealthScore() >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                {getHealthScore()}
+              </div>
+              <div className="text-[10px] text-slate-500 uppercase">Story Health</div>
+            </div>
+          )}
+          <button
+            onClick={() => setShowCustomRules(v => !v)}
+            className={`px-3 py-2 text-sm rounded flex items-center gap-2 border ${showCustomRules ? 'bg-purple-900 border-purple-500 text-purple-200' : 'bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700'}`}
+          >
+            <Settings className="w-4 h-4" />
+            Custom Rules ({customRules.length})
+          </button>
+          {issues.length > 0 && (
+            <button
+              onClick={exportCSV}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded flex items-center gap-2 text-sm border border-slate-600"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+          )}
           <button
             onClick={runConsistencyCheck}
             disabled={isChecking}
@@ -234,6 +329,51 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
           </button>
         </div>
       </div>
+
+      {/* ---- Enhancement: Custom Rules Builder ---- */}
+      {showCustomRules && (
+        <div className="bg-purple-950/40 border-b border-purple-700 p-4 flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-purple-300 flex items-center gap-2"><Settings className="w-4 h-4" /> Custom Consistency Rules</h3>
+            <button onClick={() => setShowCustomRules(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="flex gap-2 mb-3">
+            <input
+              value={newRuleText}
+              onChange={e => setNewRuleText(e.target.value)}
+              placeholder='e.g. "Character X never uses magic before Act 2"'
+              className="flex-1 bg-slate-900 border border-slate-700 text-white text-sm px-3 py-1.5 rounded focus:outline-none focus:border-purple-500"
+              onKeyDown={e => {
+                if (e.key === 'Enter' && newRuleText.trim()) {
+                  setCustomRules(prev => [...prev, { id: Date.now(), rule: newRuleText.trim() }]);
+                  setNewRuleText('');
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                if (newRuleText.trim()) {
+                  setCustomRules(prev => [...prev, { id: Date.now(), rule: newRuleText.trim() }]);
+                  setNewRuleText('');
+                }
+              }}
+              className="px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white rounded text-sm"
+            >Add</button>
+          </div>
+          {customRules.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {customRules.map(r => (
+                <div key={r.id} className="flex items-center gap-1 bg-purple-900/40 border border-purple-700 rounded px-2 py-1 text-xs text-purple-200">
+                  <span>{r.rule}</span>
+                  <button onClick={() => setCustomRules(prev => prev.filter(x => x.id !== r.id))} className="text-red-400 hover:text-red-300 ml-1">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel - Filters & Stats */}
@@ -393,6 +533,24 @@ const ConsistencyChecker = ({ actors, books, itemBank, skillBank, onClose }) => 
               <div>
                 <div className="text-xs text-slate-400 mb-1">Suggestion</div>
                 <div className="text-slate-300 text-sm bg-slate-900 p-3 rounded">{selectedIssue.suggestion}</div>
+              </div>
+              {/* ---- Enhancement: AI Fix button ---- */}
+              <div>
+                <div className="text-xs text-slate-400 mb-1">AI Fix Suggestion</div>
+                {aiFixes[selectedIssue.id] ? (
+                  <div className="text-green-300 text-sm bg-green-900/20 border border-green-700 p-3 rounded">
+                    {aiFixes[selectedIssue.id]}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => getAIFix(selectedIssue)}
+                    disabled={loadingFix === selectedIssue.id}
+                    className="w-full bg-indigo-700 hover:bg-indigo-600 disabled:bg-slate-700 text-white py-2 rounded flex items-center justify-center gap-2 text-sm"
+                  >
+                    {loadingFix === selectedIssue.id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                    {loadingFix === selectedIssue.id ? 'Getting AI fix...' : 'Get AI Fix'}
+                  </button>
+                )}
               </div>
               <button
                 onClick={() => markResolved(selectedIssue.id)}
