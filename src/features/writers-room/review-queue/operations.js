@@ -9,6 +9,7 @@ import {
   createCharacter, createPlace, createItem, createQuest, createThread,
 } from '../store/mutators';
 import { rid } from '../store/mutators';
+import { buildEntityEventFromFinding } from '../entities/entityEventBuilder';
 
 // Helper: stamp a queue item with its action result so the history view
 // shows what was done. Mutates the slice transactionally.
@@ -35,6 +36,35 @@ function appendTimelineEvent(setSlice, event) {
       ...event,
     },
   ]);
+}
+
+function appendEntityAudit(setSlice, entry) {
+  setSlice('entityAudit', xs => [
+    ...(Array.isArray(xs) ? xs : []),
+    { id: rid('audit'), createdAt: Date.now(), ...entry },
+  ]);
+}
+
+export function commitEntityEvent(setSlice, event) {
+  setSlice('entityEvents', xs => [
+    ...(Array.isArray(xs) ? xs : []),
+    { id: event.id || rid('ev'), createdAt: Date.now(), ...event },
+  ]);
+}
+
+export function commitEntityLink(setSlice, link) {
+  setSlice('entityLinks', xs => [
+    ...(Array.isArray(xs) ? xs : []),
+    { id: link.id || rid('el'), createdAt: Date.now(), ...link },
+  ]);
+}
+
+export function commitStateChange(setSlice, entityType, entityId, stateChange) {
+  if (!entityType || !entityId || !stateChange?.field) return;
+  const sliceByType = { character: 'cast', place: 'places', item: 'items', quest: 'quests', skill: 'skills' };
+  const slice = sliceByType[entityType];
+  if (!slice) return;
+  setSlice(slice, xs => (xs || []).map(x => x.id === entityId ? { ...x, [stateChange.field]: stateChange.after } : x));
 }
 
 // Build a patch for a new entity from a queue item's draft + name + notes.
@@ -225,6 +255,30 @@ export function commitQueueItem(store, itemId) {
       status: 'committed',
       resolvedAs: createdEntityId,
     });
+    const event = buildEntityEventFromFinding(item, get(), { applied: true, status: item.autoApplied ? 'auto-applied' : 'committed' });
+    commitEntityEvent(setSlice, event);
+    setSlice('entityMentions', xs => [
+      ...(Array.isArray(xs) ? xs : []),
+      ...(event.entities || []).map(ent => ({
+        id: rid('em'),
+        entityId: ent.entityId || createdEntityId || item.resolvesTo || null,
+        entityType: ent.entityType || item.kind || 'unknown',
+        chapterId: item.chapterId || null,
+        paragraphId: item.paragraphId || null,
+        quote: item.sourceQuote || event.evidence?.quote || '',
+        role: ent.role || 'subject',
+        eventId: event.id,
+        confidence: item.confidence ?? 0.7,
+        createdAt: Date.now(),
+      })),
+    ]);
+    appendEntityAudit(setSlice, {
+      queueItemId: itemId,
+      action: item.autoApplied ? 'auto-applied' : 'committed',
+      entityId: createdEntityId || item.resolvesTo || null,
+      entityKind: item.kind,
+      chapterId: item.chapterId || null,
+    });
   });
 
   return createdEntityId;
@@ -285,7 +339,11 @@ export function mergeQueueItem(store, deadId, survivorRef) {
 
 export function dismissQueueItem(store, itemId) {
   store.transaction(({ setSlice }) => {
-    patchQueueItem(setSlice, itemId, { status: 'dismissed' });
+    setSlice('reviewQueue', xs => (xs || []).map(it => {
+      if (it.id !== itemId) return it;
+      const fingerprint = [it.kind, it.name, it.chapterId, it.sourceQuote || '', it.sourceType || ''].join('|').toLowerCase();
+      return { ...it, status: 'dismissed', fingerprint, dismissedAt: Date.now(), actedAt: Date.now() };
+    }));
   });
 }
 
@@ -316,5 +374,31 @@ export function pushDraftToQueue(store, kind, draft, opts = {}) {
         source: opts.source || 'specialist',
       },
     ]);
+  });
+}
+
+export function autoApplyQueueItem(store, itemId) {
+  const queue = store.reviewQueue || [];
+  const item = queue.find(x => x.id === itemId);
+  if (!item) return null;
+  if (item.status !== 'auto-applied' && item.status !== 'pending') return null;
+  return commitQueueItem(store, itemId);
+}
+
+export function autoApplyQueueItems(store, ids = []) {
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+  const out = [];
+  for (const id of ids) {
+    const result = autoApplyQueueItem(store, id);
+    if (result != null) out.push(result);
+  }
+  return out;
+}
+
+export function undoEntityEvent(store, eventId) {
+  if (!eventId) return;
+  store.transaction(({ setSlice }) => {
+    setSlice('entityEvents', xs => (xs || []).map(ev => ev.id === eventId ? { ...ev, status: 'reverted', revertedAt: Date.now() } : ev));
+    appendEntityAudit(setSlice, { action: 'undo-event', eventId });
   });
 }

@@ -54,6 +54,11 @@ export const EMPTY_PROFILE = {
   preferredProvider: 'auto',
   aiProvider: 'auto',
   apiKeys: {},
+  reviewAutomation: {
+    autoApplyBlue: true,
+    showAutoAdded: true,
+    groupByRiskBand: true,
+  },
 };
 
 export const EMPTY_BOOK = {
@@ -148,6 +153,11 @@ export function emptyState() {
     statCatalog: [],          // [{key, description, max}] custom stats
     relationships: [],
     timelineEvents: [],
+    entityEvents: [],          // universal linked event graph
+    entityLinks: [],           // cross-entity links inferred or manual
+    entityMentions: [],        // mentions with chapter/paragraph evidence
+    entityAliases: [],         // alias records for merge/resolve support
+    entityAudit: [],           // append-only mutation/audit log
     voice: [],                // voice profiles
     tangle: { nodes: [], edges: [], layout: {} },
     ui: { ...EMPTY_UI },

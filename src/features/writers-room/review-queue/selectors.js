@@ -24,9 +24,11 @@ export function domainForKind(kind) {
 
 export function selectReviewQueueByDomain(store) {
   const queue = Array.isArray(store?.reviewQueue) ? store.reviewQueue : [];
+  const showAutoAdded = store?.profile?.reviewAutomation?.showAutoAdded !== false;
   const out = { cast: [], atlas: [], items: [], quests: [], skills: [], continuity: [] };
   for (const it of queue) {
     if (!it || it.status === 'dismissed' || it.status === 'committed' || it.status === 'merged') continue;
+    if (!showAutoAdded && it.status === 'auto-applied') continue;
     const d = domainForKind(it.kind);
     if (!d || !out[d]) continue;
     out[d].push(it);

@@ -111,6 +111,36 @@ export default function Settings({ onClose }) {
           </p>
         </Section>
 
+        <Section t={t} title="AI review automation">
+          <Toggle
+            t={t}
+            label="Enable autonomous extraction pipeline"
+            value={profile.autonomousPipeline !== false}
+            onChange={v => set('profile.autonomousPipeline', v)}
+          />
+          <Toggle
+            t={t}
+            label="Auto-apply BLUE (low-risk) findings"
+            value={profile.reviewAutomation?.autoApplyBlue !== false}
+            onChange={v => set('profile.reviewAutomation.autoApplyBlue', v)}
+          />
+          <Toggle
+            t={t}
+            label="Show BLUE auto-added items in queue"
+            value={profile.reviewAutomation?.showAutoAdded !== false}
+            onChange={v => set('profile.reviewAutomation.showAutoAdded', v)}
+          />
+          <Toggle
+            t={t}
+            label="Group queue by risk bands"
+            value={profile.reviewAutomation?.groupByRiskBand !== false}
+            onChange={v => set('profile.reviewAutomation.groupByRiskBand', v)}
+          />
+          <p style={pStyle(t)}>
+            Blue = Auto-added · Green = Suggested · Amber = Needs review · Red = Canon risk.
+          </p>
+        </Section>
+
         <Section t={t} title="Auto-track movement on the Atlas">
           <Chips t={t} items={ATLAS_AUTO} selected={[tweaks.atlasAuto || 'conservative']} onChange={v => set('ui.tweaks.atlasAuto', v[0])} />
           <Toggle t={t} label="Show every character's journey at once" value={tweaks.atlasShowAll === true} onChange={v => set('ui.tweaks.atlasShowAll', v)} />
