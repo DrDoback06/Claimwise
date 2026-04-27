@@ -24,7 +24,6 @@ export default function QueuePanel({ domain, accent, title = 'Review queue' }) {
   const [selected, setSelected] = React.useState([]);
   const groupByRisk = store.profile?.reviewAutomation?.groupByRiskBand !== false;
 
-  if (pending.length === 0 && history.length === 0) return null;
   const list = view === 'pending' ? pending : history;
   const grouped = groupItems(sortItems(list, sort), groupByRisk);
 

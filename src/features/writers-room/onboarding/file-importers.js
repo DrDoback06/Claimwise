@@ -44,7 +44,13 @@ export async function importDocx(file) {
 
 export async function importPdf(file) {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  let pdf;
+  try {
+    pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  } catch (err) {
+    // Environments that block worker/CDN scripts can fail with "reading then disappear".
+    pdf = await pdfjs.getDocument({ data: arrayBuffer, disableWorker: true }).promise;
+  }
   const all = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
@@ -81,7 +87,12 @@ export async function importZip(file) {
         paragraphs = paragraphsFromText(text);
       } else if (lower.endsWith('.pdf')) {
         const ab = await entry.async('arraybuffer');
-        const pdf = await pdfjs.getDocument({ data: ab }).promise;
+        let pdf;
+        try {
+          pdf = await pdfjs.getDocument({ data: ab }).promise;
+        } catch {
+          pdf = await pdfjs.getDocument({ data: ab, disableWorker: true }).promise;
+        }
         const all = [];
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);

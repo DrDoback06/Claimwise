@@ -27,7 +27,7 @@ function safeParse(raw) {
   try { return JSON.parse(s.slice(first, last + 1)); } catch { return null; }
 }
 
-export default function EntityWeaveWizard({ onClose }) {
+export default function EntityWeaveWizard({ onClose, seed }) {
   const t = useTheme();
   const store = useStore();
   const [step, setStep] = React.useState(1);
@@ -37,6 +37,18 @@ export default function EntityWeaveWizard({ onClose }) {
   const [busy, setBusy] = React.useState(false);
   const [generated, setGenerated] = React.useState([]);
   const [selected, setSelected] = React.useState([]);
+
+  React.useEffect(() => {
+    if (!seed) return;
+    if (typeof seed.prompt === 'string') setPrompt(seed.prompt);
+    if (Array.isArray(seed.tags) && seed.tags.length) {
+      const valid = seed.tags.filter(tag => ENTITY_TAGS.some(t => t.id === tag));
+      if (valid.length) setSelectedTags(valid);
+    }
+    if (typeof seed.riskBand === 'string' && RISK_OPTIONS.some(r => r.id === seed.riskBand)) {
+      setRiskBand(seed.riskBand);
+    }
+  }, [seed]);
 
   const toggleTag = (id) => setSelectedTags(xs => xs.includes(id) ? xs.filter(x => x !== id) : [...xs, id]);
 

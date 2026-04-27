@@ -109,6 +109,7 @@ export const EMPTY_UI = {
   // (NEW) the Today page mounts on the LEFT side (vs panels which stack
   // on the right). Tracks visibility independently.
   todayOpen: false,
+  chapterMetaOpenId: null,
 };
 
 // (NEW) Suggestion engine preferences. Living on `profile` because it's
@@ -185,6 +186,7 @@ export function emptyState() {
     //   { id, name, label, category, paragraphs[], importedAt, sizeBytes,
     //     sourceKind: 'upload'|'paste', linkedTo: { sectionIds[], characterIds[] } }
     references: [],
+    trash: [],                // soft-deleted entities for restore
     snapshots: [],
     feedback: [],
     _loading: true,

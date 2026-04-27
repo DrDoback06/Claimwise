@@ -181,6 +181,8 @@ export default function TodayPanel({ onOpenPanel, onClose }) {
             <button onClick={() => onOpenPanel?.('atlas')} style={qaBtn(t, PANEL_ACCENT.atlas)}>🗺 Open atlas</button>
             <button onClick={() => onOpenPanel?.('quests')} style={qaBtn(t, PANEL_ACCENT.threads)}>⚔ Open quests</button>
             <button onClick={() => onOpenPanel?.('continuity')} style={qaBtn(t, PANEL_ACCENT.atlas)}>🚩 Continuity</button>
+            <button onClick={() => onOpenPanel?.('items')} style={qaBtn(t, PANEL_ACCENT.items)}>🧰 Open items</button>
+            <button onClick={() => onOpenPanel?.('skills')} style={qaBtn(t, PANEL_ACCENT.items)}>✨ Open skills</button>
           </div>
         </div>
       </div>

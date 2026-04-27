@@ -18,6 +18,17 @@ export default function PlaceEditor({ onWeave }) {
   const update = (patch) => {
     store.setSlice('places', ps => ps.map(p => p.id === place.id ? { ...p, ...patch } : p));
   };
+  const moveToTrash = () => {
+    if (!window.confirm(`Move "${place.name || 'this place'}" to trash?`)) return;
+    store.setSlice('trash', xs => ([...(xs || []), {
+      id: `trash_${Date.now()}`,
+      kind: 'place',
+      payload: place,
+      deletedAt: Date.now(),
+    }]));
+    store.setSlice('places', ps => (ps || []).filter(p => p.id !== place.id));
+    store.setPath('ui.selection.place', null);
+  };
 
   const inp = {
     width: '100%', padding: '6px 8px',
@@ -81,6 +92,11 @@ export default function PlaceEditor({ onWeave }) {
             fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase', cursor: 'pointer',
           }}>✦ Weave</button>
         )}
+        <button onClick={moveToTrash} style={{
+          marginTop: 8, marginLeft: 8, padding: '7px 14px',
+          background: 'transparent', color: t.bad || '#b33', border: `1px solid ${t.bad || '#b33'}`, borderRadius: 1,
+          fontFamily: t.mono, fontSize: 10, letterSpacing: 0.12, textTransform: 'uppercase', cursor: 'pointer',
+        }}>Move to trash</button>
       </div>
 
       {(place.children || []).length > 0 && (
