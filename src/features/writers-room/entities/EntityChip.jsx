@@ -33,6 +33,11 @@ export default function EntityChip({ kind, id, size = 'md' }) {
     const it = (store.items || []).find(x => x.id === id);
     if (!it) return <Orphan label="item" />;
     label = it.name; color = t.accent; sub = it.kind || '';
+  } else if (kind === 'skill') {
+    const sk = (store.skillBank || []).find(x => x.id === id)
+      || (store.skills || []).find(x => x.id === id);
+    if (!sk) return <Orphan label="skill" />;
+    label = sk.name; color = t.accent2 || t.accent; sub = sk.tier || sk.k || 'skill';
   } else {
     return <Orphan label={kind} />;
   }

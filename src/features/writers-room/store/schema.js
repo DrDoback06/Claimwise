@@ -147,6 +147,15 @@ export function emptyState() {
     stats: [],
     statCatalog: [],          // [{key, description, max}] custom stats
     relationships: [],
+    // Living-canon graph events. One row per chapter beat, linked to every
+    // entity it touches. Shape:
+    //   { id, createdAt,
+    //     actorId,                       // legacy primary character (back-compat)
+    //     entityRefs: [{kind, id, role}], // multi-entity links (Steve+Sword+Place)
+    //     eventType,                     // mention | introduced | item_acquired | ...
+    //     chapterId,
+    //     riskBand,                      // 'high'|'normal'|'amber_review'|'red_block'
+    //     data: { sourceQuote?, evidence?, ... } }
     timelineEvents: [],
     voice: [],                // voice profiles
     tangle: { nodes: [], edges: [], layout: {} },

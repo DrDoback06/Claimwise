@@ -22,6 +22,20 @@ function chunk(text) {
   return out;
 }
 
+// Build an evidence record for a finding by locating the entity name in
+// the chunk and capturing a window around it. Returns null if not found
+// (e.g. the AI rephrased the name).
+function buildEvidence(chunkText, name, chunkIndex) {
+  if (!chunkText || !name) return null;
+  const lc = chunkText.toLowerCase();
+  const at = lc.indexOf(String(name).toLowerCase());
+  if (at < 0) return null;
+  const start = Math.max(0, at - 60);
+  const end = Math.min(chunkText.length, at + name.length + 60);
+  const sourceQuote = (start > 0 ? '…' : '') + chunkText.slice(start, end) + (end < chunkText.length ? '…' : '');
+  return { chunkIndex, offset: at, sourceQuote };
+}
+
 function safeParse(raw) {
   if (!raw) return null;
   let s = String(raw).trim();
@@ -94,6 +108,8 @@ export async function runExtractPass(state, chapterId, opts = {}) {
       if (!f?.kind || !f?.name) continue;
       const key = (f.kind + ':' + String(f.name).toLowerCase().trim());
       if (seen.has(key)) continue;
+      // Capture a 60-char window around the matched name for evidence-jump.
+      const evidence = buildEvidence(c, f.name, i);
       seen.set(key, {
         id: rid('ef'),
         kind: f.kind,
@@ -104,6 +120,8 @@ export async function runExtractPass(state, chapterId, opts = {}) {
         confidence: typeof f.confidence === 'number' ? f.confidence : 0.7,
         draft: { name: f.name, notes: f.notes || '' },
         order: order++,
+        sourceQuote: evidence?.sourceQuote || null,
+        evidence,
       });
     }
   }

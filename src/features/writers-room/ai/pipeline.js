@@ -12,6 +12,7 @@ import { scanContinuity } from '../continuity/service';
 import { detectQuestProgress } from '../quests/service';
 import { bucket as bucketByConfidence } from './confidence';
 import { runDeepCharacterPass, runQuestInvolvementPass } from './deep-extract';
+import { fingerprintFor, selectDismissedFingerprints } from '../review-queue/selectors';
 
 const DEBOUNCE_MS = 2500;
 
@@ -36,9 +37,17 @@ const REVIEW_CAP = 200;
 
 function pushReview(store, chapterId, items, kind) {
   if (!items || items.length === 0) return;
+  // Suppress findings the writer has already dismissed for this chapter.
+  // Same (kind, name, chapterId) → don't keep nagging them.
+  const dismissed = selectDismissedFingerprints(store);
   store.setSlice('reviewQueue', xs => {
     const arr = Array.isArray(xs) ? xs : [];
-    const stamped = items.map(f => ({ id: f.id || `rq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, kind, chapterId, addedAt: Date.now(), ...f }));
+    const fresh = items.filter(f => {
+      const fp = fingerprintFor({ kind: f.kind || kind, name: f.name, chapterId, draft: f.draft });
+      return !fp || !dismissed.has(fp);
+    });
+    if (fresh.length === 0) return arr;
+    const stamped = fresh.map(f => ({ id: f.id || `rq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, kind, chapterId, addedAt: Date.now(), ...f }));
     const next = [...arr, ...stamped];
     // Cap from the front so the most recent stay surfaced.
     return next.length > REVIEW_CAP ? next.slice(next.length - REVIEW_CAP) : next;
@@ -189,6 +198,30 @@ function routeDeepFindings(store, chapterId, deep) {
       confidence: r.confidence ?? 0.6,
       sourceType: 'relationship-change',
       payload: { a: r.resolvedA?.id || r.a, b: r.resolvedB?.id || r.b, kind: r.kind, strength: r.strength },
+    });
+  }
+  for (const inv of deep.inventoryChanges || []) {
+    if (!inv.character || !inv.item) continue;
+    const action = inv.action || 'acquired';
+    const where = inv.resolvedPlace?.name || inv.place || null;
+    items.push({
+      kind: 'item',
+      status: inv.resolvedItem ? 'known' : 'new',
+      name: inv.item,
+      resolvesTo: inv.resolvedItem?.id || null,
+      notes: `${action} by ${inv.character}${where ? ` in ${where}` : ''}${inv.reason ? ` — ${inv.reason}` : ''}`,
+      confidence: inv.confidence ?? 0.7,
+      sourceType: 'item-change',
+      payload: {
+        action,
+        character: inv.resolvedCharacter?.id || null,
+        characterName: inv.character,
+        item: inv.resolvedItem?.id || null,
+        itemName: inv.item,
+        place: inv.resolvedPlace?.id || null,
+        placeName: where,
+        reason: inv.reason || null,
+      },
     });
   }
   if (items.length) pushReview(store, chapterId, items, 'deep');

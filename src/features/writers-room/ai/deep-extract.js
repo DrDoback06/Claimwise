@@ -56,13 +56,17 @@ const SCHEMA = `Return ONLY this JSON, no commentary:
   ],
   "relationshipChanges": [
     {"a":"<character>","b":"<character>","kind":"<short>","strength":-1.0,"reason":"<short>","confidence":0.0}
+  ],
+  "inventoryChanges": [
+    {"character":"<exact name>","item":"<exact name>","action":"acquired|lost|destroyed|gifted|transferred","place":"<place name or null>","reason":"<short>","confidence":0.0}
   ]
-}`;
+}
+Only emit an inventoryChange when the prose explicitly shows the character taking, finding, losing, breaking, or giving the item. Do not invent ownership.`;
 
 export async function runDeepCharacterPass(store, chapterId) {
   const chapter = chapterId ? store.chapters?.[chapterId] : null;
   if (!chapter?.text || chapter.text.length < 50) {
-    return { appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [] };
+    return { appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [], inventoryChanges: [] };
   }
   const cast = store.cast || [];
   const knownNames = cast.map(c => c.name).join(', ') || '(none yet)';
@@ -75,7 +79,7 @@ export async function runDeepCharacterPass(store, chapterId) {
     extra: SCHEMA,
   });
 
-  const merged = { appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [] };
+  const merged = { appearances: [], statChanges: [], skillChanges: [], relationshipChanges: [], inventoryChanges: [] };
   const seen = new Set();
 
   for (let i = 0; i < chunks.length; i++) {
@@ -116,17 +120,24 @@ export async function runDeepCharacterPass(store, chapterId) {
     }
   }
 
-  return resolveActors(merged, cast);
+  return resolveActors(merged, cast, store.items || [], store.places || []);
 }
 
 // Replace bare character names with canonical actor IDs where possible
 // so downstream commits can patch the right entity.
-function resolveActors(merged, cast) {
+function resolveActors(merged, cast, items = [], places = []) {
   const matchOne = (name) => {
     if (!name) return null;
     const m = findMatchingActor(name, cast);
     if (!m || !m.actor) return null;
     return { id: m.actor.id, name: m.actor.name, matchType: m.matchType, confidence: m.confidence };
+  };
+  // Items + places use the same actor matcher (it's name-based, not actor-specific).
+  const matchByName = (name, pool) => {
+    if (!name) return null;
+    const m = findMatchingActor(name, pool);
+    if (!m || !m.actor) return null;
+    return { id: m.actor.id, name: m.actor.name };
   };
   return {
     appearances: merged.appearances.map(a => ({ ...a, resolved: matchOne(a.character) })),
@@ -136,6 +147,12 @@ function resolveActors(merged, cast) {
       ...a,
       resolvedA: matchOne(a.a),
       resolvedB: matchOne(a.b),
+    })),
+    inventoryChanges: (merged.inventoryChanges || []).map(a => ({
+      ...a,
+      resolvedCharacter: matchOne(a.character),
+      resolvedItem: matchByName(a.item, items),
+      resolvedPlace: a.place ? matchByName(a.place, places) : null,
     })),
   };
 }

@@ -10,6 +10,8 @@
 import React from 'react';
 import { useTheme } from '../../../theme';
 import { useStore } from '../../../store';
+import { MIME, readDrop } from '../../../drag';
+import { recordSkillAssignment } from '../../../timeline/corrections';
 
 export default function SkillsTab({ character: c, update }) {
   const t = useTheme();
@@ -29,26 +31,28 @@ export default function SkillsTab({ character: c, update }) {
   const removeSkill = (id) => setSkills(s => s.filter(x => x.id !== id));
   const updateSkill = (id, patch) => setSkills(s => s.map(x => x.id === id ? { ...x, ...patch } : x));
 
-  // Accept drag-drop from Skill Bank (panels/skills/index.jsx).
+  // Accept drag-drop from Skill Bank (panels/skills/index.jsx) OR a generic
+  // EntityChip with kind=skill (records a manual_correction event).
   const onDrop = (e) => {
     setOverDrop(false);
     const bankSkillId = e.dataTransfer.getData('application/x-lw-bank-skill');
-    if (!bankSkillId) return;
-    e.preventDefault();
-    const bankItem = bank.find(b => b.id === bankSkillId);
-    if (!bankItem) return;
-    setSkills(s => [...s, {
-      id: `sk_${Date.now()}`,
-      k: bankItem.name,
-      lvl: 1,
-      origin: 'from skill bank',
-      detail: bankItem.description || '',
-      bankSkillId,
-    }]);
+    if (bankSkillId) {
+      e.preventDefault();
+      const bankItem = bank.find(b => b.id === bankSkillId);
+      if (!bankItem) return;
+      recordSkillAssignment(store, { characterId: c.id, skillId: bankItem.id });
+      return;
+    }
+    const entityDrop = readDrop(e, MIME.ENTITY);
+    if (entityDrop && entityDrop.kind === 'skill' && entityDrop.id) {
+      e.preventDefault();
+      recordSkillAssignment(store, { characterId: c.id, skillId: entityDrop.id });
+    }
   };
 
   const onDragOver = (e) => {
-    if (e.dataTransfer.types.includes('application/x-lw-bank-skill')) {
+    if (e.dataTransfer.types.includes('application/x-lw-bank-skill')
+        || e.dataTransfer.types.includes(MIME.ENTITY)) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
       setOverDrop(true);

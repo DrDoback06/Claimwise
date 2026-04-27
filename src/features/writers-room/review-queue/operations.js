@@ -9,6 +9,7 @@ import {
   createCharacter, createPlace, createItem, createQuest, createThread,
 } from '../store/mutators';
 import { rid } from '../store/mutators';
+import { riskBandFor } from '../ai/confidence';
 
 // Helper: stamp a queue item with its action result so the history view
 // shows what was done. Mutates the slice transactionally.
@@ -26,13 +27,26 @@ function tierFor(level) {
   return 'novice';
 }
 
+// Append a timeline event. Accepts either the legacy single-actor shape
+// ({ actorId, eventType, chapterId, data }) or the multi-entity shape
+// ({ entityRefs: [{kind, id, role}], eventType, ... }). When only `actorId`
+// is provided we synthesize an `entityRefs` for the unified selector. Risk
+// band is derived from confidence + eventType unless the caller pins one
+// (e.g. manual corrections always land in 'high'/Blue).
 function appendTimelineEvent(setSlice, event) {
+  const refs = Array.isArray(event.entityRefs) && event.entityRefs.length
+    ? event.entityRefs
+    : (event.actorId ? [{ kind: 'character', id: event.actorId, role: 'primary' }] : []);
+  const band = event.riskBand
+    || riskBandFor({ confidence: event.confidence, eventType: event.eventType });
   setSlice('timelineEvents', xs => [
     ...(Array.isArray(xs) ? xs : []),
     {
       id: rid('te'),
       createdAt: Date.now(),
       ...event,
+      entityRefs: refs,
+      riskBand: band,
     },
   ]);
 }
@@ -72,7 +86,8 @@ export function commitQueueItem(store, itemId) {
       }));
       appendTimelineEvent(setSlice, {
         actorId: charId, eventType: 'stat_change', chapterId: item.chapterId,
-        data: { stat, delta, reason },
+        confidence: item.confidence,
+        data: { stat, delta, reason, evidence: item.evidence || null, sourceQuote: item.sourceQuote || item.evidence?.sourceQuote || null },
       });
       patchQueueItem(setSlice, itemId, { status: 'committed', resolvedAs: charId });
       createdEntityId = charId;
@@ -97,7 +112,12 @@ export function commitQueueItem(store, itemId) {
         }));
         appendTimelineEvent(setSlice, {
           actorId: character, eventType: 'skill_acquired', chapterId: item.chapterId,
-          data: { skillName, action, level },
+          confidence: item.confidence,
+          entityRefs: [
+            { kind: 'character', id: character, role: 'learner' },
+            { kind: 'skill', id: skillId, role: 'skill' },
+          ],
+          data: { skillName, action, level, evidence: item.evidence || null, sourceQuote: item.sourceQuote || item.evidence?.sourceQuote || null },
         });
       }
       patchQueueItem(setSlice, itemId, { status: 'committed', resolvedAs: skillId });
@@ -120,10 +140,88 @@ export function commitQueueItem(store, itemId) {
         }));
         appendTimelineEvent(setSlice, {
           actorId: a, eventType: 'relationship_change', chapterId: item.chapterId,
-          data: { other: b, kind, strength, reason: item.notes },
+          confidence: item.confidence,
+          entityRefs: [
+            { kind: 'character', id: a, role: 'subject' },
+            { kind: 'character', id: b, role: 'other' },
+          ],
+          data: { other: b, kind, strength, reason: item.notes, evidence: item.evidence || null, sourceQuote: item.sourceQuote || item.evidence?.sourceQuote || null },
         });
       }
       patchQueueItem(setSlice, itemId, { status: 'committed' });
+      return;
+    }
+    if (item.sourceType === 'item-change' && item.payload) {
+      const { action, character, item: resolvedItemId, itemName, place, placeName, reason } = item.payload;
+      const itemDraftName = item.draft?.name || itemName || item.name || 'Unnamed';
+
+      // 1. Find or create the item.
+      let entityItemId = resolvedItemId;
+      if (!entityItemId) {
+        const existing = (get?.().items || store.items || []).find(
+          x => (x.name || '').toLowerCase().trim() === itemDraftName.toLowerCase().trim());
+        if (existing) {
+          entityItemId = existing.id;
+        } else {
+          entityItemId = createItem({ setSlice }, {
+            name: itemDraftName,
+            description: item.notes || '',
+            owner: action === 'acquired' || action === 'gifted' ? character : null,
+            extractedFromChapter: item.chapterId || null,
+            draftedByLoom: true,
+          });
+        }
+      }
+
+      // 2. Mutate the character's inventory + the item's owner.
+      if (character && entityItemId) {
+        if (action === 'acquired' || action === 'gifted' || action === 'transferred') {
+          setSlice('cast', cs => (cs || []).map(c => {
+            if (c.id !== character) return c;
+            const inv = Array.isArray(c.inventory) ? c.inventory : [];
+            if (inv.some(x => (x?.id || x) === entityItemId)) return c;
+            return { ...c, inventory: [...inv, { id: entityItemId, addedAt: Date.now() }] };
+          }));
+          setSlice('items', is => (is || []).map(x => x.id === entityItemId ? { ...x, owner: character } : x));
+        } else if (action === 'lost' || action === 'destroyed') {
+          setSlice('cast', cs => (cs || []).map(c => {
+            if (c.id !== character) return c;
+            const inv = Array.isArray(c.inventory) ? c.inventory : [];
+            return { ...c, inventory: inv.filter(x => (x?.id || x) !== entityItemId) };
+          }));
+          if (action === 'destroyed') {
+            setSlice('items', is => (is || []).map(x => x.id === entityItemId ? { ...x, status: 'destroyed' } : x));
+          } else {
+            setSlice('items', is => (is || []).map(x => x.id === entityItemId ? { ...x, owner: null } : x));
+          }
+        }
+      }
+
+      // 3. Append the multi-entity timeline event.
+      const eventType = action === 'destroyed' ? 'item_destroyed'
+        : action === 'transferred' ? 'item_transferred'
+        : action === 'lost' ? 'item_transferred'
+        : 'item_acquired';
+      const refs = [];
+      if (character) refs.push({ kind: 'character', id: character, role: action === 'lost' ? 'former_owner' : 'owner' });
+      if (entityItemId) refs.push({ kind: 'item', id: entityItemId, role: 'item' });
+      if (place) refs.push({ kind: 'place', id: place, role: 'location' });
+      appendTimelineEvent(setSlice, {
+        actorId: character || null,
+        entityRefs: refs,
+        eventType,
+        chapterId: item.chapterId || null,
+        confidence: item.confidence,
+        data: {
+          description: `${itemDraftName} ${action}${placeName ? ` in ${placeName}` : ''}${reason ? ` — ${reason}` : ''}`,
+          sourceQuote: item.sourceQuote || item.evidence?.sourceQuote || null,
+          evidence: item.evidence || null,
+          action,
+        },
+      });
+
+      patchQueueItem(setSlice, item.id, { status: 'committed', resolvedAs: entityItemId });
+      createdEntityId = entityItemId;
       return;
     }
     if (item.sourceType === 'quest-involvement' && item.payload) {
@@ -137,7 +235,12 @@ export function commitQueueItem(store, itemId) {
         }));
         appendTimelineEvent(setSlice, {
           actorId: characterId, eventType: 'quest_involvement', chapterId: item.chapterId,
-          data: { questId, role },
+          confidence: item.confidence,
+          entityRefs: [
+            { kind: 'character', id: characterId, role: role || 'actor' },
+            { kind: 'quest', id: questId, role: 'quest' },
+          ],
+          data: { questId, role, evidence: item.evidence || null, sourceQuote: item.sourceQuote || item.evidence?.sourceQuote || null },
         });
       }
       patchQueueItem(setSlice, itemId, { status: 'committed', resolvedAs: questId });
@@ -154,9 +257,11 @@ export function commitQueueItem(store, itemId) {
           actorId: target,
           eventType: 'mention',
           chapterId: item.chapterId || null,
+          confidence: item.confidence,
           data: {
             description: item.notes || `Appeared in chapter`,
-            sourceQuote: item.sourceQuote || null,
+            sourceQuote: item.sourceQuote || item.evidence?.sourceQuote || null,
+            evidence: item.evidence || null,
           },
         });
       }
@@ -174,7 +279,12 @@ export function commitQueueItem(store, itemId) {
         actorId: createdEntityId,
         eventType: 'introduced',
         chapterId: item.chapterId || null,
-        data: { description: `Introduced in chapter`, sourceQuote: item.sourceQuote || null },
+        confidence: item.confidence,
+        data: {
+          description: `Introduced in chapter`,
+          sourceQuote: item.sourceQuote || item.evidence?.sourceQuote || null,
+          evidence: item.evidence || null,
+        },
       });
     } else if (item.kind === 'place') {
       createdEntityId = createPlace(helper, patch);
@@ -287,6 +397,31 @@ export function dismissQueueItem(store, itemId) {
   store.transaction(({ setSlice }) => {
     patchQueueItem(setSlice, itemId, { status: 'dismissed' });
   });
+}
+
+// Bulk variants — same semantics as their single-item siblings but issued
+// as one transaction so the UI re-renders once instead of N times.
+export function bulkDismiss(store, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return;
+  const set = new Set(ids);
+  store.transaction(({ setSlice }) => {
+    setSlice('reviewQueue', xs => (xs || []).map(it =>
+      set.has(it.id) ? { ...it, status: 'dismissed', actedAt: Date.now() } : it
+    ));
+  });
+}
+
+// Bulk commit. Re-uses `commitQueueItem` per id; each call opens its own
+// transaction. We keep them sequential because earlier commits may create
+// canonical entities that later commits resolve to.
+export function bulkCommit(store, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+  const out = [];
+  for (const id of ids) {
+    const result = commitQueueItem(store, id);
+    if (result) out.push(result);
+  }
+  return out;
 }
 
 export function editQueueItemDraft(store, itemId, patch) {

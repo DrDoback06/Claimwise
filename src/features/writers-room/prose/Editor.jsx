@@ -155,6 +155,51 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     ? chapter.text.split(/\n\n+/).map(text => ({ id: rid('p'), text, state: 'written' }))
     : [{ id: rid('p'), text: '', state: 'draft' }]);
 
+  // External jump-to-evidence: timeline rows dispatch `lw:highlight-search`
+  // with `{ detail: { quote } }`. Locate the first occurrence in the editor,
+  // scroll to it, and flash a highlight for 1.5s.
+  React.useEffect(() => {
+    function onHighlight(e) {
+      const quote = e?.detail?.quote;
+      if (!quote || !ref.current) return;
+      // Strip leading/trailing ellipses + whitespace.
+      const needle = quote.replace(/^…+\s*/, '').replace(/\s*…+$/, '').trim();
+      if (!needle) return;
+      const root = ref.current;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+      let node;
+      while ((node = walker.nextNode())) {
+        const idx = node.nodeValue.indexOf(needle.slice(0, Math.min(needle.length, 40)));
+        if (idx >= 0) {
+          const range = document.createRange();
+          range.setStart(node, idx);
+          range.setEnd(node, Math.min(node.nodeValue.length, idx + needle.length));
+          const rect = range.getBoundingClientRect();
+          if (rect.height > 0) {
+            window.scrollTo({ top: window.scrollY + rect.top - 120, behavior: 'smooth' });
+          }
+          // Wrap in a transient highlight span.
+          try {
+            const span = document.createElement('span');
+            span.style.cssText = 'background: rgba(212,146,82,0.45); transition: background 1.4s ease;';
+            range.surroundContents(span);
+            setTimeout(() => { span.style.background = 'transparent'; }, 800);
+            setTimeout(() => {
+              if (span.parentNode) {
+                const parent = span.parentNode;
+                while (span.firstChild) parent.insertBefore(span.firstChild, span);
+                parent.removeChild(span);
+              }
+            }, 2400);
+          } catch {}
+          return;
+        }
+      }
+    }
+    window.addEventListener('lw:highlight-search', onHighlight);
+    return () => window.removeEventListener('lw:highlight-search', onHighlight);
+  }, []);
+
   // Render HTML on chapter change OR when known entities change AND user not actively typing.
   const lastChapterId = React.useRef(null);
   const lastKnownHash = React.useRef('');

@@ -13,6 +13,7 @@ import Catalog from '../../items/Catalog';
 import SpecialistChat from '../../specialist/SpecialistChat';
 import QueuePanel from '../../review-queue/QueuePanel';
 import EntityImageButton from '../../images/EntityImageButton';
+import EntityTimeline from '../../timeline/EntityTimeline';
 
 const RARITIES = ['common', 'magic', 'rare', 'legendary', 'unique', 'mythic'];
 const RARITY_COLOR = {
@@ -55,7 +56,7 @@ export default function ItemsPanel({ onClose }) {
         padding: '8px 12px', display: 'flex', gap: 4, borderBottom: `1px solid ${t.rule}`,
         background: t.paper,
       }}>
-        {['bank', 'forge', 'catalog'].map(x => (
+        {['bank', 'forge', 'catalog', 'story'].map(x => (
           <button key={x} onClick={() => setTab(x)} style={{
             padding: '4px 10px',
             background: tab === x ? PANEL_ACCENT.items : 'transparent',
@@ -98,6 +99,16 @@ export default function ItemsPanel({ onClose }) {
         </div>
       )}
       {tab === 'catalog' && <Catalog />}
+      {tab === 'story' && (
+        item ? (
+          <EntityTimeline kind="item" id={item.id} />
+        ) : (
+          <div style={{
+            padding: '14px 16px', fontFamily: t.display, fontSize: 13,
+            color: t.ink3, fontStyle: 'italic',
+          }}>Select an item to see its story log.</div>
+        )
+      )}
 
       <SpecialistChat domain="items" accent={PANEL_ACCENT.items} />
 

@@ -7,6 +7,7 @@ import { useSelection } from '../../selection';
 import CollapseSection from '../CollapseSection';
 import { PLACE_TEMPLATES } from './templates';
 import { placeById } from '../../store/selectors';
+import EntityTimeline from '../../timeline/EntityTimeline';
 
 export default function PlaceEditor({ onWeave }) {
   const t = useTheme();
@@ -111,6 +112,10 @@ export default function PlaceEditor({ onWeave }) {
           })}
         </CollapseSection>
       )}
+
+      <CollapseSection title="Story log">
+        <EntityTimeline kind="place" id={place.id} />
+      </CollapseSection>
     </div>
   );
 }

@@ -1,9 +1,13 @@
-// Loomwright — Cast > Appearances tab. Auto-scan chapters for mentions.
+// Loomwright — Cast > Appearances tab. Top section: living-canon graph
+// events for this character (Loom-extracted). Bottom section: regex scan
+// of every chapter for raw name mentions, as a fallback for chapters that
+// haven't been processed by the autonomous pipeline yet.
 
 import React from 'react';
 import { useTheme } from '../../../theme';
 import { useStore } from '../../../store';
 import { chapterList } from '../../../store/selectors';
+import EntityTimeline from '../../../timeline/EntityTimeline';
 
 function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
@@ -35,7 +39,20 @@ export default function AppearancesTab({ character: c }) {
   };
 
   return (
-    <div style={{ padding: '14px 16px' }}>
+    <div style={{ padding: '14px 0' }}>
+      <div style={{
+        padding: '0 16px 6px', fontFamily: t.mono, fontSize: 9,
+        color: t.ink3, letterSpacing: 0.16, textTransform: 'uppercase',
+      }}>Story log</div>
+      <EntityTimeline kind="character" id={c.id} />
+
+      <div style={{
+        marginTop: 10, padding: '8px 16px 6px',
+        borderTop: `1px solid ${t.rule}`,
+        fontFamily: t.mono, fontSize: 9, color: t.ink3,
+        letterSpacing: 0.16, textTransform: 'uppercase',
+      }}>Raw mentions</div>
+      <div style={{ padding: '0 16px' }}>
       {chapters.length === 0 && (
         <div style={{ fontFamily: t.display, fontSize: 13, color: t.ink3, fontStyle: 'italic' }}>No chapters yet.</div>
       )}
@@ -58,6 +75,7 @@ export default function AppearancesTab({ character: c }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

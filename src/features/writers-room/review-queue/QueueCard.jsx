@@ -8,6 +8,8 @@ import { useStore } from '../store';
 import {
   commitQueueItem, dismissQueueItem, editQueueItemDraft, mergeQueueItem,
 } from './operations';
+import RiskChip from './RiskChip';
+import { riskBandFor } from '../ai/confidence';
 
 const KIND_LABEL = {
   character: 'Character',
@@ -21,7 +23,17 @@ const KIND_LABEL = {
   'quest-progress': 'Quest beat',
 };
 
-export default function QueueCard({ item, accent, onCommit }) {
+function eventTypeForItem(item) {
+  if (item?.sourceType === 'item-change' && item.payload?.action) {
+    const a = item.payload.action;
+    if (a === 'destroyed') return 'item_destroyed';
+    if (a === 'transferred' || a === 'lost') return 'item_transferred';
+    return 'item_acquired';
+  }
+  return null;
+}
+
+export default function QueueCard({ item, accent, onCommit, selected, onToggleSelect }) {
   const t = useTheme();
   const store = useStore();
   const [open, setOpen] = React.useState(false);
@@ -77,19 +89,18 @@ export default function QueueCard({ item, accent, onCommit }) {
         cursor: 'grab',
       }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {onToggleSelect && (
+          <input type="checkbox" checked={!!selected}
+            onChange={() => onToggleSelect(item.id)}
+            onClick={e => e.stopPropagation()}
+            style={{ cursor: 'pointer', flexShrink: 0 }} />
+        )}
+        <RiskChip band={riskBandFor({ confidence: item.confidence, eventType: eventTypeForItem(item) })} size="xs" />
         <span style={{
           padding: '1px 6px', background: accent, color: t.onAccent,
           fontFamily: t.mono, fontSize: 8, letterSpacing: 0.16, textTransform: 'uppercase',
           borderRadius: 1,
         }}>{KIND_LABEL[item.kind] || item.kind}</span>
-        {item.autoApplied && (
-          <span style={{
-            padding: '1px 6px', background: 'transparent', color: t.ink3,
-            border: `1px solid ${t.rule}`,
-            fontFamily: t.mono, fontSize: 8, letterSpacing: 0.14, textTransform: 'uppercase',
-            borderRadius: 1,
-          }}>auto-applied</span>
-        )}
         <input
           value={draft.name}
           onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}

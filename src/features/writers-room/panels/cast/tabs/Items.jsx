@@ -1,24 +1,48 @@
-// Loomwright — Cast > Items tab.
+// Loomwright — Cast > Items tab. Accepts item drops; each drop logs a
+// manual_correction timeline event so canon stays auditable.
 
 import React from 'react';
 import { useTheme } from '../../../theme';
 import { useStore } from '../../../store';
 import { useSelection } from '../../../selection';
-import { dragEntity } from '../../../drag';
+import { dragEntity, MIME, readDrop, isAcceptable } from '../../../drag';
+import { recordItemAssignment } from '../../../timeline/corrections';
 
 export default function ItemsTab({ character: c }) {
   const t = useTheme();
   const store = useStore();
   const { sel, select } = useSelection();
+  const [over, setOver] = React.useState(false);
   const charItems = (store.items || []).filter(it =>
-    (c.inventory || []).includes(it.id) || it.owner === c.id
+    (c.inventory || []).some(x => (x?.id || x) === it.id) || it.owner === c.id
   );
 
+  const onDragOver = (e) => {
+    if (isAcceptable(e, MIME.ENTITY)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setOver(true);
+    }
+  };
+  const onDragLeave = () => setOver(false);
+  const onDrop = (e) => {
+    setOver(false);
+    const data = readDrop(e, MIME.ENTITY);
+    if (data && data.kind === 'item' && data.id) {
+      e.preventDefault();
+      recordItemAssignment(store, { characterId: c.id, itemId: data.id, action: 'inventory-add' });
+    }
+  };
+
   return (
-    <div style={{ padding: '14px 16px' }}>
+    <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} style={{
+      padding: '14px 16px',
+      background: over ? (t.paper2 || t.paper) : 'transparent',
+      outline: over ? `1px dashed ${t.accent}` : 'none',
+    }}>
       {charItems.length === 0 && (
         <div style={{ fontFamily: t.display, fontSize: 13, color: t.ink3, fontStyle: 'italic', lineHeight: 1.5 }}>
-          Items appear as your characters pick them up.
+          Items appear as your characters pick them up. Drag an item chip here to assign one manually.
         </div>
       )}
       {charItems.map(it => {
