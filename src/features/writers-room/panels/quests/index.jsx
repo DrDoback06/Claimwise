@@ -10,7 +10,6 @@ import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore, createQuest } from '../../store';
 import { useSelection } from '../../selection';
 import { questById } from '../../store/selectors';
-import SpecialistChat from '../../specialist/SpecialistChat';
 import QueuePanel from '../../review-queue/QueuePanel';
 import { detectQuestProgress } from '../../quests/service';
 
@@ -176,7 +175,6 @@ export default function QuestsPanel({ onClose }) {
         </div>
       )}
 
-      <SpecialistChat domain="quests" accent={PANEL_ACCENT.threads} />
     </PanelFrame>
   );
 }

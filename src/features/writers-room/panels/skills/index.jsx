@@ -9,7 +9,6 @@ import { useTheme, PANEL_ACCENT } from '../../theme';
 import { useStore } from '../../store';
 import { generateTree } from '../../skills/treeService';
 import { ensureWikiEntry } from '../../wiki/service';
-import SpecialistChat from '../../specialist/SpecialistChat';
 import QueuePanel from '../../review-queue/QueuePanel';
 import { dragEntity } from '../../drag';
 
@@ -392,7 +391,6 @@ export default function SkillsPanel({ onClose }) {
         </div>
       )}
 
-      <SpecialistChat domain="skills" accent={PANEL_ACCENT.items} />
 
       <ContextMenu state={ctx.state} onClose={ctx.close} />
 
