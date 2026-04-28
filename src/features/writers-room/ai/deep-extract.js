@@ -14,6 +14,7 @@
 
 import aiService from '../../../services/aiService';
 import { composeSystem } from './context';
+import { safeParseJson } from './jsonExtract';
 import entityMatchingService from '../../../services/entityMatchingService';
 const findMatchingActor = (name, actors) => entityMatchingService.findMatchingActor(name, actors);
 
@@ -23,16 +24,6 @@ function chunk(text) {
   const out = [];
   for (let i = 0; i < text.length; i += CHUNK) out.push(text.slice(i, i + CHUNK));
   return out;
-}
-
-function safeParse(raw) {
-  if (!raw) return null;
-  let s = String(raw).trim();
-  if (s.startsWith('```')) s = s.replace(/^```[a-zA-Z]*\n?/, '').replace(/```\s*$/, '');
-  const first = s.indexOf('{');
-  const last = s.lastIndexOf('}');
-  if (first < 0 || last <= first) return null;
-  try { return JSON.parse(s.slice(first, last + 1)); } catch { return null; }
 }
 
 const PERSONA = [
@@ -126,7 +117,7 @@ export async function runDeepCharacterPass(store, chapterId) {
       console.warn('[deep-extract] chunk failed', i, err?.message);
       continue;
     }
-    const parsed = safeParse(raw);
+    const parsed = safeParseJson(raw);
     if (!parsed) continue;
 
     for (const k of Object.keys(merged)) {
@@ -219,7 +210,7 @@ export async function runQuestInvolvementPass(store, chapterId, quest) {
 
   try {
     const raw = await aiService.callAI(prompt, 'analytical', sys, { useCache: false });
-    const parsed = safeParse(raw);
+    const parsed = safeParseJson(raw);
     const list = Array.isArray(parsed?.involved) ? parsed.involved : [];
     return list.map(x => ({
       ...x,

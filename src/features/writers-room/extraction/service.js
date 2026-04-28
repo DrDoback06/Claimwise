@@ -11,6 +11,7 @@
 import aiService from '../../../services/aiService';
 import { composeSystem } from '../ai/context';
 import { reconcileFindings } from '../ai/entityMatch';
+import { safeParseJson } from '../ai/jsonExtract';
 
 function rid(prefix) { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
 
@@ -20,16 +21,6 @@ function chunk(text) {
   const out = [];
   for (let i = 0; i < text.length; i += CHUNK_SIZE) out.push(text.slice(i, i + CHUNK_SIZE));
   return out;
-}
-
-function safeParse(raw) {
-  if (!raw) return null;
-  let s = String(raw).trim();
-  if (s.startsWith('```')) s = s.replace(/^```[a-zA-Z]*\n?/, '').replace(/```\s*$/, '');
-  const first = s.indexOf('{');
-  const last = s.lastIndexOf('}');
-  if (first < 0 || last <= first) return null;
-  try { return JSON.parse(s.slice(first, last + 1)); } catch { return null; }
 }
 
 const PERSONA = [
@@ -108,12 +99,18 @@ export async function runExtractPass(state, chapterId, opts = {}) {
       console.warn('[extraction] chunk failed', i, err?.message);
       continue;
     }
-    const parsed = safeParse(raw);
+    const parsed = safeParseJson(raw);
+    if (!parsed) {
+      console.warn('[extraction] chunk', i, 'unparseable AI response (', (raw || '').length, 'chars)');
+    }
     const list = Array.isArray(parsed?.findings) ? parsed.findings : [];
     const events = Array.isArray(parsed?.entityEvents) ? parsed.entityEvents : [];
     const links = Array.isArray(parsed?.proposedLinks) ? parsed.proposedLinks : [];
     const merges = Array.isArray(parsed?.mergeSuggestions) ? parsed.mergeSuggestions : [];
     const continuity = Array.isArray(parsed?.continuityConcerns) ? parsed.continuityConcerns : [];
+    if (parsed && list.length === 0 && events.length === 0) {
+      console.info('[extraction] chunk', i, 'parsed but yielded 0 findings / events');
+    }
 
     for (const f of list) {
       if (!f?.kind || !f?.name) continue;

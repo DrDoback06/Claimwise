@@ -65,6 +65,11 @@ exports.handler = async (event) => {
           },
           body: JSON.stringify({
             model: model || 'gpt-4o-mini',
+            // Headroom for verbose extraction JSON. Without an explicit cap
+            // the API defaults to a small value and trims responses
+            // mid-array, so the safeParseJson truncation-repair has more
+            // work to do than necessary.
+            max_tokens: 8192,
             messages: [
               ...(systemContext ? [{ role: 'system', content: systemContext }] : []),
               { role: 'user', content: prompt }
@@ -99,7 +104,7 @@ exports.handler = async (event) => {
           },
           body: JSON.stringify({
             model: model || 'claude-sonnet-4-20250514',
-            max_tokens: 4096,
+            max_tokens: 8192,
             ...(systemContext ? { system: systemContext } : {}),
             messages: [{ role: 'user', content: prompt }]
           })
@@ -117,6 +122,7 @@ exports.handler = async (event) => {
           },
           body: JSON.stringify({
             model: model || 'llama-3.1-70b-versatile',
+            max_tokens: 8192,
             messages: [
               ...(systemContext ? [{ role: 'system', content: systemContext }] : []),
               { role: 'user', content: prompt }

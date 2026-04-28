@@ -5,18 +5,11 @@
 
 import aiService from '../../../services/aiService';
 import { composeSystem } from '../ai/context';
+import { safeParseJson } from '../ai/jsonExtract';
 
 function safeParse(raw) {
-  if (!raw) return [];
-  let s = String(raw).trim();
-  if (s.startsWith('```')) s = s.replace(/^```[a-zA-Z]*\n?/, '').replace(/```\s*$/, '');
-  const first = s.indexOf('{');
-  const last = s.lastIndexOf('}');
-  if (first < 0 || last <= first) return [];
-  try {
-    const parsed = JSON.parse(s.slice(first, last + 1));
-    return Array.isArray(parsed?.beats) ? parsed.beats : [];
-  } catch { return []; }
+  const parsed = safeParseJson(raw);
+  return Array.isArray(parsed?.beats) ? parsed.beats : [];
 }
 
 export async function detectQuestProgress(state, chapterId) {

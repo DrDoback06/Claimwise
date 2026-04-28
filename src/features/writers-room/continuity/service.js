@@ -4,6 +4,7 @@
 
 import aiService from '../../../services/aiService';
 import { composeSystem } from '../ai/context';
+import { safeParseJson } from '../ai/jsonExtract';
 
 const PERSONA = [
   'You are a continuity checker for a novel manuscript.',
@@ -17,17 +18,8 @@ const SCHEMA = [
 ].join('\n');
 
 function safeParse(raw) {
-  if (!raw) return [];
-  let s = String(raw).trim();
-  if (s.startsWith('```')) s = s.replace(/^```[a-zA-Z]*\n?/, '').replace(/```\s*$/, '');
-  const first = s.indexOf('{');
-  const last = s.lastIndexOf('}');
-  if (first >= 0 && last > first) s = s.slice(first, last + 1);
-  try {
-    const parsed = JSON.parse(s);
-    return Array.isArray(parsed?.findings) ? parsed.findings : [];
-  } catch {}
-  return [];
+  const parsed = safeParseJson(raw);
+  return Array.isArray(parsed?.findings) ? parsed.findings : [];
 }
 
 export async function scanContinuity(state, chapterId) {

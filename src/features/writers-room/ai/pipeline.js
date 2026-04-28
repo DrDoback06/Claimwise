@@ -76,9 +76,23 @@ async function runJob(store, chapterId) {
   // Extraction pass
   try {
     markRunning(store, chapterId, 'extraction');
+    console.info('[pipeline] extraction start', chapterId);
     const findings = await runExtractPass(store, chapterId, { deep: false });
     if (cancelled.abort) return;
     const bucketed = bucketByConfidence(findings);
+    const byKind = (Array.isArray(findings) ? findings : []).reduce((acc, f) => {
+      acc[f.kind] = (acc[f.kind] || 0) + 1; return acc;
+    }, {});
+    console.info('[pipeline] extraction findings', chapterId, {
+      total: Array.isArray(findings) ? findings.length : 0,
+      byKind,
+      auto: bucketed.auto.length,
+      suggested: bucketed.suggested.length,
+      background: bucketed.background.length,
+      ignored: bucketed.ignored.length,
+      events: findings.entityEvents?.length || 0,
+      links: findings.proposedLinks?.length || 0,
+    });
     // Auto-applies are saved straight to canon; suggested + background go
     // into the review queue as kind='extraction'.
     if (bucketed.auto.length) {
