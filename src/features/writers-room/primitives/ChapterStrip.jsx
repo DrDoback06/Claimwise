@@ -29,12 +29,24 @@ export default function ChapterStrip({
   const activeId = value || store.ui?.activeChapterId || store.book?.currentChapterId;
   const activeAccent = accent || t.accent;
 
-  // Sort chapter ids by their n value so pills always render in chapter-number
-  // order regardless of the insertion order in chapterOrder.
-  const sortedOrder = React.useMemo(
-    () => [...order].sort((a, b) => ((chapters[a]?.n) ?? 9999) - ((chapters[b]?.n) ?? 9999)),
-    [order, chapters],
-  );
+  // Sort by the chapter number embedded in the chapter text ("## CHAPTER 3:")
+  // which is the ground-truth ordering. The `n` property was assigned at
+  // import time (1st file imported = n=1) and may not match the story
+  // sequence. Fall back to `ch.n` for chapters with no numeric heading.
+  const sortedOrder = React.useMemo(() => {
+    function chNumFromText(text) {
+      if (!text) return null;
+      const m = text.slice(0, 400).match(/\bCHAPTER\s+(\d+)/i);
+      return m ? parseInt(m[1], 10) : null;
+    }
+    return [...order].sort((a, b) => {
+      const chA = chapters[a];
+      const chB = chapters[b];
+      const nA = chNumFromText(chA?.text) ?? chA?.n ?? 9999;
+      const nB = chNumFromText(chB?.text) ?? chB?.n ?? 9999;
+      return nA - nB;
+    });
+  }, [order, chapters]);
 
   const activeIdx = sortedOrder.indexOf(activeId);
 
@@ -97,6 +109,10 @@ export default function ChapterStrip({
           if (!ch) return null;
           const isActive = id === activeId;
           const wc = (ch?.text || '').trim().match(/\S+/g)?.length || 0;
+          // Use the chapter number extracted from text as the pill label so
+          // what the pill shows always matches what the chapter says it is.
+          const m = (ch.text || '').slice(0, 400).match(/\bCHAPTER\s+(\d+)/i);
+          const pillLabel = m ? parseInt(m[1], 10) : (ch.n ?? (i + 1));
           return (
             <button
               key={id}
@@ -121,7 +137,7 @@ export default function ChapterStrip({
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'background 160ms, border-color 160ms, color 160ms',
               }}>
-              {ch.n ?? (i + 1)}
+              {pillLabel}
             </button>
           );
         })}

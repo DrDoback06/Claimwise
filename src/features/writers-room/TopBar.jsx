@@ -121,7 +121,7 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
                 background: t.warn, color: t.onAccent,
                 fontFamily: t.mono, fontSize: 9, letterSpacing: 0.14,
                 textTransform: 'uppercase', whiteSpace: 'nowrap',
-              }}>⟲ {runningJobs.map(j => j.label).join('·')}</span>
+              }}>⟲ {[...new Set(runningJobs.map(j => j.label))].join('·')}{runningJobs.length > 1 ? ` (${runningJobs.length})` : ''}</span>
           )}
           {!runningJobs.length && reviewQueue.length > 0 && (
             <button
