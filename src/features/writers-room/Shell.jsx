@@ -24,7 +24,8 @@ import WhatsNew from './WhatsNew';
 import VersionHistory from './utilities/VersionHistory';
 import aiService from '../../services/aiService';
 import { shouldAutoSnapshot, makeSnapshot, pushSnapshot } from './utilities/snapshots';
-import { scheduleAutonomousRun, clearAllRuns } from './ai/pipeline';
+import { scheduleFoundationRun, scheduleDeepRun, scheduleFoundationForAll, clearAllRuns } from './ai/pipeline';
+import { resetExtraction, undoLastExtraction, describeLastExtraction } from './extraction/reset';
 import { ensureDefaultAuthor } from './authors/AuthorsPanel';
 
 import CastPanel from './panels/cast';
@@ -112,9 +113,12 @@ export default function Shell() {
     }
   }, [store._loading, store.profile?.apiKeys, store.profile?.aiProvider]);
 
-  // Auto-snapshot on chapter save. We hook into chapter changes via lastEdit.
+  // Auto-snapshot on chapter save. The autonomous extraction pipeline no
+  // longer fires on every save — it's now driven by the explicit save-mode
+  // dropdown ("Save & Extract" / "Save & Deep Extract") and by the
+  // onboarding wizard's bulk import. Real-time extraction was too costly
+  // for a 20+ chapter manuscript; the writer now opts in.
   const lastSnapshotMs = React.useRef({});
-  const lastPipelineMs = React.useRef({});
   React.useEffect(() => {
     const id = store.ui?.activeChapterId || store.book?.currentChapterId;
     const ch = id ? store.chapters?.[id] : null;
@@ -124,14 +128,6 @@ export default function Shell() {
       if (shouldAutoSnapshot(id, store.snapshots)) {
         pushSnapshot(store, makeSnapshot(ch, 'auto'));
       }
-    }
-    // Autonomous AI pipeline: only schedule when the writer's onboarded
-    // (so we have context) and the chapter has real content.
-    if (lastPipelineMs.current[id] !== ch.lastEdit
-        && (ch.text || '').trim().length > 80
-        && store.profile?.onboarded) {
-      lastPipelineMs.current[id] = ch.lastEdit;
-      scheduleAutonomousRun(store, id);
     }
   }, [store.chapters, store.ui?.activeChapterId, store.book?.currentChapterId, store.snapshots, store]);
 
@@ -185,15 +181,34 @@ export default function Shell() {
       if (chId) setExtractionFor(chId);
     }
     if (actionId === 'rescan.all') {
-      const order = store.book?.chapterOrder || [];
-      let scheduled = 0;
-      for (const id of order) {
-        const ch = store.chapters?.[id];
-        if ((ch?.text || '').trim().length > 80) {
-          try { scheduleAutonomousRun(store, id); scheduled++; } catch {}
-        }
-      }
+      const scheduled = scheduleFoundationForAll(store);
       if (scheduled === 0) window.alert('No chapters with enough text to scan.');
+    }
+    if (actionId === 'deep.scan') {
+      const id = store.ui?.activeChapterId || store.book?.currentChapterId;
+      if (!id) return;
+      scheduleDeepRun(store, id);
+    }
+    if (actionId === 'extraction.reset') {
+      const ok = window.confirm(
+        'Reset extraction?\n\n' +
+        'This clears the review queue and removes every entity the AI ' +
+        'auto-added (anything you have not manually edited). Manually ' +
+        'edited entities survive. The original chapter text is untouched.'
+      );
+      if (!ok) return;
+      resetExtraction(store);
+    }
+    if (actionId === 'extraction.undo') {
+      const desc = describeLastExtraction(store);
+      if (!desc) { window.alert('No extraction to undo.'); return; }
+      const ok = window.confirm(
+        `Undo last ${desc.mode} extraction on ch.${desc.chapterN || '?'} ${desc.chapterTitle}?\n\n` +
+        `This will remove ${desc.queueCount} review queue items and any ` +
+        `Loom-drafted entities from that run.`
+      );
+      if (!ok) return;
+      undoLastExtraction(store);
     }
     if (actionId === 'open.skills') ensurePanelOpen('skills');
     if (actionId === 'open.continuity') ensurePanelOpen('continuity');

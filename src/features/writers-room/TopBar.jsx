@@ -9,6 +9,7 @@ import SelectionPill from './selection/SelectionPill';
 import ChapterStrip from './primitives/ChapterStrip';
 import { AuthorChip } from './authors/AuthorsPanel';
 import ProjectSwitcher from './projects/ProjectSwitcher';
+import SaveButton from './SaveButton';
 
 export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpenSettings, onOpenBible, onOpenHistory, onOpenProof, onOpenAid }) {
   const t = useTheme();
@@ -171,6 +172,9 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
           </button>
         ))}
       </div>
+
+      {/* Save button with extraction-mode dropdown. */}
+      <SaveButton />
 
       {/* Save indicator — clickable, opens version history. */}
       <button

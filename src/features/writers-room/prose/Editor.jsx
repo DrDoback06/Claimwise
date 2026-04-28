@@ -341,17 +341,22 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     isUserTyping.current = false;
   }, [activeId, chapter?.text, store]);
 
-  // Wire flush to every "user is leaving" signal.
+  // Wire flush to every "user is leaving" signal — and to the explicit
+  // save-button event, so the SaveButton dropdown can guarantee the prose
+  // is on disk before it kicks the extraction pipeline.
   React.useEffect(() => {
     const onVisibility = () => { if (document.visibilityState === 'hidden') flushSave(); };
     const onBeforeUnload = () => { flushSave(); };
     const onPageHide = () => { flushSave(); };
+    const onExplicitSave = () => { flushSave(); };
     window.addEventListener('beforeunload', onBeforeUnload);
     window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('lw:flush-save', onExplicitSave);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload);
       window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('lw:flush-save', onExplicitSave);
       document.removeEventListener('visibilitychange', onVisibility);
       // Final flush on unmount (also covers chapter swap).
       flushSave();

@@ -38,8 +38,10 @@ export default function CommandPalette({ onClose, onAction }) {
     { id: 'panel.language', label: 'Open Language' },
     { id: 'panel.tangle', label: 'Open Tangle' },
     { id: 'open.weaver', label: 'Open the Weaver (⌘J)' },
-    { id: 'open.extraction', label: 'Re-scan this chapter (deep extraction)' },
-    { id: 'rescan.all', label: 'Re-scan all chapters in the background' },
+    { id: 'deep.scan', label: 'Deep scan this chapter — Layer 2 (powerful)' },
+    { id: 'rescan.all', label: 'Foundation scan all chapters (Layer 1)' },
+    { id: 'extraction.undo', label: 'Undo last extraction' },
+    { id: 'extraction.reset', label: 'Reset all extraction (clears queue + AI drafts)' },
     { id: 'focus.toggle', label: 'Toggle focus mode (F9)' },
     { id: 'theme.toggle', label: 'Toggle theme' },
   ].filter(a => !ql || a.label.toLowerCase().includes(ql));

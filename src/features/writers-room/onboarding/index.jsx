@@ -8,7 +8,7 @@ import { useTheme, PANEL_ACCENT } from '../theme';
 import { useStore } from '../store';
 import { rid } from '../store/mutators';
 import { importFile } from './file-importers';
-import { scheduleAutonomousRun } from '../ai/pipeline';
+import { scheduleFoundationRun } from '../ai/pipeline';
 import { sectionById } from './schemas';
 import { evaluateSection } from './completeness';
 import SectionIO, { TrafficLight } from './SectionIO';
@@ -306,8 +306,8 @@ export default function Onboarding({ onDone }) {
     if (budget !== 'manual' && (data.importedDocs || []).length > 0) {
       for (const c of chapterRecs) {
         if ((c.text || '').trim().length > 80) {
-          try { scheduleAutonomousRun(store, c.id); } catch (err) {
-            console.warn('[onboarding] scheduleAutonomousRun failed', c.id, err);
+          try { scheduleFoundationRun(store, c.id); } catch (err) {
+            console.warn('[onboarding] scheduleFoundationRun failed', c.id, err);
           }
         }
       }

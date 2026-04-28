@@ -154,6 +154,20 @@ export function emptyState() {
     statCatalog: [],          // [{key, description, max}] custom stats
     relationships: [],
     timelineEvents: [],
+    // (NEW 2026-04) Factions / orgs / collectives — the cast dossier renders
+    // them as group memberships. Each: { id, name, type, description,
+    // members: [characterId], goals, stance, draftedByLoom }.
+    factions: [],
+    // (NEW 2026-04) Worldbuilding lore — facts, customs, history, mythology.
+    // Surfaced in the cast dossier under "Lore the character knows" when
+    // entityMentions tie them together. Each: { id, title, category,
+    // description, knownBy: [characterId], chapterId, draftedByLoom }.
+    lore: [],
+    // (NEW 2026-04) Plot threads / story arcs — distinct from the goal-
+    // shaped quests slice. Renders as a collapsible "Arcs" list per chapter
+    // and per character. Each: { id, title, description, status,
+    // characters: [characterId], chapterId, draftedByLoom }.
+    plots: [],
     entityEvents: [],          // universal linked event graph
     entityLinks: [],           // cross-entity links inferred or manual
     entityMentions: [],        // mentions with chapter/paragraph evidence
@@ -179,6 +193,11 @@ export function emptyState() {
     // (NEW) continuity & extraction
     continuity: { findings: [], lastScanAt: null },
     extractionRuns: {},       // { [chapterId]: { ranAt, findings, deepPassRan } }
+    // (NEW 2026-04) Append-only history of extraction runs so we can undo
+    // the last one and snapshot before/after for diffing. Each entry:
+    //   { id, mode: 'foundation'|'deep', chapterId, startedAt, finishedAt,
+    //     queueIdsCreated: [...], entitiesCreated: { cast: [...], … } }
+    extractionHistory: [],
     reviewQueue: [],            // (NEW) autonomous-pipeline findings awaiting review
     autonomousJobs: [],         // (NEW) ephemeral; running pipeline jobs
     // (NEW) reference manager — uploaded docs the writer wants the AI to use

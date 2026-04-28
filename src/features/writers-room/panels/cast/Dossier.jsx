@@ -22,6 +22,9 @@ import VoiceTab from './tabs/Voice';
 import ArcsTab from './tabs/Arcs';
 import AppearancesTab from './tabs/Appearances';
 import KnowsTab from './tabs/Knows';
+import FactionsTab from './tabs/Factions';
+import LoreTab from './tabs/Lore';
+import TimelineTab from './tabs/Timeline';
 
 // Each section maps to an existing tab component as its body.
 // `count` returns a number for the badge; `desc` is a one-line subtitle.
@@ -57,6 +60,20 @@ const SECTIONS = [
     count: c => (c.relationships || []).length,
   },
   {
+    id: 'factions', label: 'Factions', cmp: FactionsTab,
+    desc: 'Groups, orgs, allegiances',
+    count: (c, store) => (store.factions || []).filter(f =>
+      (f.members || []).some(m => m === c.id || (m || '').toLowerCase() === (c.name || '').toLowerCase())
+    ).length,
+  },
+  {
+    id: 'lore', label: 'Lore Known', cmp: LoreTab,
+    desc: 'World facts they know',
+    count: (c, store) => (store.lore || []).filter(l =>
+      (l.knownBy || []).some(k => k === c.id || (k || '').toLowerCase() === (c.name || '').toLowerCase())
+    ).length,
+  },
+  {
     id: 'voice', label: 'Traits & Voice', cmp: VoiceTab,
     desc: 'Speech & tics',
     count: c => (c.voice?.tics || []).length + (c.traits || []).length,
@@ -72,6 +89,13 @@ const SECTIONS = [
     count: c => (c.arcs || c.arc?.beats || []).length,
   },
   {
+    id: 'timeline', label: 'Timeline', cmp: TimelineTab,
+    desc: 'Stat / status / emotion / decision events from extraction',
+    count: (c, store) => (store.entityEvents || []).filter(ev =>
+      (ev.entities || []).some(e => e.entityId === c.id || (e.name || '').toLowerCase() === (c.name || '').toLowerCase())
+    ).length,
+  },
+  {
     id: 'appears', label: 'Appearances', cmp: AppearancesTab,
     desc: 'Where they show up',
     count: null,
@@ -85,9 +109,12 @@ const DEFAULT_OPEN = {
   items: true,
   threads: true,
   rels: false,
+  factions: false,
+  lore: false,
   voice: false,
   knows: false,
   arcs: false,
+  timeline: false,
   appears: false,
 };
 

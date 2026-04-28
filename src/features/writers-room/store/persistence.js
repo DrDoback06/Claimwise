@@ -48,6 +48,14 @@ const META = {
   skillTrees: 'lw.skillTrees',
   authors: 'lw.authors',
   marginNotes: 'lw.marginNotes',
+  factions: 'lw.factions',
+  lore: 'lw.lore',
+  plots: 'lw.plots',
+  entityEvents: 'lw.entityEvents',
+  entityLinks: 'lw.entityLinks',
+  entityMentions: 'lw.entityMentions',
+  entityAudit: 'lw.entityAudit',
+  extractionHistory: 'lw.extractionHistory',
 };
 
 // ─── Safe wrappers ────────────────────────────────────────────────────
@@ -172,6 +180,9 @@ export async function loadAllFromDB() {
     suggestionDrawerRaw, pendingInsertionsRaw, atlasSettingsRaw, regionsRaw,
     continuityRaw, extractionRunsRaw, referencesRaw,
     skillBankRaw, skillTreesRaw, authorsRaw, marginNotesRaw,
+    factionsRaw, loreRaw, plotsRaw,
+    entityEventsRaw, entityLinksRaw, entityMentionsRaw, entityAuditRaw,
+    extractionHistoryRaw,
   ] = await Promise.all([
     dbGet(S.meta, META.profile),
     dbGet(S.meta, META.ui),
@@ -198,6 +209,14 @@ export async function loadAllFromDB() {
     dbGet(S.meta, META.skillTrees),
     dbGet(S.meta, META.authors),
     dbGet(S.meta, META.marginNotes),
+    dbGet(S.meta, META.factions),
+    dbGet(S.meta, META.lore),
+    dbGet(S.meta, META.plots),
+    dbGet(S.meta, META.entityEvents),
+    dbGet(S.meta, META.entityLinks),
+    dbGet(S.meta, META.entityMentions),
+    dbGet(S.meta, META.entityAudit),
+    dbGet(S.meta, META.extractionHistory),
   ]);
 
   const profile = { ...EMPTY_PROFILE, ...(profileRaw?.data || profileRaw || {}) };
@@ -283,6 +302,14 @@ export async function loadAllFromDB() {
     skillTrees: Array.isArray(skillTreesRaw?.data) ? skillTreesRaw.data : [],
     authors: Array.isArray(authorsRaw?.data) ? authorsRaw.data : [],
     marginNotes: Array.isArray(marginNotesRaw?.data) ? marginNotesRaw.data : [],
+    factions: Array.isArray(factionsRaw?.data) ? factionsRaw.data : [],
+    lore: Array.isArray(loreRaw?.data) ? loreRaw.data : [],
+    plots: Array.isArray(plotsRaw?.data) ? plotsRaw.data : [],
+    entityEvents: Array.isArray(entityEventsRaw?.data) ? entityEventsRaw.data : [],
+    entityLinks: Array.isArray(entityLinksRaw?.data) ? entityLinksRaw.data : [],
+    entityMentions: Array.isArray(entityMentionsRaw?.data) ? entityMentionsRaw.data : [],
+    entityAudit: Array.isArray(entityAuditRaw?.data) ? entityAuditRaw.data : [],
+    extractionHistory: Array.isArray(extractionHistoryRaw?.data) ? extractionHistoryRaw.data : [],
     reviewQueue: reviewQueueRaw?.data || [],
     snapshots: snapshotsRaw?.data || [],
     feedback: [],
@@ -366,6 +393,13 @@ export async function persistSlice(slice, prev, next) {
   }
   if (slice === 'marginNotes') {
     await dbPut(S.meta, { id: META.marginNotes, data: Array.isArray(next) ? next : [] });
+    return;
+  }
+  if (slice === 'factions' || slice === 'lore' || slice === 'plots' ||
+      slice === 'entityEvents' || slice === 'entityLinks' ||
+      slice === 'entityMentions' || slice === 'entityAudit' ||
+      slice === 'extractionHistory') {
+    await dbPut(S.meta, { id: META[slice], data: Array.isArray(next) ? next : [] });
     return;
   }
   if (slice === 'continuity') {

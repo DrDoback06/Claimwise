@@ -1,25 +1,38 @@
-// Loomwright — autonomous on-save pipeline.
+// Loomwright — autonomous extraction pipeline (rewritten 2026-04 to use the
+// legacy multi-focused-call pattern via foundation.js + depth.js).
 //
-// Watches chapter saves; debounces; then runs extraction + continuity scans
-// in the background. Findings get bucketed by confidence and queued into
-// `state.reviewQueue` so the writer comes back to a populated room.
+// Two modes:
+//   foundation — Layer 1 roster scan: characters, places, items, skills,
+//                quests, plus the side-channel relationships / factions /
+//                lore / plots. Cheap, runs on import for every chapter and
+//                on the explicit "Save & Extract" action.
+//   deep       — Layer 2 change scan: stat / status / inventory / location
+//                / knowledge / promise changes plus relationship deltas,
+//                plot beats, emotional beats, and decisions. Expensive,
+//                runs only on the explicit "Save & Deep Extract" action.
 //
-// One queue, one worker, one outstanding job per chapter. Earlier jobs for
-// the same chapter are cancelled by the next save.
+// Findings flow into reviewQueue (for the writer to confirm) and the new
+// slices (factions / lore / plots / entityEvents). High-confidence items
+// auto-apply per the tightened gate in `confidence.js`.
 
-import { runExtractPass } from '../extraction/service';
+import { runFoundationPass } from '../extraction/foundation';
+import { runDeepPass } from '../extraction/depth';
 import { scanContinuity } from '../continuity/service';
 import { detectQuestProgress } from '../quests/service';
 import { bucket as bucketByConfidence } from './confidence';
-import { runDeepCharacterPass, runQuestInvolvementPass } from './deep-extract';
 import { classifyRiskBand, isAutoApplyBand } from './riskBands';
 import { autoApplyQueueItems } from '../review-queue/operations';
 import { buildEntityEventFromFinding } from '../entities/entityEventBuilder';
 
-const DEBOUNCE_MS = 2500;
+const DEBOUNCE_MS = 1500;
+const REVIEW_CAP = 500;
 
-const pending = new Map();   // chapterId -> timeout
-const inflight = new Map();  // chapterId -> abort flag
+const pending = new Map();   // chapterId|mode -> timeout
+const inflight = new Map();  // chapterId|mode -> abort flag
+
+function key(chapterId, mode) { return `${chapterId}|${mode}`; }
+
+function rid(prefix) { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
 
 function markRunning(store, chapterId, label) {
   store.setSlice('autonomousJobs', xs => {
@@ -35,10 +48,11 @@ function clearRunning(store, chapterId) {
   store.setSlice('autonomousJobs', xs => (xs || []).filter(j => j.chapterId !== chapterId));
 }
 
-const REVIEW_CAP = 200;
-
-function pushReview(store, chapterId, items, kind) {
-  if (!items || items.length === 0) return;
+// Push a batch of stamped queue items + return their ids so we can record
+// them on the extraction-history entry for undo.
+function pushReview(store, chapterId, items, kind, source, runId) {
+  if (!items || items.length === 0) return [];
+  const ids = [];
   store.setSlice('reviewQueue', xs => {
     const arr = Array.isArray(xs) ? xs : [];
     const stamped = items.map(f => {
@@ -48,197 +62,298 @@ function pushReview(store, chapterId, items, kind) {
         consequence: f.consequence || 'low',
         isCanonChanging: Boolean(f.canonRisk),
       });
+      const id = f.id || rid('rq');
+      ids.push(id);
       return {
-        id: f.id || `rq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        id,
         kind,
-        source: f.source || `autonomous-${kind}`,
+        source: source || `extraction-${kind}`,
         chapterId,
         addedAt: Date.now(),
         riskBand: f.riskBand || risk.id,
         riskLabel: risk.label,
         autoApplyEligible: risk.autoApply,
+        runId,
         ...f,
       };
     });
     const next = [...arr, ...stamped];
-    // Cap from the front so the most recent stay surfaced.
     return next.length > REVIEW_CAP ? next.slice(next.length - REVIEW_CAP) : next;
   });
+  return ids;
 }
 
-async function runJob(store, chapterId) {
-  const profile = store.profile || {};
-  const enabled = profile.autonomousPipeline !== false; // default on
-  if (!enabled) return;
-  const cancelled = { abort: false };
-  inflight.set(chapterId, cancelled);
+// ─── Foundation mode ─────────────────────────────────────────────────────
 
-  // Extraction pass
+async function runFoundationJob(store, chapterId, runId) {
+  const cancelled = { abort: false };
+  inflight.set(key(chapterId, 'foundation'), cancelled);
+
+  markRunning(store, chapterId, 'foundation');
+  console.info('[pipeline] foundation start', chapterId);
+
+  let findings = [];
   try {
-    markRunning(store, chapterId, 'extraction');
-    console.info('[pipeline] extraction start', chapterId);
-    const findings = await runExtractPass(store, chapterId, { deep: false });
-    if (cancelled.abort) return;
-    const bucketed = bucketByConfidence(findings);
-    const byKind = (Array.isArray(findings) ? findings : []).reduce((acc, f) => {
-      acc[f.kind] = (acc[f.kind] || 0) + 1; return acc;
-    }, {});
-    console.info('[pipeline] extraction findings', chapterId, {
-      total: Array.isArray(findings) ? findings.length : 0,
-      byKind,
-      auto: bucketed.auto.length,
-      suggested: bucketed.suggested.length,
-      background: bucketed.background.length,
-      ignored: bucketed.ignored.length,
-      events: findings.entityEvents?.length || 0,
-      links: findings.proposedLinks?.length || 0,
-    });
-    // Auto-applies are saved straight to canon; suggested + background go
-    // into the review queue as kind='extraction'.
-    if (bucketed.auto.length) {
-      const stampedAuto = bucketed.auto.map(f => ({ ...f, autoApplied: true, status: 'auto-applied' }));
-      pushReview(store, chapterId, stampedAuto, 'extraction');
-      if (isAutoApplyBand('blue', store)) {
-        const queueItems = (store.reviewQueue || []).filter(it =>
-          it.chapterId === chapterId &&
-          it.source === 'autonomous-extraction' &&
-          it.status === 'auto-applied' &&
-          it.riskBand === 'blue'
-        );
-        autoApplyQueueItems(store, queueItems.map(x => x.id));
-      }
-    }
-    if (bucketed.suggested.length || bucketed.background.length) {
-      pushReview(store, chapterId, [...bucketed.suggested, ...bucketed.background], 'extraction');
-    }
-    if (Array.isArray(findings.entityEvents) && findings.entityEvents.length) {
-      store.setSlice('entityEvents', xs => {
-        const arr = Array.isArray(xs) ? xs : [];
-        const built = findings.entityEvents.map(ev => buildEntityEventFromFinding({ ...ev, chapterId, source: 'extract-pass' }, store));
-        return [...arr, ...built];
-      });
-    }
-    if (Array.isArray(findings.proposedLinks) && findings.proposedLinks.length) {
-      store.setSlice('entityLinks', xs => {
-        const arr = Array.isArray(xs) ? xs : [];
-        const links = findings.proposedLinks.map(link => ({
-          id: link.id || `el_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-          fromEntityId: null,
-          fromEntityType: link.fromType || null,
-          fromLabel: link.from,
-          toEntityId: null,
-          toEntityType: link.toType || null,
-          toLabel: link.to,
-          relation: link.relation || 'related-to',
-          confidence: link.confidence ?? 0.7,
-          chapterId,
-          createdAt: Date.now(),
-          source: 'extract-pass',
-        }));
-        return [...arr, ...links];
-      });
-    }
+    findings = await runFoundationPass(store, chapterId);
   } catch (err) {
-    console.warn('[pipeline] extraction failed', err?.message);
+    console.warn('[pipeline] foundation failed', err?.message);
+    clearRunning(store, chapterId);
+    return;
   }
   if (cancelled.abort) { clearRunning(store, chapterId); return; }
 
-  // Continuity pass
+  const byKind = (Array.isArray(findings) ? findings : []).reduce((acc, f) => {
+    acc[f.kind] = (acc[f.kind] || 0) + 1; return acc;
+  }, {});
+  const bucketed = bucketByConfidence(findings);
+  console.info('[pipeline] foundation findings', chapterId, {
+    total: findings.length || 0,
+    byKind,
+    auto: bucketed.auto.length,
+    suggested: bucketed.suggested.length,
+    background: bucketed.background.length,
+    relationships: findings.relationships?.length || 0,
+    factions: findings.factions?.length || 0,
+    lore: findings.lore?.length || 0,
+    plots: findings.plots?.length || 0,
+  });
+
+  const queueIds = [];
+
+  // Auto-apply bucket: write to queue stamped, then run the auto-apply
+  // helper. The tightened gate in confidence.js / autoApplyQueueItems will
+  // block auto-create unless the entity occurred in >= 2 chapters.
+  if (bucketed.auto.length) {
+    const stampedAuto = bucketed.auto.map(f => ({ ...f, autoApplied: true, status: 'auto-applied' }));
+    queueIds.push(...pushReview(store, chapterId, stampedAuto, 'extraction', 'foundation', runId));
+    if (isAutoApplyBand('blue', store)) {
+      const fresh = (store.reviewQueue || []).filter(it =>
+        it.runId === runId && it.status === 'auto-applied'
+      );
+      autoApplyQueueItems(store, fresh.map(x => x.id));
+    }
+  }
+  if (bucketed.suggested.length || bucketed.background.length) {
+    queueIds.push(...pushReview(
+      store, chapterId,
+      [...bucketed.suggested, ...bucketed.background],
+      'extraction', 'foundation', runId
+    ));
+  }
+
+  // Side-channel: factions, lore, plots, relationships.
+  // Each gets written to its own slice, deduped against existing entries.
+  if ((findings.factions || []).length) {
+    store.setSlice('factions', xs => {
+      const arr = Array.isArray(xs) ? xs : [];
+      const have = new Set(arr.map(f => (f.name || '').toLowerCase()));
+      const fresh = findings.factions.filter(f => f.name && !have.has(f.name.toLowerCase()));
+      return [...arr, ...fresh];
+    });
+  }
+  if ((findings.lore || []).length) {
+    store.setSlice('lore', xs => {
+      const arr = Array.isArray(xs) ? xs : [];
+      const have = new Set(arr.map(l => (l.title || '').toLowerCase()));
+      const fresh = findings.lore.filter(l => l.title && !have.has(l.title.toLowerCase()));
+      return [...arr, ...fresh];
+    });
+  }
+  if ((findings.plots || []).length) {
+    store.setSlice('plots', xs => {
+      const arr = Array.isArray(xs) ? xs : [];
+      const have = new Set(arr.map(p => (p.title || '').toLowerCase()));
+      const fresh = findings.plots.filter(p => p.title && !have.has(p.title.toLowerCase()));
+      return [...arr, ...fresh];
+    });
+  }
+  if ((findings.relationships || []).length) {
+    // Append to each character's `relationships[]` array. Dedupe by
+    // {a, b, kind} so re-running doesn't double-up.
+    store.setSlice('cast', xs => {
+      if (!Array.isArray(xs)) return xs;
+      const byName = new Map(xs.map(c => [(c.name || '').toLowerCase(), c]));
+      const next = xs.map(c => ({ ...c, relationships: [...(c.relationships || [])] }));
+      for (const r of findings.relationships) {
+        const a = byName.get((r.a || '').toLowerCase());
+        const b = byName.get((r.b || '').toLowerCase());
+        if (!a) continue;
+        const charIdx = next.findIndex(c => c.id === a.id);
+        if (charIdx < 0) continue;
+        const existing = next[charIdx].relationships || [];
+        const dupKey = `${(r.b || '').toLowerCase()}|${(r.kind || '').toLowerCase()}`;
+        const has = existing.some(x => `${(x.with || x.b || '').toLowerCase()}|${(x.kind || '').toLowerCase()}` === dupKey);
+        if (has) continue;
+        next[charIdx].relationships = [...existing, {
+          id: rid('rel'),
+          with: r.b,
+          withId: b?.id || null,
+          kind: r.kind,
+          strength: r.strength,
+          reason: r.reason,
+          chapterId: r.chapterId,
+          confidence: r.confidence,
+          draftedByLoom: true,
+        }];
+      }
+      return next;
+    });
+  }
+
+  // entityEvents — for now foundation produces none. Layer 2 fills these.
+
+  clearRunning(store, chapterId);
+  recordHistory(store, runId, 'foundation', chapterId, queueIds, findings);
+  console.info('[pipeline] foundation done', chapterId, { queueIds: queueIds.length });
+}
+
+// ─── Deep mode ───────────────────────────────────────────────────────────
+
+async function runDeepJob(store, chapterId, runId) {
+  const cancelled = { abort: false };
+  inflight.set(key(chapterId, 'deep'), cancelled);
+
+  // Pre-step: also run foundation (cheap & catches any new entities the
+  // chapter introduced since the last foundation pass) so the deep pass
+  // has the latest roster to resolve names against.
+  await runFoundationJob(store, chapterId, runId);
+  if (cancelled.abort) { clearRunning(store, chapterId); return; }
+
+  markRunning(store, chapterId, 'deep');
+  console.info('[pipeline] deep start', chapterId);
+
+  let deep = null;
+  try {
+    deep = await runDeepPass(store, chapterId);
+  } catch (err) {
+    console.warn('[pipeline] deep failed', err?.message);
+    clearRunning(store, chapterId);
+    return;
+  }
+  if (cancelled.abort || !deep) { clearRunning(store, chapterId); return; }
+
+  console.info('[pipeline] deep findings', chapterId, {
+    appearances: deep.appearances.length,
+    statChanges: deep.statChanges.length,
+    skillChanges: deep.skillChanges.length,
+    inventoryChanges: deep.inventoryChanges.length,
+    locationChanges: deep.locationChanges.length,
+    statusChanges: deep.statusChanges.length,
+    knowledgeChanges: deep.knowledgeChanges.length,
+    promiseChanges: deep.promiseChanges.length,
+    revelations: deep.revelations.length,
+    relationshipChanges: deep.relationshipChanges.length,
+    plotBeats: deep.plotBeats.length,
+    emotionalBeats: deep.emotionalBeats.length,
+    decisions: deep.decisions.length,
+  });
+
+  const queueIds = routeDeepFindings(store, chapterId, deep, runId);
+
+  // Continuity + quest-progress as additional passes — same as before.
   try {
     markRunning(store, chapterId, 'continuity');
     const findings = await scanContinuity(store, chapterId);
-    if (cancelled.abort) return;
-    if (findings.length) {
-      // Continuity findings live in the continuity slice as well.
+    if (!cancelled.abort && findings?.length) {
       store.setSlice('continuity', c => {
         const cur = c || { findings: [], lastScanAt: null };
-        // Replace findings for this chapter; keep findings for other chapters.
         const others = (cur.findings || []).filter(f =>
           !(f.manuscriptLocations || []).some(loc => loc.chapterId === chapterId));
         return { findings: [...others, ...findings], lastScanAt: Date.now() };
       });
-      pushReview(store, chapterId, findings, 'continuity');
+      queueIds.push(...pushReview(store, chapterId, findings, 'continuity', 'deep', runId));
     }
-  } catch (err) {
-    console.warn('[pipeline] continuity failed', err?.message);
-  }
-  if (cancelled.abort) { clearRunning(store, chapterId); return; }
+  } catch (err) { console.warn('[pipeline] continuity failed', err?.message); }
 
-  // Quest progress pass
   try {
     markRunning(store, chapterId, 'quests');
     const beats = await detectQuestProgress(store, chapterId);
-    if (cancelled.abort) return;
-    if (beats.length) {
-      pushReview(store, chapterId, beats, 'quest-progress');
+    if (!cancelled.abort && beats?.length) {
+      queueIds.push(...pushReview(store, chapterId, beats, 'quest-progress', 'deep', runId));
     }
-  } catch (err) {
-    console.warn('[pipeline] quest detect failed', err?.message);
-  }
-  if (cancelled.abort) { clearRunning(store, chapterId); return; }
+  } catch (err) { console.warn('[pipeline] quest detect failed', err?.message); }
 
-  // Deep character pass — appearances, stat changes, skill changes,
-  // relationship changes. Each finding routes to the appropriate review
-  // queue based on its kind so the writer can confirm in-context.
-  try {
-    markRunning(store, chapterId, 'deep-character');
-    const deep = await runDeepCharacterPass(store, chapterId);
-    if (cancelled.abort) return;
-    routeDeepFindings(store, chapterId, deep);
-  } catch (err) {
-    console.warn('[pipeline] deep-character failed', err?.message);
+  // Build entityEvents from all the accumulated findings so the timeline
+  // graph populates. Each "change" from the deep pass becomes an event
+  // referencing the resolved character + state delta.
+  const newEvents = [];
+  for (const a of deep.appearances) {
+    if (!a.character) continue;
+    newEvents.push(buildEntityEventFromFinding({
+      kind: 'character', name: a.character,
+      eventType: a.firstMention ? 'first-appearance' : 'appearance',
+      summary: a.why || (a.firstMention ? 'First on-page appearance' : 'Appears'),
+      confidence: a.confidence,
+      chapterId, source: 'deep-pass',
+    }, store));
   }
-  if (cancelled.abort) { clearRunning(store, chapterId); return; }
-
-  // Quest involvement pass — for each known active quest, decide which
-  // characters were involved in this chapter. High-confidence matches
-  // auto-attach to quest.characters; the rest go into the quests queue.
-  try {
-    markRunning(store, chapterId, 'quest-actors');
-    const quests = (store.quests || []).filter(q => q.active !== false).slice(0, 8);
-    for (const quest of quests) {
-      if (cancelled.abort) break;
-      const involved = await runQuestInvolvementPass(store, chapterId, quest);
-      if (cancelled.abort) break;
-      routeQuestInvolvement(store, chapterId, quest, involved);
-    }
-  } catch (err) {
-    console.warn('[pipeline] quest-actors failed', err?.message);
+  for (const s of deep.statChanges) {
+    newEvents.push(buildEntityEventFromFinding({
+      kind: 'character', name: s.character,
+      eventType: 'stat-change',
+      summary: `${s.stat} ${s.delta != null ? (s.delta >= 0 ? '+' : '') + s.delta : (s.qualitative || 'changed')} — ${s.reason || ''}`.trim(),
+      confidence: s.confidence,
+      stateChanges: [{ entity: s.character, field: s.stat, after: s.delta }],
+      chapterId, source: 'deep-pass',
+    }, store));
+  }
+  for (const r of deep.relationshipChanges) {
+    newEvents.push(buildEntityEventFromFinding({
+      kind: 'relationship', name: `${r.a} ↔ ${r.b}`,
+      eventType: 'relationship-change',
+      summary: `${r.action || 'shifted'} (${r.kind}) — ${r.reason || ''}`.trim(),
+      confidence: r.confidence,
+      chapterId, source: 'deep-pass',
+    }, store));
+  }
+  for (const beat of deep.plotBeats) {
+    newEvents.push(buildEntityEventFromFinding({
+      kind: 'plot', name: beat.plotTitle || beat.summary?.slice(0, 60) || 'Plot beat',
+      eventType: 'plot-beat',
+      summary: `[${beat.status}] ${beat.summary}`,
+      confidence: beat.confidence,
+      chapterId, source: 'deep-pass',
+    }, store));
+  }
+  if (newEvents.length) {
+    store.setSlice('entityEvents', xs => [...(Array.isArray(xs) ? xs : []), ...newEvents]);
   }
 
-  inflight.delete(chapterId);
   clearRunning(store, chapterId);
+  recordHistory(store, runId, 'deep', chapterId, queueIds, deep);
+  console.info('[pipeline] deep done', chapterId, { queueIds: queueIds.length, events: newEvents.length });
 }
 
-// Convert deep-extract findings into review-queue items keyed by domain.
-function routeDeepFindings(store, chapterId, deep) {
+// Convert a deep-pass batch into review-queue items. Returns the new queue
+// ids so the history record can include them.
+function routeDeepFindings(store, chapterId, deep, runId) {
   const items = [];
-  for (const a of deep.appearances || []) {
+  for (const a of deep.appearances) {
     if (!a.character) continue;
     items.push({
       kind: 'character',
       status: a.resolved ? 'known' : 'new',
       name: a.character,
       resolvesTo: a.resolved?.id || null,
-      notes: a.firstMention ? 'First on-page appearance.' : 'Appears in this chapter.',
+      notes: a.why || (a.firstMention ? 'First on-page appearance.' : 'Appears in this chapter.'),
       confidence: a.confidence ?? 0.7,
       sourceType: 'appearance',
     });
   }
-  for (const s of deep.statChanges || []) {
+  for (const s of deep.statChanges) {
     if (!s.character || !s.stat) continue;
     items.push({
       kind: 'character',
       status: 'known',
       name: s.character,
       resolvesTo: s.resolved?.id || null,
-      notes: `${s.stat} ${(s.delta ?? 0) >= 0 ? '+' : ''}${s.delta ?? '?'} — ${s.reason || ''}`.trim(),
+      notes: `${s.stat} ${(s.delta ?? 0) >= 0 ? '+' : ''}${s.delta ?? s.qualitative ?? '?'} — ${s.reason || ''}`.trim(),
       confidence: s.confidence ?? 0.65,
       sourceType: 'stat-change',
-      payload: { stat: s.stat, delta: s.delta, reason: s.reason },
+      payload: { stat: s.stat, delta: s.delta, qualitative: s.qualitative, reason: s.reason },
     });
   }
-  for (const sk of deep.skillChanges || []) {
+  for (const sk of deep.skillChanges) {
     if (!sk.skill) continue;
     items.push({
       kind: 'skill',
@@ -250,19 +365,19 @@ function routeDeepFindings(store, chapterId, deep) {
       payload: { character: sk.resolved?.id || sk.character, action: sk.action, level: sk.level },
     });
   }
-  for (const r of deep.relationshipChanges || []) {
+  for (const r of deep.relationshipChanges) {
     if (!r.a || !r.b) continue;
     items.push({
       kind: 'relationship',
       status: 'new',
       name: `${r.a} ↔ ${r.b}`,
-      notes: `${r.kind || 'shift'}${typeof r.strength === 'number' ? ` (${r.strength.toFixed(1)})` : ''} — ${r.reason || ''}`,
+      notes: `${r.action || r.kind || 'shift'}${typeof r.strength === 'number' ? ` (${r.strength.toFixed(1)})` : ''} — ${r.reason || ''}`,
       confidence: r.confidence ?? 0.6,
       sourceType: 'relationship-change',
-      payload: { a: r.resolvedA?.id || r.a, b: r.resolvedB?.id || r.b, kind: r.kind, strength: r.strength },
+      payload: { a: r.resolvedA?.id || r.a, b: r.resolvedB?.id || r.b, kind: r.kind, action: r.action, strength: r.strength },
     });
   }
-  for (const inv of deep.inventoryChanges || []) {
+  for (const inv of deep.inventoryChanges) {
     if (!inv.character || !inv.item) continue;
     items.push({
       kind: 'item',
@@ -274,7 +389,7 @@ function routeDeepFindings(store, chapterId, deep) {
       payload: { character: inv.resolved?.id || inv.character, action: inv.action, location: inv.location },
     });
   }
-  for (const l of deep.locationChanges || []) {
+  for (const l of deep.locationChanges) {
     if (!l.character || !l.location) continue;
     items.push({
       kind: 'place',
@@ -286,90 +401,147 @@ function routeDeepFindings(store, chapterId, deep) {
       payload: { character: l.resolved?.id || l.character, action: l.action },
     });
   }
-  for (const q of deep.questStateChanges || []) {
-    if (!q.quest) continue;
+  for (const s of deep.statusChanges) {
+    if (!s.character || !s.status) continue;
     items.push({
-      kind: 'quest',
+      kind: 'character',
       status: 'known',
-      name: q.quest,
-      notes: `${q.state || 'progressed'} — ${q.reason || ''}`.trim(),
-      confidence: q.confidence ?? 0.67,
-      sourceType: 'quest-state-change',
-      payload: { state: q.state },
-      canonRisk: q.state === 'completed' || q.state === 'failed',
-      consequence: q.state === 'completed' || q.state === 'failed' ? 'high' : 'medium',
+      name: s.character,
+      resolvesTo: s.resolved?.id || null,
+      notes: `${s.action || 'became'} ${s.status} — ${s.reason || ''}`.trim(),
+      confidence: s.confidence ?? 0.7,
+      sourceType: 'status-change',
+      payload: { status: s.status, action: s.action },
     });
   }
-  for (const it of deep.itemStateChanges || []) {
-    if (!it.item) continue;
+  for (const k of deep.knowledgeChanges) {
+    if (!k.character || !k.fact) continue;
     items.push({
-      kind: 'item',
-      status: 'known',
-      name: it.item,
-      notes: `${it.state || 'changed'} — ${it.reason || ''}`.trim(),
-      confidence: it.confidence ?? 0.67,
-      sourceType: 'item-state-change',
-      canonRisk: it.state === 'destroyed',
-      consequence: it.state === 'destroyed' ? 'high' : 'medium',
+      kind: 'fact',
+      status: 'new',
+      name: `${k.character} ${k.action || 'learned'}: ${k.fact}`,
+      notes: k.fromCharacter ? `from ${k.fromCharacter}` : '',
+      confidence: k.confidence ?? 0.7,
+      sourceType: 'knowledge-change',
+      payload: { character: k.resolved?.id || k.character, fact: k.fact, action: k.action, from: k.fromCharacter },
     });
   }
-  if (items.length) pushReview(store, chapterId, items, 'deep');
-}
-
-function routeQuestInvolvement(store, chapterId, quest, involved) {
-  if (!Array.isArray(involved) || involved.length === 0) return;
-  const HIGH = 0.8;
-  const auto = involved.filter(i => (i.confidence ?? 0) >= HIGH);
-  const suggest = involved.filter(i => (i.confidence ?? 0) < HIGH);
-
-  // Auto-attach high-confidence actors directly to the quest.
-  if (auto.length) {
-    store.setSlice('quests', qs => (qs || []).map(q => {
-      if (q.id !== quest.id) return q;
-      const cur = new Set(q.characters || []);
-      for (const i of auto) if (i.resolved?.id) cur.add(i.resolved.id);
-      return { ...q, characters: [...cur] };
-    }));
+  for (const r of deep.revelations) {
+    items.push({
+      kind: 'fact',
+      status: 'new',
+      name: r.summary,
+      notes: `Revelation, impact: ${r.impact || 'medium'}`,
+      confidence: r.confidence ?? 0.7,
+      sourceType: 'revelation',
+      payload: { characters: r.characters, impact: r.impact },
+    });
   }
-
-  // Suggest the rest via the quests review queue.
-  if (suggest.length) {
-    pushReview(store, chapterId, suggest.map(i => ({
-      kind: 'quest',
+  for (const beat of deep.plotBeats) {
+    items.push({
+      kind: 'plot',
+      status: 'new',
+      name: beat.plotTitle || beat.summary?.slice(0, 60) || 'Plot beat',
+      notes: `[${beat.status}] ${beat.summary}`,
+      confidence: beat.confidence ?? 0.65,
+      sourceType: 'plot-beat',
+      payload: { status: beat.status, characters: beat.characters },
+    });
+  }
+  for (const e of deep.emotionalBeats) {
+    items.push({
+      kind: 'character',
       status: 'known',
-      name: `${i.resolved?.name || i.character} → ${quest.name || quest.title}`,
-      resolvesTo: quest.id,
-      notes: `Possible involvement (${i.role || 'actor'}): ${i.reason || ''}`,
-      confidence: i.confidence ?? 0,
-      sourceType: 'quest-involvement',
-      payload: { questId: quest.id, characterId: i.resolved?.id || null, role: i.role },
-    })), 'deep');
+      name: e.character,
+      resolvesTo: e.resolved?.id || null,
+      notes: `${e.emotion} (${e.intensity || 'medium'}) — ${e.trigger || ''}`,
+      confidence: e.confidence ?? 0.65,
+      sourceType: 'emotional-beat',
+      payload: { emotion: e.emotion, trigger: e.trigger, intensity: e.intensity },
+    });
   }
+  for (const d of deep.decisions) {
+    items.push({
+      kind: 'character',
+      status: 'known',
+      name: d.character,
+      resolvesTo: d.resolved?.id || null,
+      notes: `Decided: ${d.decision} (stake: ${d.stake || '?'})`,
+      confidence: d.confidence ?? 0.7,
+      sourceType: 'decision',
+      payload: { decision: d.decision, stake: d.stake },
+    });
+  }
+  return pushReview(store, chapterId, items, 'deep', 'deep', runId);
 }
 
-// Public API: schedule a debounced run for a chapter id. If the writer
-// keeps typing, we keep pushing the timer back; the AI only fires once
-// the writer stops.
-export function scheduleAutonomousRun(store, chapterId) {
+// ─── Extraction history (undo support) ──────────────────────────────────
+
+function recordHistory(store, runId, mode, chapterId, queueIds, findingsBag) {
+  store.setSlice('extractionHistory', xs => {
+    const arr = Array.isArray(xs) ? xs : [];
+    const entry = {
+      id: runId,
+      mode,
+      chapterId,
+      finishedAt: Date.now(),
+      queueIds: queueIds || [],
+      // For dedupe + diagnostics. Doesn't include the full findings.
+      summary: summariseFindings(findingsBag),
+    };
+    return [...arr.slice(-49), entry]; // keep last 50
+  });
+}
+
+function summariseFindings(b) {
+  if (!b) return {};
+  if (Array.isArray(b)) {
+    const out = {};
+    for (const f of b) out[f.kind] = (out[f.kind] || 0) + 1;
+    return out;
+  }
+  // deep bag — top-level keys are arrays of changes
+  const out = {};
+  for (const k of Object.keys(b)) if (Array.isArray(b[k])) out[k] = b[k].length;
+  return out;
+}
+
+// ─── Public API ──────────────────────────────────────────────────────────
+
+export function scheduleFoundationRun(store, chapterId) {
   if (!chapterId) return;
-  // Cancel any in-flight job for this chapter.
-  const flag = inflight.get(chapterId);
+  const k = key(chapterId, 'foundation');
+  const flag = inflight.get(k);
   if (flag) flag.abort = true;
-  clearTimeout(pending.get(chapterId));
+  clearTimeout(pending.get(k));
+  const runId = rid('run');
   const timer = setTimeout(() => {
-    pending.delete(chapterId);
-    runJob(store, chapterId);
+    pending.delete(k);
+    runFoundationJob(store, chapterId, runId);
   }, DEBOUNCE_MS);
-  pending.set(chapterId, timer);
+  pending.set(k, timer);
+  return runId;
 }
 
-export function clearAutonomousRun(chapterId) {
-  if (chapterId == null) return;
-  clearTimeout(pending.get(chapterId));
-  pending.delete(chapterId);
-  const flag = inflight.get(chapterId);
+export function scheduleDeepRun(store, chapterId) {
+  if (!chapterId) return;
+  const k = key(chapterId, 'deep');
+  const flag = inflight.get(k);
   if (flag) flag.abort = true;
-  inflight.delete(chapterId);
+  clearTimeout(pending.get(k));
+  const runId = rid('run');
+  const timer = setTimeout(() => {
+    pending.delete(k);
+    runDeepJob(store, chapterId, runId);
+  }, DEBOUNCE_MS);
+  pending.set(k, timer);
+  return runId;
+}
+
+// Backwards-compat shim — old callsites scheduling a generic "autonomous"
+// run get foundation by default.
+export function scheduleAutonomousRun(store, chapterId) {
+  return scheduleFoundationRun(store, chapterId);
 }
 
 export function clearAllRuns() {
@@ -377,4 +549,20 @@ export function clearAllRuns() {
   pending.clear();
   for (const flag of inflight.values()) flag.abort = true;
   inflight.clear();
+}
+
+// Run foundation across every chapter that has enough text. Used by the
+// onboarding wizard's "import everything" path so all 20+ chapters get
+// rostered without the writer having to navigate through them.
+export function scheduleFoundationForAll(store) {
+  const order = store.book?.chapterOrder || [];
+  let scheduled = 0;
+  for (const id of order) {
+    const ch = store.chapters?.[id];
+    if ((ch?.text || '').trim().length > 80) {
+      scheduleFoundationRun(store, id);
+      scheduled++;
+    }
+  }
+  return scheduled;
 }
