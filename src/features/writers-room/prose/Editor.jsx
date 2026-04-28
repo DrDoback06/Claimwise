@@ -39,6 +39,12 @@ function escapeHtml(s) {
   })[c]);
 }
 
+// Minimal CSS.escape polyfill for the attribute values we control. We only
+// pass internal kinds + ids (no user-typed text) so this is enough.
+function cssEscape(s) {
+  return String(s).replace(/[^a-zA-Z0-9_-]/g, ch => '\\' + ch);
+}
+
 // In-place squiggle wrapping: walk text nodes inside `paragraph`, replace
 // each occurrence of every known proofread `quote` with a span. We do not
 // nest into existing wrappers (so entity spans and already-wrapped issue
@@ -416,7 +422,9 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     if (e.dataTransfer.types.includes(MIME.ENTITY)) e.preventDefault();
   };
 
-  // Click on entity span → spotlight. Also picks up @-mention spans.
+  // Click on entity span → open the wiki-style quick-link popover. The
+  // Shell mounts the popover so it can persist across re-renders and so
+  // its "Open dossier" action can reach the panel-stack helpers.
   const onClick = (e) => {
     const mention = e.target.closest('[data-lw-mention]');
     if (mention) {
@@ -431,8 +439,39 @@ export default function Editor({ onContextMenu, onParagraphMeasure }) {
     e.preventDefault();
     const kind = span.getAttribute('data-lw-entity-kind');
     const id = span.getAttribute('data-lw-entity-id');
-    if (kind && id) select(kind, id);
+    if (!kind || !id) return;
+    // Sync selection so cast-on-page chips and the dossier reflect it
+    // immediately, and dispatch the popover event for the Shell to render.
+    select(kind, id);
+    const rect = span.getBoundingClientRect();
+    window.dispatchEvent(new CustomEvent('lw:entity-popover', {
+      detail: { kind, id, anchorRect: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right } }
+    }));
   };
+
+  // Listen for "highlight all instances" broadcasts from the popover and
+  // briefly flash every span in the editor that matches the given kind+id.
+  React.useEffect(() => {
+    const onFlash = (e) => {
+      if (!ref.current) return;
+      const { kind, id } = e?.detail || {};
+      if (!kind || !id) return;
+      const spans = ref.current.querySelectorAll(
+        `[data-lw-entity-kind="${cssEscape(kind)}"][data-lw-entity-id="${cssEscape(id)}"]`
+      );
+      let firstScrolled = false;
+      for (const s of spans) {
+        s.classList.add('lw-entity-flash');
+        if (!firstScrolled) {
+          s.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstScrolled = true;
+        }
+        setTimeout(() => s.classList.remove('lw-entity-flash'), 1300);
+      }
+    };
+    window.addEventListener('lw:flash-entity', onFlash);
+    return () => window.removeEventListener('lw:flash-entity', onFlash);
+  }, []);
 
   return (
     <>

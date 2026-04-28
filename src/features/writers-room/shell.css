@@ -235,11 +235,25 @@
   background: rgba(139, 43, 31, 0.06);
 }
 
+[data-paragraph-id] [data-lw-entity-id] {
+  border-radius: 2px;
+  transition: background 120ms ease, border-bottom-width 120ms ease;
+  padding: 0 1px;
+}
 [data-paragraph-id] [data-lw-entity-id]:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.06);
+  border-bottom-width: 2px;
 }
 [data-lw-theme="night"] [data-paragraph-id] [data-lw-entity-id]:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
+}
+[data-paragraph-id] [data-lw-entity-id].lw-entity-flash,
+.lw-entity-flash {
+  animation: lw-entity-flash 1200ms ease-out;
+}
+@keyframes lw-entity-flash {
+  0%   { background: rgba(212, 146, 82, 0.45); }
+  100% { background: transparent; }
 }
 
 [data-paragraph-id][data-lw-spotlight="true"] [data-lw-entity-id="lw-target"] {

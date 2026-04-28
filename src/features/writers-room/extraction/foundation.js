@@ -124,11 +124,37 @@ const NETWORK_SCHEMA = [
 ].join('\n');
 
 // ─── Single-call worker ─────────────────────────────────────────────────
+//
+// `skipList` is appended to the persona so the model treats canon names
+// as background knowledge — they should NOT come back in the response.
+// Massive token savings on a manuscript with a 50-character cast.
+
+function buildSkipList(state) {
+  const names = [];
+  const push = (arr, key) => {
+    for (const x of (arr || [])) {
+      const n = x?.name || x?.title;
+      if (n) names.push(`${key}:${n}`);
+    }
+  };
+  push(state.cast, 'character');
+  push(state.places, 'place');
+  push(state.items, 'item');
+  push(state.skills, 'skill');
+  push(state.quests, 'quest');
+  push(state.factions, 'faction');
+  push(state.lore, 'lore');
+  return names;
+}
 
 async function callExtractor(prompt, sysPersona, sysSchema, state, focusChapterId, label) {
+  const skipList = buildSkipList(state);
+  const skipNote = skipList.length
+    ? '\n\nALREADY-CANON entities (do NOT re-emit these unless you observe a NEW interaction with them — focus your output on entities NOT in this list):\n  ' + skipList.slice(0, 200).join(', ')
+    : '';
   const sys = composeSystem({
     state,
-    persona: sysPersona,
+    persona: sysPersona + skipNote,
     focusChapterId,
     slice: ['cast', 'places', 'items', 'quests', 'skills'],
     extra: sysSchema,

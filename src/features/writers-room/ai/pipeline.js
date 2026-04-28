@@ -34,6 +34,63 @@ function key(chapterId, mode) { return `${chapterId}|${mode}`; }
 
 function rid(prefix) { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
 
+// 32-bit djb2 hash — cheap, collision-resistant enough for "did this text
+// change?" checks. Stable across page reloads since it's pure.
+function hashStr(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return h.toString(36);
+}
+
+// Cache TTL — once a chapter has been extracted at a given level, skip if
+// the text hash matches AND the run was within this many ms. Past the
+// TTL, the cache is considered stale (writer may want fresh signal as
+// context drifts) but the unchanged-text path still skips most work.
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+// Decide whether to skip a planned extraction run. Returns the cached
+// run record (with .skipped=true) when a skip is warranted, or null when
+// the run should proceed.
+function shouldSkipExtraction(store, chapterId, mode, opts = {}) {
+  if (opts.force) return null;
+  const ch = store.chapters?.[chapterId];
+  if (!ch?.text) return { skipped: true, reason: 'no-text' };
+  const runs = store.extractionRuns || {};
+  const rec = runs[chapterId];
+  if (!rec) return null;
+  const hash = hashStr(ch.text);
+  const last = mode === 'foundation' ? rec.foundationRanAt : rec.deepRanAt;
+  const lastHash = mode === 'foundation' ? rec.foundationHash : rec.deepHash;
+  if (lastHash !== hash) return null;        // text changed → run again
+  if (!last) return null;
+  if (Date.now() - last > CACHE_TTL_MS) return null;
+  return { skipped: true, reason: 'cache-hit', textHash: hash, ranAt: last };
+}
+
+function recordExtractionRun(store, chapterId, mode) {
+  const ch = store.chapters?.[chapterId];
+  const hash = hashStr(ch?.text || '');
+  store.setSlice('extractionRuns', xs => {
+    const cur = xs && typeof xs === 'object' ? xs : {};
+    const rec = cur[chapterId] || {};
+    return {
+      ...cur,
+      [chapterId]: {
+        ...rec,
+        ...(mode === 'foundation' ? { foundationHash: hash, foundationRanAt: Date.now() } : {}),
+        ...(mode === 'deep' ? { deepHash: hash, deepRanAt: Date.now() } : {}),
+      },
+    };
+  });
+}
+
+// Toast helper — non-blocking, dispatched as a custom event so the shell
+// (or any other listener) can surface it. We keep this file UI-free.
+function emitToast(message, kind = 'info') {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('lw:toast', { detail: { message, kind } }));
+}
+
 function markRunning(store, chapterId, label) {
   store.setSlice('autonomousJobs', xs => {
     const arr = Array.isArray(xs) ? xs : [];
@@ -85,7 +142,16 @@ function pushReview(store, chapterId, items, kind, source, runId) {
 
 // ─── Foundation mode ─────────────────────────────────────────────────────
 
-async function runFoundationJob(store, chapterId, runId) {
+async function runFoundationJob(store, chapterId, runId, opts = {}) {
+  const skip = shouldSkipExtraction(store, chapterId, 'foundation', opts);
+  if (skip) {
+    if (skip.reason === 'cache-hit') {
+      const ago = Math.round((Date.now() - skip.ranAt) / 60000);
+      emitToast(`Skipped foundation extraction — chapter unchanged (${ago}m ago). ⌘K → Force re-extract to re-run.`, 'info');
+      console.info('[pipeline] foundation skipped (cache hit)', chapterId);
+    }
+    return;
+  }
   const cancelled = { abort: false };
   inflight.set(key(chapterId, 'foundation'), cancelled);
 
@@ -204,19 +270,30 @@ async function runFoundationJob(store, chapterId, runId) {
 
   clearRunning(store, chapterId);
   recordHistory(store, runId, 'foundation', chapterId, queueIds, findings);
+  recordExtractionRun(store, chapterId, 'foundation');
   console.info('[pipeline] foundation done', chapterId, { queueIds: queueIds.length });
 }
 
 // ─── Deep mode ───────────────────────────────────────────────────────────
 
-async function runDeepJob(store, chapterId, runId) {
+async function runDeepJob(store, chapterId, runId, opts = {}) {
+  const skip = shouldSkipExtraction(store, chapterId, 'deep', opts);
+  if (skip) {
+    if (skip.reason === 'cache-hit') {
+      const ago = Math.round((Date.now() - skip.ranAt) / 60000);
+      emitToast(`Skipped deep extraction — chapter unchanged (${ago}m ago). ⌘K → Force re-extract to re-run.`, 'info');
+      console.info('[pipeline] deep skipped (cache hit)', chapterId);
+    }
+    return;
+  }
   const cancelled = { abort: false };
   inflight.set(key(chapterId, 'deep'), cancelled);
 
   // Pre-step: also run foundation (cheap & catches any new entities the
   // chapter introduced since the last foundation pass) so the deep pass
-  // has the latest roster to resolve names against.
-  await runFoundationJob(store, chapterId, runId);
+  // has the latest roster to resolve names against. We pass through opts
+  // so a force flag escalates to the foundation step too.
+  await runFoundationJob(store, chapterId, runId, opts);
   if (cancelled.abort) { clearRunning(store, chapterId); return; }
 
   markRunning(store, chapterId, 'deep');
@@ -321,6 +398,7 @@ async function runDeepJob(store, chapterId, runId) {
 
   clearRunning(store, chapterId);
   recordHistory(store, runId, 'deep', chapterId, queueIds, deep);
+  recordExtractionRun(store, chapterId, 'deep');
   console.info('[pipeline] deep done', chapterId, { queueIds: queueIds.length, events: newEvents.length });
 }
 
@@ -508,7 +586,7 @@ function summariseFindings(b) {
 
 // ─── Public API ──────────────────────────────────────────────────────────
 
-export function scheduleFoundationRun(store, chapterId) {
+export function scheduleFoundationRun(store, chapterId, opts = {}) {
   if (!chapterId) return;
   const k = key(chapterId, 'foundation');
   const flag = inflight.get(k);
@@ -517,13 +595,13 @@ export function scheduleFoundationRun(store, chapterId) {
   const runId = rid('run');
   const timer = setTimeout(() => {
     pending.delete(k);
-    runFoundationJob(store, chapterId, runId);
+    runFoundationJob(store, chapterId, runId, opts);
   }, DEBOUNCE_MS);
   pending.set(k, timer);
   return runId;
 }
 
-export function scheduleDeepRun(store, chapterId) {
+export function scheduleDeepRun(store, chapterId, opts = {}) {
   if (!chapterId) return;
   const k = key(chapterId, 'deep');
   const flag = inflight.get(k);
@@ -532,10 +610,18 @@ export function scheduleDeepRun(store, chapterId) {
   const runId = rid('run');
   const timer = setTimeout(() => {
     pending.delete(k);
-    runDeepJob(store, chapterId, runId);
+    runDeepJob(store, chapterId, runId, opts);
   }, DEBOUNCE_MS);
   pending.set(k, timer);
   return runId;
+}
+
+// Quick check exposed for the UI layer — used by the cache-skip toast and
+// the "Force re-extract" command. Returns the extractionRuns record for
+// a chapter, or null when no extraction has run yet.
+export function getCachedExtraction(store, chapterId) {
+  const runs = store.extractionRuns || {};
+  return runs[chapterId] || null;
 }
 
 // Backwards-compat shim — old callsites scheduling a generic "autonomous"

@@ -13,6 +13,7 @@ import MarginNoticings from './prose/MarginNoticings';
 import Tethers from './prose/Tethers';
 import CommandPalette from './CommandPalette';
 import EntityWeaveWizard from './entities/EntityWeaveWizard';
+import EntityQuickLink from './EntityQuickLink';
 import SummoningRing from './radial/SummoningRing';
 import WalkThroughWizard from './wizard/WalkThroughWizard';
 import Onboarding from './onboarding';
@@ -73,6 +74,7 @@ export default function Shell() {
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [tethers, setTethers] = React.useState([]);
   const [extractionFor, setExtractionFor] = React.useState(null); // chapterId
+  const [quickLink, setQuickLink] = React.useState(null); // { kind, id, anchorRect }
 
   const proseColumnRef = React.useRef(null);
   const marginRef = React.useRef(null);
@@ -189,6 +191,16 @@ export default function Shell() {
       if (!id) return;
       scheduleDeepRun(store, id);
     }
+    if (actionId === 'force.extract') {
+      const id = store.ui?.activeChapterId || store.book?.currentChapterId;
+      if (!id) return;
+      scheduleFoundationRun(store, id, { force: true });
+    }
+    if (actionId === 'force.deep') {
+      const id = store.ui?.activeChapterId || store.book?.currentChapterId;
+      if (!id) return;
+      scheduleDeepRun(store, id, { force: true });
+    }
     if (actionId === 'extraction.reset') {
       const ok = window.confirm(
         'Reset extraction?\n\n' +
@@ -260,6 +272,53 @@ export default function Shell() {
     window.addEventListener('lw:open-weaver', onWeaverOpen);
     return () => window.removeEventListener('lw:open-weaver', onWeaverOpen);
   }, []);
+
+  // Entity quick-link popover wiring.
+  React.useEffect(() => {
+    const onOpen = (e) => {
+      const { kind, id, anchorRect } = e?.detail || {};
+      if (!kind || !id) return;
+      setQuickLink({ kind, id, anchorRect });
+    };
+    window.addEventListener('lw:entity-popover', onOpen);
+    return () => window.removeEventListener('lw:entity-popover', onOpen);
+  }, []);
+
+  const onOpenDossier = React.useCallback((kind, id, panelId) => {
+    if (!panelId) return;
+    if (!openPanels.includes(panelId)) {
+      const list = [...openPanels, panelId];
+      while (list.length > 3) list.shift();
+      store.setPath('ui.panels', list);
+    }
+    select(kind, id);
+    setQuickLink(null);
+    // Give the panel a tick to mount, then ping it to scroll the row into
+    // view + expand the dossier section that matters.
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('lw:scroll-to-entity', { detail: { kind, id } }));
+    }, 80);
+  }, [openPanels, select, store]);
+
+  // Lightweight toast surface. Pipeline emits `lw:toast` for cache-skips
+  // and other passive notices; we render a single auto-dismiss banner at
+  // the bottom of the prose column.
+  const [toast, setToast] = React.useState(null);
+  React.useEffect(() => {
+    const onToast = (e) => {
+      const { message, kind } = e?.detail || {};
+      if (!message) return;
+      setToast({ message, kind, at: Date.now() });
+      setTimeout(() => setToast(cur => cur && cur.at + 4500 < Date.now() + 1 ? null : cur), 4500);
+    };
+    window.addEventListener('lw:toast', onToast);
+    return () => window.removeEventListener('lw:toast', onToast);
+  }, []);
+  React.useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // Global keyboard.
   React.useEffect(() => {
@@ -385,6 +444,26 @@ export default function Shell() {
         </div>
       )}
 
+      {quickLink && (
+        <EntityQuickLink
+          kind={quickLink.kind}
+          id={quickLink.id}
+          anchorRect={quickLink.anchorRect}
+          onClose={() => setQuickLink(null)}
+          onOpenDossier={onOpenDossier}
+        />
+      )}
+      {toast && (
+        <div style={{
+          position: 'fixed', left: 16, bottom: 16, zIndex: 3500,
+          maxWidth: 480,
+          padding: '10px 14px',
+          background: t.paper, border: `1px solid ${t.rule}`,
+          borderLeft: `3px solid ${t.accent}`,
+          borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+          fontFamily: t.display, fontSize: 13, color: t.ink,
+        }}>{toast.message}</div>
+      )}
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onAction={onAction} />}
       {weaverOpen && <EntityWeaveWizard seed={weaverSeed} onClose={() => { setWeaverOpen(false); setWeaverSeed(null); }} />}
       {aidOpen && <WritingAid onClose={() => setAidOpen(false)} />}

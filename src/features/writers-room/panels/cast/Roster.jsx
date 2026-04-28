@@ -14,6 +14,7 @@ export default function Roster({ activeId, onSelect }) {
   const onPage = castOnPage(store);
   const offPage = castOffPage(store);
   const onPageIds = new Set(onPage.map(c => c.id));
+  const rowRefs = React.useRef({});
 
   const addCharacter = () => {
     let id = null;
@@ -22,6 +23,24 @@ export default function Roster({ activeId, onSelect }) {
     });
     if (id) onSelect?.(id);
   };
+
+  // Scroll-to-entity event from the prose canvas's quick-link popover.
+  // We only handle character kind here — the other rosters listen too.
+  React.useEffect(() => {
+    const onScroll = (e) => {
+      const { kind, id } = e?.detail || {};
+      if (kind !== 'character') return;
+      onSelect?.(id);
+      const el = rowRefs.current[id];
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('lw-entity-flash');
+        setTimeout(() => el.classList.remove('lw-entity-flash'), 1300);
+      }
+    };
+    window.addEventListener('lw:scroll-to-entity', onScroll);
+    return () => window.removeEventListener('lw:scroll-to-entity', onScroll);
+  }, [onSelect]);
 
   const activeCh = store.ui?.activeChapterId
     ? store.chapters?.[store.ui.activeChapterId]
@@ -43,6 +62,7 @@ export default function Roster({ activeId, onSelect }) {
         )}
         {onPage.map(x => (
           <button key={x.id}
+            ref={el => { if (el) rowRefs.current[x.id] = el; }}
             onClick={() => onSelect?.(x.id)}
             draggable
             onDragStart={e => dragEntity(e, 'character', x.id)}
@@ -70,6 +90,7 @@ export default function Roster({ activeId, onSelect }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
         {offPage.map(x => (
           <button key={x.id}
+            ref={el => { if (el) rowRefs.current[x.id] = el; }}
             onClick={() => onSelect?.(x.id)}
             draggable
             onDragStart={e => dragEntity(e, 'character', x.id)}

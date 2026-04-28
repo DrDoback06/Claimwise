@@ -39,6 +39,8 @@ export default function CommandPalette({ onClose, onAction }) {
     { id: 'panel.tangle', label: 'Open Tangle' },
     { id: 'open.weaver', label: 'Open the Weaver (⌘J)' },
     { id: 'deep.scan', label: 'Deep scan this chapter — Layer 2 (powerful)' },
+    { id: 'force.extract', label: 'Force re-extract this chapter (ignore cache)' },
+    { id: 'force.deep', label: 'Force deep re-extract this chapter (ignore cache)' },
     { id: 'rescan.all', label: 'Foundation scan all chapters (Layer 1)' },
     { id: 'extraction.undo', label: 'Undo last extraction' },
     { id: 'extraction.reset', label: 'Reset all extraction (clears queue + AI drafts)' },
