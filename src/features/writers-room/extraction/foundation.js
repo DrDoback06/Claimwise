@@ -228,6 +228,11 @@ export async function runFoundationPass(state, chapterId) {
     });
   }
 
+  // Track whether at least one AI call returned a parseable response.
+  // Used by the pipeline to decide whether to cache the run — if all calls
+  // fail (network/key error) we skip caching so the next startup retries.
+  let anyCallSucceeded = false;
+
   for (const c of chunks) {
     const heading = `Chapter ${chapter.n || '?'}, chunk ${c.index + 1} of ${chunks.length}.`;
 
@@ -237,6 +242,7 @@ export async function runFoundationPass(state, chapterId) {
       ENTITIES_PERSONA, ENTITIES_SCHEMA, state, chapterId, 'entities'
     );
     if (aResp) {
+      anyCallSucceeded = true;
       for (const x of asArray(aResp.characters)) pushFinding('character', x);
       for (const x of asArray(aResp.places))     pushFinding('place', x);
       for (const x of asArray(aResp.items))      pushFinding('item', x);
@@ -249,6 +255,7 @@ export async function runFoundationPass(state, chapterId) {
       STORY_PERSONA, STORY_SCHEMA, state, chapterId, 'story'
     );
     if (bResp) {
+      anyCallSucceeded = true;
       for (const q of asArray(bResp.quests)) pushFinding('quest', q);
       for (const p of asArray(bResp.plots)) {
         const key = (p.title || '').toLowerCase().trim();
@@ -272,6 +279,7 @@ export async function runFoundationPass(state, chapterId) {
       NETWORK_PERSONA, NETWORK_SCHEMA, state, chapterId, 'network'
     );
     if (cResp) {
+      anyCallSucceeded = true;
       for (const r of asArray(cResp.relationships)) {
         const key = `${(r.a || '').toLowerCase()}|${(r.b || '').toLowerCase()}|${(r.kind || '').toLowerCase()}`;
         if (!key || relSeen.has(key)) continue;
@@ -328,5 +336,9 @@ export async function runFoundationPass(state, chapterId) {
   findings.plots = [...plotSeen.values()];
   findings.entityEvents = [];     // Layer 2 produces these
   findings.proposedLinks = [];    // Layer 2 produces these
+  // Signal to the pipeline whether the AI responded at all. If false, the
+  // pipeline skips caching so the next startup will retry rather than
+  // seeing a stale cache-hit from a silently-failed run.
+  findings.anyCallSucceeded = anyCallSucceeded;
   return findings;
 }

@@ -163,10 +163,26 @@ async function runFoundationJob(store, chapterId, runId, opts = {}) {
     findings = await runFoundationPass(store, chapterId);
   } catch (err) {
     console.warn('[pipeline] foundation failed', err?.message);
+    emitToast(`Extraction error: ${err?.message || 'unknown error'}. Check API keys in Settings.`, 'error');
     clearRunning(store, chapterId);
     return;
   }
   if (cancelled.abort) { clearRunning(store, chapterId); return; }
+
+  // If ALL AI calls returned null (network failure, invalid key, proxy error,
+  // or totally unparseable responses), bail out WITHOUT recording a cache hit.
+  // The chapter will be retried on next load instead of being silently stuck.
+  if (!findings.anyCallSucceeded) {
+    const ch = store.chapters?.[chapterId];
+    const chLabel = ch?.title ? `"${ch.title}"` : `chapter ${ch?.n || '?'}`;
+    emitToast(
+      `Extraction failed for ${chLabel} — no AI provider responded. ` +
+      'Check your API keys in Settings (⌘K → Settings).',
+      'error'
+    );
+    clearRunning(store, chapterId);
+    return;
+  }
 
   const byKind = (Array.isArray(findings) ? findings : []).reduce((acc, f) => {
     acc[f.kind] = (acc[f.kind] || 0) + 1; return acc;
@@ -272,6 +288,14 @@ async function runFoundationJob(store, chapterId, runId, opts = {}) {
   recordHistory(store, runId, 'foundation', chapterId, queueIds, findings);
   recordExtractionRun(store, chapterId, 'foundation');
   console.info('[pipeline] foundation done', chapterId, { queueIds: queueIds.length });
+  if (queueIds.length > 0) {
+    const ch = store.chapters?.[chapterId];
+    const chLabel = ch?.title ? `"${ch.title}"` : `chapter ${ch?.n || '?'}`;
+    emitToast(
+      `Extraction complete for ${chLabel}: ${queueIds.length} item${queueIds.length === 1 ? '' : 's'} added to margin.`,
+      'info'
+    );
+  }
 }
 
 // ─── Deep mode ───────────────────────────────────────────────────────────
