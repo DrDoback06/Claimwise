@@ -4,6 +4,8 @@
 // Cache by paragraph hash; abort on text change. Self-filters to confidence ≥ 0.6.
 
 import aiService from '../../../services/aiService';
+import { normalizeEntityName } from '../ai/entityMatch';
+import { safeParseJson } from '../ai/jsonExtract';
 
 const CACHE = new Map();        // hash -> Detection[]
 const INFLIGHT = new Map();     // paragraphId -> AbortController
@@ -32,17 +34,8 @@ function buildPrompt(paragraph, contextBefore, contextAfter, knownEntities) {
 }
 
 function safeParse(raw) {
-  if (!raw) return [];
-  let s = String(raw).trim();
-  if (s.startsWith('```')) s = s.replace(/^```[a-zA-Z]*\n?/, '').replace(/```\s*$/, '');
-  const first = s.indexOf('{');
-  const last = s.lastIndexOf('}');
-  if (first >= 0 && last > first) s = s.slice(first, last + 1);
-  try {
-    const parsed = JSON.parse(s);
-    if (Array.isArray(parsed?.detections)) return parsed.detections;
-  } catch {}
-  return [];
+  const parsed = safeParseJson(raw);
+  return Array.isArray(parsed?.detections) ? parsed.detections : [];
 }
 
 export async function detectInParagraph({
@@ -74,8 +67,10 @@ export async function detectInParagraph({
   }
 
   const list = safeParse(raw);
+  const knownSet = new Set((knownEntities || []).map(e => normalizeEntityName(e.name)).filter(Boolean));
   const cleaned = list
     .filter(d => d && d.kind && d.suggestedName && (d.confidence ?? 0) >= 0.6)
+    .filter(d => !knownSet.has(normalizeEntityName(d.suggestedName)))
     .map(d => ({
       kind: d.kind,
       surfaceText: d.surfaceText || d.suggestedName,

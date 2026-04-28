@@ -34,6 +34,13 @@
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
+# Route /api/ai/* to the bundled Netlify functions. Must come BEFORE the
+# SPA catch-all below — Netlify evaluates redirects top-to-bottom.
+[[redirects]]
+  from   = "/api/ai/*"
+  to     = "/.netlify/functions/:splat"
+  status = 200
+
 # SPA fallback for hash-routed paths (e.g. /#/legacy).
 [[redirects]]
   from   = "/*"

@@ -67,7 +67,14 @@ class AIService {
       huggingface: process.env.REACT_APP_HUGGINGFACE_API_KEY || ''
     };
     this.runtimeKeys = {};
-    this.useServerProxy = false;
+    // Use the Netlify function proxy when we're not in local dev. This is
+    // the only way Anthropic/Claude works from the browser (api.anthropic.com
+    // doesn't permit cross-origin preflight). The proxy still accepts the
+    // user's BYOK key passed in the body when no cookie session / env key is
+    // configured server-side.
+    this.useServerProxy =
+      typeof window !== 'undefined' &&
+      !/^(localhost|127\.|0\.0\.0\.0)/.test(window.location.host || '');
 
     // Load preferred provider from localStorage
     this.preferredProvider = localStorage.getItem('ai_preferred_provider') || 'auto';
@@ -300,6 +307,11 @@ class AIService {
   }
 
   async callProviderProxy(provider, payload, abortController = null) {
+    // BYOK fallback: if the user has saved a key locally and the server
+    // hasn't been provisioned with a session cookie or env var, send the
+    // key in the request body so the proxy can use it. Same-origin HTTPS,
+    // never persisted server-side.
+    const byokKey = this.runtimeKeys[provider] || this.apis?.[provider]?.key || null;
     const fetchOptions = {
       method: 'POST',
       headers: {
@@ -309,7 +321,7 @@ class AIService {
           : {})
       },
       credentials: 'include',
-      body: JSON.stringify({ provider, ...payload })
+      body: JSON.stringify({ provider, ...payload, ...(byokKey ? { apiKey: byokKey } : {}) })
     };
     if (abortController) {
       fetchOptions.signal = abortController.signal;

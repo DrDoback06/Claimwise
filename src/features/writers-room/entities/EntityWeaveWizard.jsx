@@ -2,6 +2,7 @@ import React from 'react';
 import { useTheme } from '../theme';
 import { useStore } from '../store';
 import aiService from '../../../services/aiService';
+import { safeParseJson } from '../ai/jsonExtract';
 
 const ENTITY_TAGS = [
   { id: 'cast', label: 'Cast', kind: 'character' },
@@ -17,15 +18,6 @@ const RISK_OPTIONS = [
   { id: 'amber', label: 'Amber (needs review)' },
   { id: 'red', label: 'Red (canon risk)' },
 ];
-
-function safeParse(raw) {
-  if (!raw) return null;
-  const s = String(raw).trim().replace(/^```[a-z]*\n?/i, '').replace(/```$/i, '');
-  const first = s.indexOf('{');
-  const last = s.lastIndexOf('}');
-  if (first < 0 || last <= first) return null;
-  try { return JSON.parse(s.slice(first, last + 1)); } catch { return null; }
-}
 
 export default function EntityWeaveWizard({ onClose, seed }) {
   const t = useTheme();
@@ -67,7 +59,7 @@ export default function EntityWeaveWizard({ onClose, seed }) {
         `User request: ${prompt}`,
       ].join('\n\n');
       const raw = await aiService.callAI(instruction, 'analytical', null, { useCache: false });
-      const parsed = safeParse(raw);
+      const parsed = safeParseJson(raw);
       const entries = Array.isArray(parsed?.entities) ? parsed.entities : [];
       const normalized = entries.map((x, i) => ({
         id: `wiz_${Date.now().toString(36)}_${i}`,

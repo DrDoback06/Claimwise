@@ -17,7 +17,7 @@ const PROVIDER_ENV_MAP = {
   huggingface: 'HUGGINGFACE_API_KEY'
 };
 
-function getProviderKey(event, provider) {
+function getProviderKey(event, provider, bodyKey) {
   const cookies = parseCookies(event.headers.cookie || '');
   if (cookies.claimwise_byok) {
     try {
@@ -26,9 +26,15 @@ function getProviderKey(event, provider) {
         return session.providers[provider];
       }
     } catch (_) {
-      // ignore invalid cookie and fallback to server env key
+      // ignore invalid cookie and fallback to body / env key
     }
   }
+
+  // BYOK fallback — caller supplied a key in the request body. Used when
+  // the client has saved keys locally but never established a server-side
+  // session. The proxy uses the key to call the upstream provider and does
+  // not persist it.
+  if (bodyKey && typeof bodyKey === 'string' && bodyKey.length >= 8) return bodyKey;
 
   const keyName = PROVIDER_ENV_MAP[provider];
   return process.env[keyName];
@@ -42,11 +48,11 @@ exports.handler = async (event) => {
   if (!enforceBodyLimit(event)) return json(413, { error: 'Payload too large' });
 
   try {
-    const { provider, prompt, systemContext = '', model = null } = JSON.parse(event.body || '{}');
+    const { provider, prompt, systemContext = '', model = null, apiKey: bodyKey = null } = JSON.parse(event.body || '{}');
     if (!validateProvider(provider)) return json(400, { error: 'Unsupported provider' });
     if (!prompt || typeof prompt !== 'string') return json(400, { error: 'provider and prompt are required' });
 
-    const apiKey = getProviderKey(event, provider);
+    const apiKey = getProviderKey(event, provider, bodyKey);
     if (!apiKey) return json(500, { error: `Missing key for provider: ${provider}` });
 
     switch (provider) {

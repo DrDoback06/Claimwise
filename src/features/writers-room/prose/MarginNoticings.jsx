@@ -80,6 +80,8 @@ const MarginNoticings = React.forwardRef(function MarginNoticings({ onWalkThroug
       ...(store.places || []).map(p => ({ kind: 'place', name: p.name })),
       ...(store.items || []).map(i => ({ kind: 'item', name: i.name })),
       ...(store.quests || []).map(t => ({ kind: 'thread', name: t.title || t.name })),
+      ...(store.profile?.workingTitle ? [{ kind: 'thread', name: store.profile.workingTitle }] : []),
+      ...(store.profile?.seriesName ? [{ kind: 'thread', name: store.profile.seriesName }] : []),
     ].filter(e => e.name);
 
     paragraphs.forEach((p, i) => {

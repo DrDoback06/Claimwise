@@ -4,18 +4,9 @@
 
 import aiService from '../../../services/aiService';
 import { composeSystem } from '../ai/context';
+import { safeParseJson } from '../ai/jsonExtract';
 
 function rid(prefix) { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`; }
-
-function safeParse(raw) {
-  if (!raw) return null;
-  let s = String(raw).trim();
-  if (s.startsWith('```')) s = s.replace(/^```[a-zA-Z]*\n?/, '').replace(/```\s*$/, '');
-  const first = s.indexOf('{');
-  const last = s.lastIndexOf('}');
-  if (first < 0 || last <= first) return null;
-  try { return JSON.parse(s.slice(first, last + 1)); } catch { return null; }
-}
 
 function knownStatsFromState(state) {
   const set = new Set();
@@ -55,7 +46,7 @@ export async function generateTree(state, userPrompt, opts = {}) {
   } catch (err) {
     return { error: err?.message || 'tree gen failed', nodes: [] };
   }
-  const parsed = safeParse(raw);
+  const parsed = safeParseJson(raw);
   if (!parsed?.nodes?.length) return { error: 'parse failed', raw, nodes: [] };
 
   // Place nodes on a tier-row layout.
