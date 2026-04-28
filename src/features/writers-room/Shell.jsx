@@ -134,6 +134,34 @@ export default function Shell() {
     }
   }, [store.chapters, store.ui?.activeChapterId, store.book?.currentChapterId, store.snapshots, store]);
 
+  // One-time startup: schedule foundation extraction for any chapter that has
+  // text but has never been extracted. Covers two scenarios:
+  //   • User imported chapters during onboarding but the stale-store race
+  //     prevented the pipeline from firing (the onboarding schedules with a
+  //     snapshot of the store taken before the transaction committed).
+  //   • User reloads the app — persisted chapters that were never extracted
+  //     get a first pass automatically.
+  const autoExtractScheduled = React.useRef(false);
+  React.useEffect(() => {
+    if (store._loading) return;
+    if (!store.profile?.onboarded) return;
+    if (autoExtractScheduled.current) return;
+    autoExtractScheduled.current = true;
+    const order = store.book?.chapterOrder || [];
+    const runs = store.extractionRuns || {};
+    for (const id of order) {
+      const ch = store.chapters?.[id];
+      if ((ch?.text || '').trim().length > 80 && !runs[id]?.foundationRanAt) {
+        try { scheduleFoundationRun(store, id); } catch (err) {
+          console.warn('[shell] auto-extract failed to schedule', id, err?.message);
+        }
+      }
+    }
+  // Intentionally only re-checks when loading or onboarded status changes —
+  // the ref prevents duplicate scheduling on subsequent store updates.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store._loading, store.profile?.onboarded]);
+
   React.useEffect(() => () => clearAllRuns(), []);
 
   // Reset wordsToday at midnight (user local).

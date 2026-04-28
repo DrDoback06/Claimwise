@@ -9,6 +9,7 @@ import { suggest } from '../services/suggest';
 import { detectInParagraph } from '../services/marginExtract';
 import { getActiveAuthor } from '../authors/AuthorsPanel';
 import { rid } from '../store/mutators';
+import { commitQueueItem, dismissQueueItem } from '../review-queue/operations';
 
 const KIND_ACCENT = {
   character: PANEL_ACCENT.cast,
@@ -41,9 +42,15 @@ const MarginNoticings = React.forwardRef(function MarginNoticings({ onWalkThroug
 
   React.useImperativeHandle(ref, () => ({ container: containerRef.current }));
 
-  // Run suggest() on chapter text changes.
+  // Run suggest() on chapter text changes. Clear items immediately when the
+  // chapter id changes so stale grammar noticings don't bleed across chapters.
+  const lastSuggestChapterId = React.useRef(null);
   React.useEffect(() => {
-    if (!chapter?.text) { setItems([]); return; }
+    if (lastSuggestChapterId.current !== chapter?.id) {
+      setItems([]);
+      lastSuggestChapterId.current = chapter?.id || null;
+    }
+    if (!chapter?.text) return;
     let cancelled = false;
     setRunning(true);
     const ctx = {
@@ -188,6 +195,15 @@ const MarginNoticings = React.forwardRef(function MarginNoticings({ onWalkThroug
     setItems(prev => prev.filter(x => x.id !== s.id));
   };
 
+  // Extraction findings: review-queue items for this chapter that haven't
+  // been acted on yet. Capped at 20 to keep the margin scannable.
+  const extractionItems = React.useMemo(() => {
+    if (!activeId) return [];
+    return (store.reviewQueue || [])
+      .filter(it => it.chapterId === activeId && it.status !== 'committed' && it.status !== 'dismissed' && it.status !== 'merged')
+      .slice(0, 20);
+  }, [store.reviewQueue, activeId]);
+
   return (
     <aside ref={containerRef} style={{
       width: 280, padding: '40px 16px',
@@ -203,7 +219,31 @@ const MarginNoticings = React.forwardRef(function MarginNoticings({ onWalkThroug
 
       <AuthorNotesSection chapterId={activeId} />
       <ContinuityFindingsSection chapterId={activeId} />
-      {visible.length === 0 && !running && Object.values(detections).every(d => !d?.length) && (
+
+      {/* Extraction findings — entities, places, items etc. found by the AI
+          pipeline for this chapter. One-click commit or dismiss from here. */}
+      {extractionItems.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{
+            fontFamily: t.mono, fontSize: 9, color: t.ink3,
+            letterSpacing: 0.16, textTransform: 'uppercase', marginBottom: 8,
+            paddingBottom: 4, borderBottom: `1px solid ${t.rule}`,
+          }}>
+            Extracted · {extractionItems.length}
+          </div>
+          {extractionItems.map(item => (
+            <ExtractionCard
+              key={item.id}
+              item={item}
+              t={t}
+              onCommit={() => commitQueueItem(store, item.id)}
+              onDismiss={() => dismissQueueItem(store, item.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {extractionItems.length === 0 && visible.length === 0 && !running && Object.values(detections).every(d => !d?.length) && (
         <div style={{
           fontFamily: t.display, fontSize: 13, color: t.ink3, fontStyle: 'italic',
           lineHeight: 1.5, padding: '20px 0',
@@ -315,6 +355,64 @@ function btnStyle(t, ghost) {
     letterSpacing: 0.12, textTransform: 'uppercase',
     cursor: 'pointer',
   };
+}
+
+// Renders a single review-queue extraction finding in the margin. Coloured
+// stripe matches the entity kind; one-click commit or dismiss.
+function ExtractionCard({ item, t, onCommit, onDismiss }) {
+  const accent = KIND_ACCENT[item.kind] || t.accent;
+  const conf = typeof item.confidence === 'number' ? Math.round(item.confidence * 100) : null;
+  const label = item.draft?.name || item.name || '—';
+  return (
+    <div style={{
+      marginBottom: 8, padding: '8px 10px',
+      background: t.paper2,
+      borderLeft: `2px solid ${accent}`,
+      borderRadius: 1,
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2,
+      }}>
+        <span style={{
+          fontFamily: t.mono, fontSize: 8, color: accent,
+          letterSpacing: 0.16, textTransform: 'uppercase',
+        }}>{item.kind}</span>
+        {conf !== null && (
+          <span style={{ fontFamily: t.mono, fontSize: 8, color: t.ink3 }}>{conf}%</span>
+        )}
+        {item.status === 'auto-applied' && (
+          <span style={{
+            fontFamily: t.mono, fontSize: 8, color: t.good || '#2a8',
+            letterSpacing: 0.12, textTransform: 'uppercase',
+          }}>auto</span>
+        )}
+      </div>
+      <div style={{
+        fontFamily: t.display, fontSize: 13, color: t.ink,
+        lineHeight: 1.4, marginBottom: 4, wordBreak: 'break-word',
+      }}>{label}</div>
+      {item.notes && (
+        <div style={{
+          fontFamily: t.display, fontSize: 11, color: t.ink2,
+          fontStyle: 'italic', lineHeight: 1.4, marginBottom: 4,
+        }}>{String(item.notes).slice(0, 120)}</div>
+      )}
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button onClick={onCommit} style={{
+          padding: '3px 8px', background: accent, color: t.onAccent,
+          border: 'none', borderRadius: 1, cursor: 'pointer',
+          fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
+          textTransform: 'uppercase', fontWeight: 600,
+        }}>+ Add to canon</button>
+        <button onClick={onDismiss} style={{
+          padding: '3px 6px', background: 'transparent', color: t.ink3,
+          border: `1px solid ${t.rule}`, borderRadius: 1, cursor: 'pointer',
+          fontFamily: t.mono, fontSize: 9, letterSpacing: 0.12,
+          textTransform: 'uppercase',
+        }}>Dismiss</button>
+      </div>
+    </div>
+  );
 }
 
 function DetectionChip({ detection: d, t, onAdd, onDismiss }) {
