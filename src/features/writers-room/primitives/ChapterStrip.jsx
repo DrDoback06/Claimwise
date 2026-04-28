@@ -27,8 +27,16 @@ export default function ChapterStrip({
   const order = store.book?.chapterOrder || [];
   const chapters = store.chapters || {};
   const activeId = value || store.ui?.activeChapterId || store.book?.currentChapterId;
-  const activeIdx = order.indexOf(activeId);
   const activeAccent = accent || t.accent;
+
+  // Sort chapter ids by their n value so pills always render in chapter-number
+  // order regardless of the insertion order in chapterOrder.
+  const sortedOrder = React.useMemo(
+    () => [...order].sort((a, b) => ((chapters[a]?.n) ?? 9999) - ((chapters[b]?.n) ?? 9999)),
+    [order, chapters],
+  );
+
+  const activeIdx = sortedOrder.indexOf(activeId);
 
   const stripRef = React.useRef(null);
   const itemRefs = React.useRef({});
@@ -55,8 +63,10 @@ export default function ChapterStrip({
 
   const handlePick = (id) => {
     if (mode === 'jump') {
-      store.setPath('ui.activeChapterId', id);
-      store.setPath('book.currentChapterId', id);
+      store.transaction(({ setPath }) => {
+        setPath('ui.activeChapterId', id);
+        setPath('book.currentChapterId', id);
+      });
     }
     onChange?.(id);
   };
@@ -82,10 +92,10 @@ export default function ChapterStrip({
           // Hide native scrollbar visually but keep wheel/touch scroll.
           msOverflowStyle: 'none',
         }}>
-        {order.map((id, i) => {
+        {sortedOrder.map((id, i) => {
           const ch = chapters[id];
           if (!ch) return null;
-          const isActive = i === activeIdx;
+          const isActive = id === activeId;
           const wc = (ch?.text || '').trim().match(/\S+/g)?.length || 0;
           return (
             <button
@@ -155,7 +165,7 @@ export default function ChapterStrip({
       {metaOpenId && (
         <ChapterMetaModal
           chapter={chapters[metaOpenId]}
-          index={order.indexOf(metaOpenId)}
+          index={sortedOrder.indexOf(metaOpenId)}
           onClose={() => setMetaOpenId(null)}
           onDelete={() => {
             const id = metaOpenId;
