@@ -135,24 +135,40 @@ export default function Shell() {
   }, [store.chapters, store.ui?.activeChapterId, store.book?.currentChapterId, store.snapshots, store]);
 
   // One-time startup: schedule foundation extraction for any chapter that has
-  // text but has never been extracted. Covers two scenarios:
+  // text. Covers two scenarios:
   //   • User imported chapters during onboarding but the stale-store race
-  //     prevented the pipeline from firing (the onboarding schedules with a
-  //     snapshot of the store taken before the transaction committed).
-  //   • User reloads the app — persisted chapters that were never extracted
-  //     get a first pass automatically.
+  //     prevented the pipeline from firing.
+  //   • Previous extraction runs silently failed (AI error); those chapters
+  //     now have a stale cache entry. We clear extractionRuns once per session
+  //     so every chapter gets a fresh attempt on the next load.
   const autoExtractScheduled = React.useRef(false);
   React.useEffect(() => {
     if (store._loading) return;
     if (!store.profile?.onboarded) return;
     if (autoExtractScheduled.current) return;
     autoExtractScheduled.current = true;
+
+    // Clear stale extraction cache entries once per session so silently-failed
+    // runs from previous loads don't permanently block re-extraction.
+    // Chapters with genuinely-extracted content won't be re-extracted because
+    // the pipeline's hash + TTL cache still gates them correctly after this.
+    // We only clear entries where the review queue has NO items for that
+    // chapter — a chapter with committed items was successfully extracted.
+    const existingQueue = store.reviewQueue || [];
+    const chaptersWithQueueItems = new Set(existingQueue.map(it => it.chapterId));
+    const runs = store.extractionRuns || {};
+    const toReset = Object.keys(runs).filter(id => !chaptersWithQueueItems.has(id));
+    if (toReset.length > 0) {
+      store.setSlice('extractionRuns', xs => {
+        const next = { ...(xs || {}) };
+        for (const id of toReset) delete next[id];
+        return next;
+      });
+    }
+
     const order = store.book?.chapterOrder || [];
     for (const id of order) {
       const ch = store.chapters?.[id];
-      // Schedule for every chapter with real text. The pipeline's own
-      // hash+TTL cache (shouldSkipExtraction) will skip anything that was
-      // already properly extracted so this costs nothing for clean sessions.
       if ((ch?.text || '').trim().length > 80) {
         try { scheduleFoundationRun(store, id); } catch (err) {
           console.warn('[shell] auto-extract failed to schedule', id, err?.message);
@@ -435,7 +451,6 @@ export default function Shell() {
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenBible={() => setSeriesOpen(true)}
             onOpenHistory={() => setHistoryOpen(true)}
-            onOpenProof={() => setProofOpen(true)}
             onOpenAid={() => setAidOpen(true)}
           />
         )}
@@ -498,10 +513,12 @@ export default function Shell() {
           position: 'fixed', left: 16, bottom: 16, zIndex: 3500,
           maxWidth: 480,
           padding: '10px 14px',
-          background: t.paper, border: `1px solid ${t.rule}`,
-          borderLeft: `3px solid ${t.accent}`,
+          background: t.paper,
+          border: `1px solid ${toast.kind === 'error' ? (t.bad || '#c44') : t.rule}`,
+          borderLeft: `3px solid ${toast.kind === 'error' ? (t.bad || '#c44') : t.accent}`,
           borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-          fontFamily: t.display, fontSize: 13, color: t.ink,
+          fontFamily: t.display, fontSize: 13,
+          color: toast.kind === 'error' ? (t.bad || '#c44') : t.ink,
         }}>{toast.message}</div>
       )}
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onAction={onAction} />}

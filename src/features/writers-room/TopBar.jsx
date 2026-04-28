@@ -15,7 +15,7 @@ import ProjectSwitcher from './projects/ProjectSwitcher';
 import SaveButton from './SaveButton';
 import useViewport from './utilities/useViewport';
 
-export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpenSettings, onOpenBible, onOpenHistory, onOpenProof, onOpenAid }) {
+export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpenSettings, onOpenBible, onOpenHistory, onOpenAid }) {
   const t = useTheme();
   const store = useStore();
   const { book } = store;
@@ -66,7 +66,6 @@ export default function TopBar({ onOpenPalette, onToggleFocus, focusMode, onOpen
       active: suggestionsOpen, onClick: () => store.setPath('ui.suggestionsOpen', !suggestionsOpen) },
     {                  id: 'extract', icon: null,       label: '⌬', title: 'Run extraction on this chapter',
       onClick: () => window.dispatchEvent(new CustomEvent('lw:open-extraction')) },
-    onOpenProof   && { id: 'proof',   icon: null,       label: '✓', title: "Proofreader (⌘')",          onClick: onOpenProof },
     onOpenHistory && { id: 'hist',    icon: 'book',     label: null, title: 'Version history',           onClick: onOpenHistory },
     onOpenBible   && { id: 'bible',   icon: 'building', label: null, title: 'Series bible',              onClick: onOpenBible },
     onOpenSettings && { id: 'settings', icon: 'cog',    label: null, title: 'Settings',                  onClick: onOpenSettings },
