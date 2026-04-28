@@ -32,19 +32,21 @@ export default function ChapterStrip({
   // Sort by the chapter number embedded in the chapter text ("## CHAPTER 3:")
   // which is the ground-truth ordering. The `n` property was assigned at
   // import time (1st file imported = n=1) and may not match the story
-  // sequence. Fall back to `ch.n` for chapters with no numeric heading.
+  // sequence. Prologue sorts before chapter 1, epilogue after all chapters,
+  // un-numbered chapters fall to the end in original insertion order.
   const sortedOrder = React.useMemo(() => {
-    function chNumFromText(text) {
-      if (!text) return null;
-      const m = text.slice(0, 400).match(/\bCHAPTER\s+(\d+)/i);
-      return m ? parseInt(m[1], 10) : null;
+    function chPos(text, fallbackIdx) {
+      const head = (text || '').slice(0, 400);
+      const m = head.match(/\bCHAPTER\s+(\d+)/i);
+      if (m) return parseInt(m[1], 10);
+      if (/\bPROLOGUE\b/i.test(head)) return 0;
+      if (/\bEPILOGUE\b/i.test(head)) return 9998;
+      return 10000 + fallbackIdx;
     }
     return [...order].sort((a, b) => {
-      const chA = chapters[a];
-      const chB = chapters[b];
-      const nA = chNumFromText(chA?.text) ?? chA?.n ?? 9999;
-      const nB = chNumFromText(chB?.text) ?? chB?.n ?? 9999;
-      return nA - nB;
+      const idxA = order.indexOf(a);
+      const idxB = order.indexOf(b);
+      return chPos(chapters[a]?.text, idxA) - chPos(chapters[b]?.text, idxB);
     });
   }, [order, chapters]);
 
@@ -111,8 +113,13 @@ export default function ChapterStrip({
           const wc = (ch?.text || '').trim().match(/\S+/g)?.length || 0;
           // Use the chapter number extracted from text as the pill label so
           // what the pill shows always matches what the chapter says it is.
-          const m = (ch.text || '').slice(0, 400).match(/\bCHAPTER\s+(\d+)/i);
-          const pillLabel = m ? parseInt(m[1], 10) : (ch.n ?? (i + 1));
+          // Prologue → "P", Epilogue → "E" so they never collide with ch.1.
+          const head = (ch.text || '').slice(0, 400);
+          const m = head.match(/\bCHAPTER\s+(\d+)/i);
+          const pillLabel = m ? parseInt(m[1], 10)
+            : /\bPROLOGUE\b/i.test(head) ? 'P'
+            : /\bEPILOGUE\b/i.test(head) ? 'E'
+            : (ch.n ?? (i + 1));
           return (
             <button
               key={id}

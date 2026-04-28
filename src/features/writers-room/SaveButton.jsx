@@ -13,6 +13,7 @@ import React from 'react';
 import { useTheme } from './theme';
 import { useStore } from './store';
 import { scheduleFoundationRun, scheduleDeepRun } from './ai/pipeline';
+import useViewport from './utilities/useViewport';
 
 const MODES = [
   { id: 'save',    label: 'Save', sub: 'Just write to disk' },
@@ -25,6 +26,8 @@ const STORAGE_KEY = 'lw.saveMode';
 export default function SaveButton() {
   const t = useTheme();
   const store = useStore();
+  const { mobile, narrow } = useViewport();
+  const compact = mobile || narrow;
   const [open, setOpen] = React.useState(false);
   const [mode, setMode] = React.useState(() => {
     try { return localStorage.getItem(STORAGE_KEY) || 'extract'; }
@@ -69,14 +72,16 @@ export default function SaveButton() {
         title={current.sub}
         onClick={onClick}
         style={{
-          padding: '4px 10px',
+          padding: compact ? '4px 8px' : '4px 10px',
           background: t.accent, color: t.onAccent,
           border: 'none', borderRadius: '4px 0 0 4px',
           fontFamily: t.mono, fontSize: 10, letterSpacing: 0.14,
           textTransform: 'uppercase', cursor: 'pointer', fontWeight: 600,
           whiteSpace: 'nowrap',
         }}>
-        {current.label.replace('Save & ', '+ ')}
+        {compact
+          ? (current.id === 'save' ? '↓' : current.id === 'deep' ? '↓↓' : '↓+')
+          : current.label.replace('Save & ', '+ ')}
       </button>
       <button
         title="Choose save mode"
