@@ -94,9 +94,9 @@ export default function Proofreader({ onClose }) {
 
   return (
     <aside style={{
-      position: 'fixed', top: 0, right: 0, bottom: 0, width: 420,
+      position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(100%, 420px)',
       background: t.paper, borderLeft: `1px solid ${t.rule}`,
-      display: 'flex', flexDirection: 'column', zIndex: 1000,
+      display: 'flex', flexDirection: 'column', zIndex: 2500,
       animation: 'lw-slide-in 240ms ease',
       boxShadow: '0 0 24px rgba(0,0,0,0.08)',
     }}>

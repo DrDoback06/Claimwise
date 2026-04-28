@@ -7,6 +7,7 @@ import { useStore, createChapter } from './store';
 import { useSelection } from './selection';
 import LeftRail from './LeftRail';
 import TopBar from './TopBar';
+import ChapterStrip from './primitives/ChapterStrip';
 import RitualBar from './RitualBar';
 import Editor from './prose/Editor';
 import MarginNoticings from './prose/MarginNoticings';
@@ -407,6 +408,15 @@ export default function Shell() {
             onOpenProof={() => setProofOpen(true)}
             onOpenAid={() => setAidOpen(true)}
           />
+        )}
+        {!focusMode && (
+          <div className="lw-chapter-row" style={{
+            display: 'flex', alignItems: 'center',
+            padding: '4px 8px', borderBottom: `1px solid ${t.rule}`,
+            background: t.paper, minWidth: 0, flexShrink: 0,
+          }}>
+            <ChapterStrip mode="jump" />
+          </div>
         )}
         <div className="lw-prose-wrap" ref={proseColumnRef} style={{ display: 'flex', position: 'relative' }}>
           <div style={{ flex: 1, minWidth: 0 }}>

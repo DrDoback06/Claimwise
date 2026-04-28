@@ -89,10 +89,13 @@
 .lw-app.focus-mode .lw-panel-stack { display: none; }
 
 /* Mobile breakpoint (CODE-INSIGHT §10 / Tier 3). Below 1100px the panel
-   stack stops trying to flow next to the prose column and instead becomes a
-   single floating panel that overlays from the right. The left rail drops to
-   a thin 48px and panels span the visible width. */
-@media (max-width: 1100px) and (pointer: coarse) {
+   stack stops trying to flow next to the prose column and instead
+   becomes a single floating panel that overlays from the right. The
+   left rail drops to a thin 48px and panels span the visible width.
+   This rule fires on plain narrow viewports too — resizing a desktop
+   browser to phone-width should mirror the touch experience so the
+   writer never loses the close ✕ off the side. */
+@media (max-width: 1100px) {
   .lw-app {
     grid-template-columns: 48px 1fr;
   }
@@ -111,23 +114,22 @@
   .lw-app .lw-rail-btn { width: 36px !important; height: 36px !important; }
   .lw-app .lw-leftrail { padding: 6px 0 !important; }
 }
-@media (max-width: 720px) and (pointer: coarse) {
+@media (max-width: 860px) {
   .lw-app .lw-panel-stack > aside {
     width: 100vw !important;
     max-width: 100vw !important;
   }
-  /* Mobile: collapse to single column. Left rail + margin hide; bottom
-     tab bar takes nav. */
   .lw-app {
     grid-template-columns: 1fr !important;
   }
   .lw-app .lw-leftrail { display: none !important; }
   .lw-app .lw-prose-wrap aside { display: none !important; }
   .lw-app .lw-panel-stack {
-    top: 0 !important;
+    top: 48px !important;
+    bottom: 56px !important;
   }
   .lw-app .lw-panel-stack > aside {
-    height: calc(100vh - 56px) !important;
+    height: 100% !important;
   }
   .lw-mobile-tabbar {
     display: flex !important;
@@ -136,7 +138,8 @@
     padding: 4px 8px !important;
   }
   /* Today panel slides in over the editor on mobile rather than sitting
-     to the side. */
+     to the side. Sits beneath the topbar; allowed to cover the chapter
+     strip just like the right-side panels do. */
   .lw-app > aside:first-of-type {
     position: fixed;
     inset: 48px 0 56px 0;
@@ -144,6 +147,24 @@
     max-width: 100vw !important;
     z-index: 1400;
   }
+  /* Compact chapter strip on mobile so it doesn't crowd the editor. */
+  .lw-chapter-row { padding: 2px 6px !important; }
+}
+
+/* The chapter strip row sits just below the topbar and spans the
+   centre column (so it starts at the left rail's right edge). It is
+   intentionally below the panel-stack z-index — when a right-side
+   panel opens it can cover the strip; closing the panel reveals it
+   again. This matches the brief: "fine if the other right toolbar
+   covers it when they open as they can be closed to see all the way
+   across". */
+.lw-chapter-row {
+  position: relative;
+  z-index: 1100;
+}
+.lw-chapter-row > div {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Mobile bottom tab bar — hidden by default; CSS above flips it on. */
