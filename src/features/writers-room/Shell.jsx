@@ -148,10 +148,12 @@ export default function Shell() {
     if (autoExtractScheduled.current) return;
     autoExtractScheduled.current = true;
     const order = store.book?.chapterOrder || [];
-    const runs = store.extractionRuns || {};
     for (const id of order) {
       const ch = store.chapters?.[id];
-      if ((ch?.text || '').trim().length > 80 && !runs[id]?.foundationRanAt) {
+      // Schedule for every chapter with real text. The pipeline's own
+      // hash+TTL cache (shouldSkipExtraction) will skip anything that was
+      // already properly extracted so this costs nothing for clean sessions.
+      if ((ch?.text || '').trim().length > 80) {
         try { scheduleFoundationRun(store, id); } catch (err) {
           console.warn('[shell] auto-extract failed to schedule', id, err?.message);
         }
