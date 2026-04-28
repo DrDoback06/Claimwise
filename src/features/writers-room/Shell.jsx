@@ -26,7 +26,7 @@ import WhatsNew from './WhatsNew';
 import VersionHistory from './utilities/VersionHistory';
 import aiService from '../../services/aiService';
 import { shouldAutoSnapshot, makeSnapshot, pushSnapshot } from './utilities/snapshots';
-import { scheduleFoundationRun, scheduleDeepRun, scheduleFoundationForAll, clearAllRuns } from './ai/pipeline';
+import { scheduleFoundationRun, scheduleDeepRun, scheduleFoundationForAll, clearAllRuns, forceRunOnce } from './ai/pipeline';
 import { resetExtraction, undoLastExtraction, describeLastExtraction } from './extraction/reset';
 import { ensureDefaultAuthor } from './authors/AuthorsPanel';
 
@@ -159,6 +159,9 @@ export default function Shell() {
     const runs = store.extractionRuns || {};
     const toReset = Object.keys(runs).filter(id => !chaptersWithQueueItems.has(id));
     if (toReset.length > 0) {
+      // Mark these chapters for forced re-run BEFORE the async setSlice so
+      // the pipeline (which reads a stale store snapshot) still sees the flag.
+      for (const id of toReset) forceRunOnce(id);
       store.setSlice('extractionRuns', xs => {
         const next = { ...(xs || {}) };
         for (const id of toReset) delete next[id];

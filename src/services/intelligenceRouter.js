@@ -109,7 +109,7 @@ const MODEL_REGISTRY = [
   {
     id: 'claude-sonnet',
     provider: 'anthropic',
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     tier: 'premium',
     capability: 9,
     speed: 5,
@@ -122,7 +122,7 @@ const MODEL_REGISTRY = [
   {
     id: 'claude-opus',
     provider: 'anthropic',
-    model: 'claude-opus-4-20250514',
+    model: 'claude-opus-4-7',
     tier: 'premium',
     capability: 10,
     speed: 3,

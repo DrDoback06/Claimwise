@@ -29,6 +29,10 @@ const REVIEW_CAP = 500;
 
 const pending = new Map();   // chapterId|mode -> timeout
 const inflight = new Map();  // chapterId|mode -> abort flag
+// One-shot force flags — set by forceRunOnce() so the pipeline bypasses
+// the cache check even when the store snapshot passed in is stale (React
+// async state updates race with the debounce timer).
+const forceRunIds = new Set();
 
 function key(chapterId, mode) { return `${chapterId}|${mode}`; }
 
@@ -52,7 +56,10 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // run record (with .skipped=true) when a skip is warranted, or null when
 // the run should proceed.
 function shouldSkipExtraction(store, chapterId, mode, opts = {}) {
-  if (opts.force) return null;
+  if (opts.force || forceRunIds.has(chapterId)) {
+    forceRunIds.delete(chapterId); // one-shot
+    return null;
+  }
   const ch = store.chapters?.[chapterId];
   if (!ch?.text) return { skipped: true, reason: 'no-text' };
   const runs = store.extractionRuns || {};
@@ -659,6 +666,15 @@ export function clearAllRuns() {
   pending.clear();
   for (const flag of inflight.values()) flag.abort = true;
   inflight.clear();
+}
+
+// Mark a chapter to bypass the cache check on its next scheduled run.
+// Used by Shell.jsx startup to work around the React async-state race:
+// setSlice('extractionRuns') is async but the debounce fires with the
+// old store snapshot — the force flag lives in module scope so it's
+// always current regardless of which store snapshot the pipeline got.
+export function forceRunOnce(chapterId) {
+  if (chapterId) forceRunIds.add(chapterId);
 }
 
 // Run foundation across every chapter that has enough text. Used by the

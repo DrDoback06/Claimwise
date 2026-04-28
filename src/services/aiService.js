@@ -1028,7 +1028,7 @@ class AIService {
       case "openai":
         return this.callChatGPT(prompt, systemContext, model || "gpt-4o", abortController);
       case "anthropic":
-        return this.callClaude(prompt, systemContext, model || "claude-sonnet-4-20250514", abortController);
+        return this.callClaude(prompt, systemContext, model || "claude-sonnet-4-6", abortController);
       case "groq":
         return this.callGroq(prompt, systemContext, model || "llama-3.3-70b-versatile", abortController);
       case "huggingface":
