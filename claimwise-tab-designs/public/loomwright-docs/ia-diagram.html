@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Loomwright — IA Diagram</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #faf8f4;
+    --paper: #ffffff;
+    --ink: #1a1612;
+    --ink-2: #5a554d;
+    --ink-3: #8a8378;
+    --rule: #e8e2d6;
+    --rule-2: #f0ead9;
+    --accent: oklch(58% 0.13 35);
+    --accent-2: oklch(58% 0.13 180);
+    --kill: oklch(58% 0.13 25);
+    --merge: oklch(58% 0.13 75);
+    --keep: oklch(58% 0.13 145);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'Inter', sans-serif; }
+  .page { padding: 64px 56px 120px; max-width: 1600px; margin: 0 auto; }
+  .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+  h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 56px; letter-spacing: -0.02em; line-height: 1; margin: 12px 0 8px; }
+  .sub { font-family: 'Fraunces', serif; font-style: italic; font-size: 20px; color: var(--ink-2); margin-bottom: 56px; }
+
+  .legend { display: flex; gap: 28px; margin: 24px 0 36px; font-size: 12px; color: var(--ink-2); font-family: 'JetBrains Mono', monospace; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+
+  /* Diagram */
+  .stage {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    padding: 56px 48px;
+    position: relative;
+  }
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 200px 1fr;
+    gap: 32px;
+    align-items: start;
+    position: relative;
+  }
+  .col-head {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .col-head .num { font-family: 'Fraunces', serif; font-size: 36px; color: var(--ink); letter-spacing: -0.02em; }
+
+  /* Left side — current nav */
+  .group {
+    margin-bottom: 18px;
+  }
+  .group-name {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-2);
+    margin-bottom: 6px;
+    padding: 4px 0;
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--paper);
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--ink-2);
+    position: relative;
+    transition: all .2s;
+  }
+  .item .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink-3);
+  }
+  .item.k .dot { background: var(--keep); }
+  .item.m .dot { background: var(--merge); }
+  .item.x .dot { background: var(--kill); }
+  .item.x { color: var(--ink-3); text-decoration: line-through; opacity: 0.7; }
+  .item .id {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+  }
+
+  /* Middle — flow lanes */
+  .flow-lanes {
+    position: relative;
+    height: 100%;
+    min-height: 800px;
+  }
+
+  /* Right side — new workspaces */
+  .ws {
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    border-radius: 4px;
+    position: relative;
+  }
+  .ws-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+  }
+  .ws-name {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin: 2px 0 4px;
+  }
+  .ws-blurb {
+    font-size: 11px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  .ws.featured {
+    background: color-mix(in oklch, var(--accent) 8%, var(--paper));
+    border-color: var(--accent);
+  }
+  .ws.featured .ws-num { color: var(--ink); }
+
+  /* SVG flow lines layer */
+  svg.flow {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+  svg.flow path {
+    fill: none;
+    stroke: var(--ink-3);
+    stroke-width: 1;
+    opacity: 0.35;
+  }
+  svg.flow path.kill { stroke: var(--kill); stroke-dasharray: 3 3; opacity: 0.5; }
+  svg.flow path.keep { stroke: var(--keep); opacity: 0.5; }
+  svg.flow path.merge { stroke: var(--merge); opacity: 0.55; }
+
+  /* Stats row */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+    margin-top: 56px;
+  }
+  .stat {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    padding: 24px 28px;
+  }
+  .stat .num {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 56px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .stat .num .from { color: var(--ink-3); font-size: 28px; text-decoration: line-through; margin-right: 8px; }
+  .stat .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    margin-top: 14px;
+  }
+  .stat .desc {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+
+  /* Persistent shell row */
+  .shell-row {
+    margin-top: 56px;
+    background: var(--ink);
+    color: var(--bg);
+    padding: 32px 40px;
+  }
+  .shell-row h3 {
+    margin: 0 0 8px;
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+  }
+  .shell-row p { font-size: 13px; color: rgba(250,248,244,0.65); margin: 0 0 18px; max-width: 60ch; line-height: 1.6; }
+  .shell-bits { display: flex; gap: 14px; flex-wrap: wrap; }
+  .shell-bit {
+    border: 1px solid rgba(250,248,244,0.2);
+    padding: 12px 16px;
+    border-radius: 4px;
+    flex: 1;
+    min-width: 200px;
+  }
+  .shell-bit .name { font-family: 'Fraunces', serif; font-size: 18px; }
+  .shell-bit .what { font-size: 11px; color: rgba(250,248,244,0.6); margin-top: 4px; }
+  .key { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 6px; background: rgba(250,248,244,0.15); border-radius: 3px; color: var(--bg); margin-left: 6px; }
+
+  .nav-link { display: inline-block; margin-top: 32px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent); padding-bottom: 2px; }
+</style>
+</head>
+<body>
+<div class="page" data-screen-label="01 IA Diagram">
+
+  <div class="eyebrow">Document 01 / Information Architecture</div>
+  <h1>From 28 doors to 6 rooms.</h1>
+  <div class="sub">Every nav item, mapped to its new home.</div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--keep)"></span> KEEP — moves intact</span>
+    <span><span class="swatch" style="background:var(--merge)"></span> MERGE — folds into a workspace</span>
+    <span><span class="swatch" style="background:var(--kill)"></span> KILL — removed or demoted to a button</span>
+  </div>
+
+  <div class="stage">
+    <div class="columns" id="diagram">
+
+      <!-- LEFT: current 28 nav items -->
+      <div id="left-col">
+        <div class="col-head"><span>Current nav</span><span class="num">28</span></div>
+
+        <div class="group">
+          <div class="group-name">Creation</div>
+          <div class="item k" data-id="personnel"><span class="dot"></span>Personnel<span class="id">→ Cast</span></div>
+          <div class="item m" data-id="items"><span class="dot"></span>Item Vault<span class="id">→ World</span></div>
+          <div class="item m" data-id="inventory"><span class="dot"></span>Inventory<span class="id">→ World</span></div>
+          <div class="item m" data-id="skills"><span class="dot"></span>Skill Bank<span class="id">→ World</span></div>
+          <div class="item m" data-id="stats"><span class="dot"></span>Stat Registry<span class="id">→ World</span></div>
+        </div>
+
+        <div class="group">
+          <div class="group-name">Writing</div>
+          <div class="item k" data-id="story"><span class="dot"></span>Writer's Room<span class="id">→ Write</span></div>
+          <div class="item m" data-id="bible"><span class="dot"></span>Series Bible<span class="id">→ Write</span></div>
+          <div class="item m" data-id="manuscript"><span class="dot"></span>Manuscript Intelligence<span class="id">→ Write</span></div>
+          <div class="item x" data-id="speedreader"><span class="dot"></span>Speed Reader<span class="id">demote → button</span></div>
+        </div>
+
+        <div class="group">
+          <div class="group-name">Visualization</div>
+          <div class="item m" data-id="plottimeline"><span class="dot"></span>Plot Timeline<span class="id">→ Timeline</span></div>
+          <div class="item m" data-id="mindmap"><span class="dot"></span>Story Mind Map<span class="id">→ World</span></div>
+          <div class="item m" data-id="ukmap"><span class="dot"></span>UK Map<span class="id">→ Atlas</span></div>
+          <div class="item m" data-id="timeline"><span class="dot"></span>Master Timeline<span class="id">→ Timeline</span></div>
+          <div class="item m" data-id="characterarcs"><span class="dot"></span>Character Arcs<span class="id">→ Timeline / Cast</span></div>
+          <div class="item m" data-id="skilltree"><span class="dot"></span>Skill Tree Visual<span class="id">→ World</span></div>
+        </div>
+
+        <div class="group">
+          <div class="group-name">Analysis</div>
+          <div class="item m" data-id="relationships"><span class="dot"></span>Relationships<span class="id">→ Cast</span></div>
+          <div class="item m" data-id="plotthreads"><span class="dot"></span>Plot &amp; Quests<span class="id">→ Plot</span></div>
+          <div class="item m" data-id="worldlore"><span class="dot"></span>World / Lore<span class="id">→ World</span></div>
+          <div class="item m" data-id="consistency"><span class="dot"></span>Story Analysis<span class="id">→ Plot / Home</span></div>
+          <div class="item m" data-id="wiki"><span class="dot"></span>Wiki Manager<span class="id">→ World</span></div>
+          <div class="item m" data-id="storymap"><span class="dot"></span>Story Map<span class="id">→ Plot</span></div>
+        </div>
+
+        <div class="group">
+          <div class="group-name">Tools</div>
+          <div class="item m" data-id="storysetup"><span class="dot"></span>Story Setup<span class="id">→ Settings</span></div>
+          <div class="item x" data-id="search"><span class="dot"></span>Search<span class="id">→ Cmd+K</span></div>
+          <div class="item m" data-id="versioncontrol"><span class="dot"></span>Version Control<span class="id">→ Settings</span></div>
+          <div class="item m" data-id="backup"><span class="dot"></span>Backup<span class="id">→ Settings</span></div>
+          <div class="item m" data-id="sync"><span class="dot"></span>Sync<span class="id">→ Settings</span></div>
+          <div class="item k" data-id="settings"><span class="dot"></span>Settings<span class="id">→ Settings</span></div>
+        </div>
+      </div>
+
+      <!-- MIDDLE: SVG flow lines layer -->
+      <div class="flow-lanes" id="lanes">
+        <svg class="flow" id="flow-svg" preserveAspectRatio="none"></svg>
+      </div>
+
+      <!-- RIGHT: new 6 workspaces -->
+      <div id="right-col">
+        <div class="col-head"><span>New workspaces</span><span class="num">6 + Home</span></div>
+
+        <div class="ws featured" data-ws="home">
+          <div class="ws-num">00 / HOME</div>
+          <div class="ws-name">Dashboard</div>
+          <div class="ws-blurb">Resume above the fold; story health below. Today's chapter, open threads, what the AI noticed.</div>
+        </div>
+
+        <div class="ws" data-ws="write">
+          <div class="ws-num">01 / WRITE</div>
+          <div class="ws-name">Writer's Room</div>
+          <div class="ws-blurb">Editor + Bible + chapter ingest. Reader mode in toolbar.</div>
+        </div>
+
+        <div class="ws" data-ws="cast">
+          <div class="ws-num">02 / CAST</div>
+          <div class="ws-name">Personnel</div>
+          <div class="ws-blurb">Characters with deep tabs. Relationships and arcs deep-link from here.</div>
+        </div>
+
+        <div class="ws" data-ws="world">
+          <div class="ws-num">03 / WORLD</div>
+          <div class="ws-name">World &amp; Systems</div>
+          <div class="ws-blurb">Items, skills, stats, lore, wiki, mind map, atlas. Three surfaces: List · Graph · Atlas.</div>
+        </div>
+
+        <div class="ws" data-ws="plot">
+          <div class="ws-num">04 / PLOT</div>
+          <div class="ws-name">Plot Lab</div>
+          <div class="ws-blurb">Threads, quests, beats, consistency, story structure. One canvas, mode toolbar.</div>
+        </div>
+
+        <div class="ws" data-ws="timeline">
+          <div class="ws-num">05 / TIMELINE</div>
+          <div class="ws-name">Chronology</div>
+          <div class="ws-blurb">Single timeline, filterable by character, thread, location, event.</div>
+        </div>
+
+        <div class="ws" data-ws="settings">
+          <div class="ws-num">06 / SETTINGS</div>
+          <div class="ws-name">Config &amp; Data</div>
+          <div class="ws-blurb">Account · API · Style guide · Story setup · Data &amp; History (Backup + Sync + Versions merged).</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div class="num"><span class="from">28</span>7</div>
+      <div class="label">Top-level destinations</div>
+      <div class="desc">Six workspaces + Home. Cmd+K replaces a nav slot for Search.</div>
+    </div>
+    <div class="stat">
+      <div class="num"><span class="from">3</span>1</div>
+      <div class="label">Timelines</div>
+      <div class="desc">Plot Timeline + Master Timeline + Character Arcs → one filterable Chronology.</div>
+    </div>
+    <div class="stat">
+      <div class="num"><span class="from">3</span>1</div>
+      <div class="label">World views</div>
+      <div class="desc">Mind Map + Story Map + Wiki Manager → World workspace with three surfaces.</div>
+    </div>
+    <div class="stat">
+      <div class="num"><span class="from">7</span>0</div>
+      <div class="label">Dead imports</div>
+      <div class="desc">Six superseded components and one unrendered tracker — all removed.</div>
+    </div>
+  </div>
+
+  <!-- Persistent shell -->
+  <div class="shell-row">
+    <h3>Always-on, across every workspace</h3>
+    <p>Three persistent surfaces stay with you wherever you are in the app. They're the seam that makes six workspaces feel like one tool.</p>
+    <div class="shell-bits">
+      <div class="shell-bit">
+        <div class="name">Cmd+K palette<span class="key">⌘K</span></div>
+        <div class="what">Jump to anything · run an action · search every entity. Replaces the Search tab.</div>
+      </div>
+      <div class="shell-bit">
+        <div class="name">AI dock<span class="key">⌘.</span></div>
+        <div class="what">Right-edge collapsible. Knows what you're looking at; offers contextual actions.</div>
+      </div>
+      <div class="shell-bit">
+        <div class="name">Tutor<span class="key">F1</span></div>
+        <div class="what">Spotlight walkthrough of any workspace. Resumable. Designed in doc 04.</div>
+      </div>
+    </div>
+  </div>
+
+  <a class="nav-link" href="00 - IA Spec & Audit.html">← back to spec</a>
+  <a class="nav-link" href="02 - Aesthetic Directions.html" style="margin-left: 32px;">02 — Aesthetic Directions →</a>
+</div>
+
+<script>
+  // Draw flow lines from each left item to the workspace it merges into
+  const MAP = {
+    personnel: 'cast',
+    items: 'world', inventory: 'world', skills: 'world', stats: 'world',
+    story: 'write', bible: 'write', manuscript: 'write',
+    plottimeline: 'timeline', timeline: 'timeline', characterarcs: 'timeline',
+    mindmap: 'world', ukmap: 'world', skilltree: 'world',
+    relationships: 'cast', plotthreads: 'plot', worldlore: 'world',
+    consistency: 'plot', wiki: 'world', storymap: 'plot',
+    storysetup: 'settings', versioncontrol: 'settings', backup: 'settings', sync: 'settings', settings: 'settings',
+  };
+  const KILL = new Set(['speedreader','search']);
+
+  function draw() {
+    const stage = document.getElementById('diagram');
+    const lanes = document.getElementById('lanes');
+    const svg = document.getElementById('flow-svg');
+    const stageR = stage.getBoundingClientRect();
+    const lanesR = lanes.getBoundingClientRect();
+
+    svg.setAttribute('viewBox', `0 0 ${lanesR.width} ${lanesR.height}`);
+    svg.setAttribute('width', lanesR.width);
+    svg.setAttribute('height', lanesR.height);
+    svg.innerHTML = '';
+
+    const items = document.querySelectorAll('#left-col .item');
+    items.forEach(it => {
+      const id = it.dataset.id;
+      const wsId = MAP[id];
+      const itR = it.getBoundingClientRect();
+      const y1 = itR.top + itR.height/2 - lanesR.top;
+      const x1 = 0; // left edge of lanes
+
+      let x2, y2, klass;
+      if (KILL.has(id)) {
+        // draw a short stub fading right
+        x2 = lanesR.width * 0.4;
+        y2 = y1;
+        klass = 'kill';
+      } else {
+        const ws = document.querySelector(`[data-ws="${wsId}"]`);
+        if (!ws) return;
+        const wsR = ws.getBoundingClientRect();
+        x2 = lanesR.width;
+        y2 = wsR.top + wsR.height/2 - lanesR.top;
+        klass = id === 'personnel' || id === 'settings' || id === 'story' ? 'keep' : 'merge';
+      }
+
+      const cx1 = x1 + (x2 - x1) * 0.5;
+      const cx2 = x1 + (x2 - x1) * 0.5;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${x1} ${y1} C ${cx1} ${y1}, ${cx2} ${y2}, ${x2} ${y2}`);
+      path.setAttribute('class', klass);
+      svg.appendChild(path);
+    });
+  }
+
+  window.addEventListener('load', () => setTimeout(draw, 50));
+  window.addEventListener('resize', draw);
+</script>
+</body>
+</html>

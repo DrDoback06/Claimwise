@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Loomwright — AI Providers</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; }
+  *::-webkit-scrollbar { width:8px; height:8px; } *::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); border-radius:4px; }
+  button, input, select { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="proto/theme.jsx"></script>
+<script type="text/babel" src="proto/primitives.jsx"></script>
+<script type="text/babel">
+
+const PROVIDERS = [
+  { id: 'claude',   name: 'Anthropic Claude',  color: 'oklch(70% 0.14 25)',  models: [
+    { id: 'claude-opus-4',     name: 'Claude Opus 4',     tier: 'flagship', ctx: '200k', in: 15,   out: 75,   best: 'Drafting, deep weaves, voice work' },
+    { id: 'claude-sonnet-4',   name: 'Claude Sonnet 4',   tier: 'balanced', ctx: '200k', in: 3,    out: 15,   best: 'Daily driver. Most Loomwright tasks.' },
+    { id: 'claude-haiku-4',    name: 'Claude Haiku 4',    tier: 'cheap',    ctx: '200k', in: 0.8,  out: 4,    best: 'Noticings, grammar, classification' },
+  ], key: 'sk-ant-**********7F2a', status: 'connected' },
+  { id: 'openai',   name: 'OpenAI',             color: 'oklch(68% 0.15 145)', models: [
+    { id: 'gpt-5',             name: 'GPT-5',             tier: 'flagship', ctx: '256k', in: 10,   out: 40,   best: 'Structured reasoning, outlines' },
+    { id: 'gpt-5-mini',        name: 'GPT-5 mini',        tier: 'balanced', ctx: '128k', in: 1,    out: 4,    best: 'Interview mode, suggestions' },
+    { id: 'gpt-4o',            name: 'GPT-4o',            tier: 'legacy',   ctx: '128k', in: 2.5,  out: 10,   best: 'Legacy projects' },
+  ], key: 'sk-**********b9e1',    status: 'connected' },
+  { id: 'gemini',   name: 'Google Gemini',      color: 'oklch(70% 0.13 240)', models: [
+    { id: 'gemini-2-pro',      name: 'Gemini 2 Pro',      tier: 'flagship', ctx: '2M',   in: 7,    out: 21,   best: 'Very long context (whole book)' },
+    { id: 'gemini-2-flash',    name: 'Gemini 2 Flash',    tier: 'cheap',    ctx: '1M',   in: 0.3,  out: 1.2,  best: 'Bulk tasks, cheap noticings' },
+  ], key: null,                   status: 'not-connected' },
+  { id: 'mistral',  name: 'Mistral',            color: 'oklch(72% 0.14 65)',  models: [
+    { id: 'mistral-large',     name: 'Mistral Large 2',   tier: 'balanced', ctx: '128k', in: 2,    out: 6,    best: 'European writers / data residency' },
+  ], key: null,                   status: 'not-connected' },
+  { id: 'local',    name: 'Local (Ollama)',     color: 'oklch(65% 0.10 160)', models: [
+    { id: 'llama-3-70b',       name: 'Llama 3.1 70B',     tier: 'local',    ctx: '128k', in: 0,    out: 0,    best: 'Private. Free. Slower.' },
+    { id: 'mixtral-8x22b',     name: 'Mixtral 8x22B',     tier: 'local',    ctx: '64k',  in: 0,    out: 0,    best: 'Good balance of speed & quality' },
+  ], key: 'http://localhost:11434', status: 'connected' },
+];
+
+// Each "task" in Loomwright can route to a different provider+model.
+const TASKS = [
+  { id: 'draft',     label: 'Chapter drafting',   desc: 'Full prose generation in your voice',     provider: 'claude',  model: 'claude-opus-4',   weight: 'heavy' },
+  { id: 'weave',     label: 'Canon Weaver',       desc: 'Mass edits across systems',              provider: 'claude',  model: 'claude-opus-4',   weight: 'heavy' },
+  { id: 'voice',     label: 'Voice re-render',    desc: 'Re-voicing paragraphs in Voice Studio',  provider: 'claude',  model: 'claude-sonnet-4', weight: 'medium' },
+  { id: 'notice',    label: 'Noticings',          desc: 'Ambient contradiction & thread checks',  provider: 'claude',  model: 'claude-haiku-4',  weight: 'light' },
+  { id: 'grammar',   label: 'Grammar & spelling', desc: 'Live inline checking',                    provider: 'claude',  model: 'claude-haiku-4',  weight: 'light' },
+  { id: 'interview', label: 'Interview mode',     desc: 'Character chat & group chats',           provider: 'openai',  model: 'gpt-5-mini',      weight: 'medium' },
+  { id: 'suggest',   label: 'Daily spark',        desc: 'Editor-note what-if generation',          provider: 'claude',  model: 'claude-sonnet-4', weight: 'medium' },
+  { id: 'summarize', label: 'Summaries',          desc: 'Chapter recaps, thread summaries',        provider: 'gemini',  model: 'gemini-2-flash',  weight: 'light' },
+];
+
+// Usage this month
+const USAGE = [
+  { task: 'draft',     tokens: 824_000, cost: 12.36 },
+  { task: 'weave',     tokens: 142_000, cost:  3.20 },
+  { task: 'voice',     tokens: 380_000, cost:  1.24 },
+  { task: 'notice',    tokens: 620_000, cost:  0.52 },
+  { task: 'grammar',   tokens: 210_000, cost:  0.18 },
+  { task: 'interview', tokens:  95_000, cost:  0.41 },
+  { task: 'suggest',   tokens:  42_000, cost:  0.18 },
+  { task: 'summarize', tokens: 180_000, cost:  0.07 },
+];
+const BUDGET = 25;
+
+function modelOf(pid, mid) {
+  const p = PROVIDERS.find(x => x.id === pid);
+  return p && p.models.find(m => m.id === mid);
+}
+
+function App() {
+  const t = useTheme();
+  const [tab, setTab] = React.useState('routing');
+  const [tasks, setTasks] = React.useState(TASKS);
+  const [selectedProvider, setSelectedProvider] = React.useState('claude');
+  const totalSpent = USAGE.reduce((a, u) => a + u.cost, 0);
+  const totalTokens = USAGE.reduce((a, u) => a + u.tokens, 0);
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: t.bg, color: t.ink, fontFamily: t.font }}>
+      {/* Sidebar */}
+      <aside style={{ width: 220, background: t.sidebar, borderRight: `1px solid ${t.rule}`, padding: '20px 14px', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 16, borderBottom: `1px solid ${t.rule}`, marginBottom: 16 }}>
+          <div style={{ width: 32, height: 32, background: t.accent, color: t.onAccent, fontFamily: t.display, fontWeight: 600, display: 'grid', placeItems: 'center', fontSize: 15, borderRadius: 2 }}>L<span style={{ fontSize: 13, opacity: 0.6 }}>w</span></div>
+          <div>
+            <div style={{ fontFamily: t.display, fontWeight: 500, fontSize: 15, color: t.ink }}>Loomwright</div>
+            <div style={{ fontFamily: t.mono, fontSize: 9, color: t.accent, letterSpacing: 0.14, textTransform: 'uppercase', marginTop: 2 }}>AI Providers</div>
+          </div>
+        </div>
+        <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase', marginBottom: 8 }}>Settings</div>
+        {[
+          { id: 'routing',  label: 'Task routing',   desc: 'Which AI does what' },
+          { id: 'providers', label: 'Providers',     desc: 'Keys, endpoints, models' },
+          { id: 'usage',    label: 'Usage & cost',   desc: 'Tokens this month' },
+          { id: 'presets',  label: 'Presets',        desc: 'Premium · Balanced · Budget · Local' },
+        ].map(tb => (
+          <button key={tb.id} onClick={() => setTab(tb.id)} style={{
+            display: 'block', width: '100%', textAlign: 'left',
+            padding: '9px 10px', marginBottom: 3,
+            background: tab === tb.id ? t.paper : 'transparent',
+            border: 'none', borderLeft: tab === tb.id ? `2px solid ${t.accent}` : '2px solid transparent',
+            cursor: 'pointer', color: tab === tb.id ? t.ink : t.ink2,
+          }}>
+            <div style={{ fontFamily: t.display, fontSize: 13, fontWeight: 500 }}>{tb.label}</div>
+            <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.1, marginTop: 1 }}>{tb.desc.toUpperCase()}</div>
+          </button>
+        ))}
+        <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: `1px solid ${t.rule}` }}>
+          <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.12, textTransform: 'uppercase', marginBottom: 4 }}>This month</div>
+          <div style={{ fontFamily: t.display, fontSize: 22, color: t.ink, fontWeight: 500 }}>${totalSpent.toFixed(2)}</div>
+          <div style={{ fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.1 }}>/ ${BUDGET} BUDGET</div>
+          <div style={{ height: 4, background: t.rule, borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+            <div style={{ width: `${(totalSpent / BUDGET) * 100}%`, height: '100%', background: t.good }} />
+          </div>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 28px', borderBottom: `1px solid ${t.rule}`, display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+          <div>
+            <div style={{ fontFamily: t.mono, fontSize: 9, color: t.accent, letterSpacing: 0.14, textTransform: 'uppercase' }}>Settings · AI</div>
+            <div style={{ fontFamily: t.display, fontSize: 20, fontWeight: 500, marginTop: 2, color: t.ink }}>{tab === 'routing' ? 'Task routing' : tab === 'providers' ? 'Providers & keys' : tab === 'usage' ? 'Usage & cost' : 'Quick presets'}</div>
+          </div>
+          <div style={{ flex: 1 }} />
+          <ThemeToggle />
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
+          {tab === 'routing' && <RoutingTab tasks={tasks} setTasks={setTasks} />}
+          {tab === 'providers' && <ProvidersTab selected={selectedProvider} setSelected={setSelectedProvider} />}
+          {tab === 'usage' && <UsageTab totalSpent={totalSpent} totalTokens={totalTokens} />}
+          {tab === 'presets' && <PresetsTab setTasks={setTasks} />}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function RoutingTab({ tasks, setTasks }) {
+  const t = useTheme();
+  const updateTask = (id, patch) => setTasks(ts => ts.map(x => x.id === id ? { ...x, ...patch } : x));
+  return (
+    <div style={{ maxWidth: 900 }}>
+      <p style={{ fontSize: 13, color: t.ink2, marginTop: 0, maxWidth: '62ch', lineHeight: 1.65 }}>
+        Every AI task in Loomwright can run on a different provider and model. Put your heavy lifting on a flagship model. Put cheap noticings on a nimble one. Keep private work on a local model. <strong style={{ color: t.ink }}>You decide where the tokens go.</strong>
+      </p>
+
+      <div style={{ background: t.paper, border: `1px solid ${t.rule}`, borderRadius: t.radius, overflow: 'hidden', marginTop: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.5fr 1.8fr 0.8fr 0.9fr', padding: '10px 16px', borderBottom: `1px solid ${t.rule}`, background: t.paper2 }}>
+          {['Task', 'Provider', 'Model', 'Weight', 'Cost'].map(h => (
+            <div key={h} style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase' }}>{h}</div>
+          ))}
+        </div>
+        {tasks.map((task, i) => {
+          const provider = PROVIDERS.find(p => p.id === task.provider);
+          const model = modelOf(task.provider, task.model);
+          const estCost = model ? (model.in * 0.5 + model.out * 0.5).toFixed(2) : '—';
+          return (
+            <div key={task.id} style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.5fr 1.8fr 0.8fr 0.9fr', padding: '12px 16px', borderTop: i > 0 ? `1px solid ${t.rule}` : 'none', alignItems: 'center', gap: 10 }}>
+              <div>
+                <div style={{ fontFamily: t.display, fontSize: 14, fontWeight: 500, color: t.ink }}>{task.label}</div>
+                <div style={{ fontSize: 11, color: t.ink3, marginTop: 2 }}>{task.desc}</div>
+              </div>
+              <div>
+                <select value={task.provider} onChange={e => {
+                  const pid = e.target.value;
+                  const p = PROVIDERS.find(x => x.id === pid);
+                  updateTask(task.id, { provider: pid, model: p.models[0].id });
+                }} style={{ padding: '6px 8px', width: '100%', background: t.bg, color: t.ink, border: `1px solid ${t.rule}`, borderRadius: t.radius, fontSize: 12 }}>
+                  {PROVIDERS.map(p => <option key={p.id} value={p.id} disabled={p.status !== 'connected'}>{p.name}{p.status !== 'connected' ? ' (not connected)' : ''}</option>)}
+                </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4, fontFamily: t.mono, fontSize: 9, color: provider.color, letterSpacing: 0.08 }}>
+                  <span style={{ width: 5, height: 5, background: provider.color, borderRadius: '50%' }} />
+                  {provider.status === 'connected' ? 'CONNECTED' : 'NOT CONNECTED'}
+                </div>
+              </div>
+              <div>
+                <select value={task.model} onChange={e => updateTask(task.id, { model: e.target.value })}
+                  style={{ padding: '6px 8px', width: '100%', background: t.bg, color: t.ink, border: `1px solid ${t.rule}`, borderRadius: t.radius, fontSize: 12 }}>
+                  {provider.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+                {model && <div style={{ fontFamily: t.mono, fontSize: 9, color: t.ink3, marginTop: 4, letterSpacing: 0.08 }}>{model.ctx} CTX · TIER {model.tier.toUpperCase()}</div>}
+              </div>
+              <div style={{ fontFamily: t.mono, fontSize: 10, letterSpacing: 0.1, color: task.weight === 'heavy' ? '#c88080' : task.weight === 'medium' ? t.warn : t.good, textTransform: 'uppercase' }}>{task.weight}</div>
+              <div style={{ fontFamily: t.mono, fontSize: 11, color: t.ink }}>${estCost}<div style={{ fontSize: 9, color: t.ink3 }}>/M tok</div></div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 18, padding: 16, background: t.paper2, border: `1px dashed ${t.accent}`, borderRadius: t.radius, display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ fontSize: 22 }}>✦</div>
+        <div style={{ flex: 1, fontSize: 13, color: t.ink2, lineHeight: 1.55 }}>
+          <strong style={{ color: t.ink }}>Loomwright suggestion.</strong> Your <em>Chapter drafting</em> is on Opus — that's where it should be. But <em>Noticings</em> fires hundreds of times a day; moving it to Gemini Flash would save ~$0.40/day. Want to try?
+        </div>
+        <button style={{ padding: '7px 14px', background: t.accent, color: t.onAccent, border: 'none', borderRadius: t.radius, fontFamily: t.display, fontWeight: 500, fontSize: 12, cursor: 'pointer' }}>Apply suggestion</button>
+      </div>
+    </div>
+  );
+}
+
+function ProvidersTab({ selected, setSelected }) {
+  const t = useTheme();
+  const prov = PROVIDERS.find(p => p.id === selected);
+  return (
+    <div style={{ maxWidth: 980, display: 'grid', gridTemplateColumns: '260px 1fr', gap: 18 }}>
+      <div>
+        {PROVIDERS.map(p => (
+          <button key={p.id} onClick={() => setSelected(p.id)} style={{
+            display: 'block', width: '100%', textAlign: 'left', padding: 14, marginBottom: 6,
+            background: selected === p.id ? t.paper : 'transparent',
+            border: `1px solid ${selected === p.id ? p.color : t.rule}`, borderRadius: t.radius,
+            cursor: 'pointer',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 10, height: 10, background: p.color, borderRadius: 2 }} />
+              <span style={{ fontFamily: t.display, fontSize: 14, fontWeight: 500, color: t.ink }}>{p.name}</span>
+            </div>
+            <div style={{ fontFamily: t.mono, fontSize: 9, color: p.status === 'connected' ? t.good : t.ink3, letterSpacing: 0.1, marginTop: 4, textTransform: 'uppercase' }}>
+              {p.status === 'connected' ? '● CONNECTED' : '○ NOT CONNECTED'} · {p.models.length} MODELS
+            </div>
+          </button>
+        ))}
+      </div>
+      <div style={{ padding: 22, background: t.paper, border: `1px solid ${t.rule}`, borderLeft: `3px solid ${prov.color}`, borderRadius: t.radius }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontFamily: t.display, fontSize: 22, fontWeight: 500, color: t.ink }}>{prov.name}</div>
+          <div style={{ flex: 1 }} />
+          <button style={{ padding: '6px 12px', background: prov.status === 'connected' ? 'transparent' : prov.color, color: prov.status === 'connected' ? prov.color : t.onAccent, border: `1px solid ${prov.color}`, borderRadius: t.radius, fontFamily: t.mono, fontSize: 10, letterSpacing: 0.1, textTransform: 'uppercase', cursor: 'pointer' }}>{prov.status === 'connected' ? 'Disconnect' : 'Connect'}</button>
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase', marginBottom: 6 }}>{prov.id === 'local' ? 'Endpoint' : 'API Key'}</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={prov.key || ''} placeholder={prov.id === 'local' ? 'http://localhost:11434' : 'sk-...'} readOnly style={{
+              flex: 1, padding: '9px 12px',
+              background: t.bg, color: prov.key ? t.ink : t.ink3,
+              border: `1px solid ${t.rule}`, borderRadius: t.radius,
+              fontFamily: t.mono, fontSize: 12, letterSpacing: 0.08,
+            }} />
+            <button style={{ padding: '8px 14px', background: 'transparent', color: t.ink2, border: `1px solid ${t.rule}`, borderRadius: t.radius, fontFamily: t.mono, fontSize: 10, letterSpacing: 0.1, textTransform: 'uppercase', cursor: 'pointer' }}>{prov.key ? 'Replace' : 'Add'}</button>
+          </div>
+        </div>
+        <div style={{ marginTop: 22 }}>
+          <div style={{ fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase', marginBottom: 8 }}>Models</div>
+          {prov.models.map(m => (
+            <div key={m.id} style={{ padding: '10px 0', borderTop: `1px solid ${t.rule}`, display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, alignItems: 'center' }}>
+              <div>
+                <div style={{ fontFamily: t.display, fontSize: 14, fontWeight: 500, color: t.ink }}>{m.name}</div>
+                <div style={{ fontSize: 12, color: t.ink3, marginTop: 2 }}>{m.best}</div>
+              </div>
+              <div style={{ fontFamily: t.mono, fontSize: 10, color: t.ink2, letterSpacing: 0.1, textAlign: 'right' }}>{m.ctx} ctx<div style={{ color: t.ink3, marginTop: 2 }}>TIER {m.tier.toUpperCase()}</div></div>
+              <div style={{ fontFamily: t.mono, fontSize: 11, color: t.ink, textAlign: 'right' }}>${m.in}/${m.out}<div style={{ fontSize: 9, color: t.ink3 }}>IN / OUT M tok</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UsageTab({ totalSpent, totalTokens }) {
+  const t = useTheme();
+  const maxCost = Math.max(...USAGE.map(u => u.cost));
+  return (
+    <div style={{ maxWidth: 900 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+        {[
+          { k: 'Spent this month', v: '$' + totalSpent.toFixed(2), s: `of $${BUDGET} budget` },
+          { k: 'Total tokens',     v: (totalTokens / 1_000_000).toFixed(2) + 'M', s: 'across 8 tasks' },
+          { k: 'Avg cost / 1k wds', v: '$0.04', s: 'down from $0.07 last month' },
+        ].map(s => (
+          <div key={s.k} style={{ padding: 16, background: t.paper, border: `1px solid ${t.rule}`, borderRadius: t.radius }}>
+            <div style={{ fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase' }}>{s.k}</div>
+            <div style={{ fontFamily: t.display, fontSize: 26, color: t.ink, marginTop: 4, fontWeight: 500 }}>{s.v}</div>
+            <div style={{ fontSize: 11, color: t.ink3, marginTop: 2 }}>{s.s}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: t.paper, border: `1px solid ${t.rule}`, borderRadius: t.radius, padding: 20 }}>
+        <div style={{ fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.14, textTransform: 'uppercase', marginBottom: 14 }}>By task · this month</div>
+        {USAGE.map(u => {
+          const task = TASKS.find(ta => ta.id === u.task);
+          const provider = PROVIDERS.find(p => p.id === task.provider);
+          return (
+            <div key={u.task} style={{ padding: '10px 0', borderTop: `1px solid ${t.rule}`, display: 'grid', gridTemplateColumns: '1.5fr 2fr 1fr 0.8fr', gap: 14, alignItems: 'center' }}>
+              <div>
+                <div style={{ fontFamily: t.display, fontSize: 13, color: t.ink, fontWeight: 500 }}>{task.label}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, fontFamily: t.mono, fontSize: 9, color: provider.color, letterSpacing: 0.1 }}>
+                  <span style={{ width: 6, height: 6, background: provider.color, borderRadius: 1 }} />
+                  {provider.name} · {modelOf(task.provider, task.model)?.name}
+                </div>
+              </div>
+              <div style={{ height: 10, background: t.rule, borderRadius: 1, position: 'relative' }}>
+                <div style={{ width: `${(u.cost / maxCost) * 100}%`, height: '100%', background: provider.color, borderRadius: 1 }} />
+              </div>
+              <div style={{ fontFamily: t.mono, fontSize: 11, color: t.ink, textAlign: 'right' }}>{(u.tokens / 1000).toFixed(0)}k tok</div>
+              <div style={{ fontFamily: t.mono, fontSize: 12, color: t.ink, textAlign: 'right' }}>${u.cost.toFixed(2)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PresetsTab() {
+  const t = useTheme();
+  const presets = [
+    { id: 'premium',  name: 'Premium',  tag: 'Best output', color: 'oklch(70% 0.14 25)', desc: 'Everything on flagship models. Highest quality prose, deepest weaves, costliest.', cost: '≈ $28/mo typical', picks: ['Drafting: Claude Opus 4', 'Weaver: Claude Opus 4', 'Voice: Claude Sonnet 4', 'Noticings: Claude Sonnet 4', 'Interviews: GPT-5'] },
+    { id: 'balanced', name: 'Balanced', tag: 'Recommended', color: 'oklch(78% 0.13 78)', desc: 'Flagship for heavy lifting, cheap-and-smart for everything else. The Loomwright default.', cost: '≈ $10/mo typical', picks: ['Drafting: Claude Opus 4', 'Weaver: Claude Sonnet 4', 'Voice: Claude Sonnet 4', 'Noticings: Claude Haiku 4', 'Interviews: GPT-5 mini'] },
+    { id: 'budget',   name: 'Budget',   tag: 'Cheapest cloud', color: 'oklch(68% 0.15 145)', desc: 'Gemini Flash + Claude Haiku only. Still capable, a fraction of the cost.', cost: '≈ $2/mo typical', picks: ['Drafting: Gemini 2 Pro', 'Weaver: Gemini 2 Pro', 'Voice: Claude Haiku 4', 'Noticings: Gemini 2 Flash', 'Interviews: GPT-5 mini'] },
+    { id: 'local',    name: 'Local only', tag: 'Private · free · slower', color: 'oklch(65% 0.10 160)', desc: 'Everything runs on your machine via Ollama. Nothing leaves your computer.', cost: 'Free (your hardware)', picks: ['Drafting: Llama 3.1 70B', 'Weaver: Llama 3.1 70B', 'Voice: Mixtral 8x22B', 'Noticings: Mixtral 8x22B', 'Interviews: Llama 3.1 70B'] },
+  ];
+  const [active, setActive] = React.useState('balanced');
+  return (
+    <div style={{ maxWidth: 1000 }}>
+      <p style={{ fontSize: 13, color: t.ink2, maxWidth: '62ch', lineHeight: 1.65, marginTop: 0 }}>
+        One-click presets set every task to a sensible model. You can still fine-tune any individual task under <em>Task routing</em> afterwards.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginTop: 16 }}>
+        {presets.map(p => (
+          <div key={p.id} style={{
+            padding: 20, background: t.paper,
+            border: `1px solid ${active === p.id ? p.color : t.rule}`,
+            borderLeft: `3px solid ${p.color}`, borderRadius: t.radius,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontFamily: t.display, fontSize: 20, fontWeight: 500, color: t.ink }}>{p.name}</span>
+              <span style={{ fontFamily: t.mono, fontSize: 9, padding: '2px 7px', border: `1px solid ${p.color}`, color: p.color, borderRadius: 1, letterSpacing: 0.1, textTransform: 'uppercase' }}>{p.tag}</span>
+            </div>
+            <div style={{ fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.12, textTransform: 'uppercase', marginTop: 4 }}>{p.cost}</div>
+            <div style={{ fontSize: 13, color: t.ink2, lineHeight: 1.6, marginTop: 10 }}>{p.desc}</div>
+            <div style={{ marginTop: 12, fontFamily: t.mono, fontSize: 10, color: t.ink3, letterSpacing: 0.12, textTransform: 'uppercase' }}>Picks</div>
+            {p.picks.map(pi => <div key={pi} style={{ fontSize: 12, color: t.ink2, marginTop: 3, paddingLeft: 8 }}>· {pi}</div>)}
+            <button onClick={() => setActive(p.id)} style={{
+              marginTop: 14, padding: '7px 14px',
+              background: active === p.id ? p.color : 'transparent',
+              color: active === p.id ? t.onAccent : p.color,
+              border: `1px solid ${p.color}`, borderRadius: t.radius,
+              fontFamily: t.display, fontWeight: 500, fontSize: 12, cursor: 'pointer',
+            }}>{active === p.id ? '✓ Active' : 'Apply preset'}</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<ThemeProvider><App /></ThemeProvider>);
+</script>
+</body>
+</html>

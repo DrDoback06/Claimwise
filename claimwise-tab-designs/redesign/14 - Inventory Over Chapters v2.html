@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Loomwright — Inventory Over Chapters</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>html,body{margin:0;padding:0;height:100%;overflow:hidden}*::-webkit-scrollbar{width:8px;height:8px}*::-webkit-scrollbar-thumb{background:rgba(128,128,128,.3);border-radius:4px}button,input,select{font-family:inherit}</style>
+</head><body><div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="proto/theme.jsx"></script>
+<script type="text/babel">
+const CHARS = [
+  { id:'mira', name:'Mira Vale', color:'oklch(78% 0.13 78)' },
+  { id:'edrick', name:'Edrick of Thorn', color:'oklch(72% 0.10 200)' },
+  { id:'tobyn', name:'Old Tobyn', color:'oklch(72% 0.13 145)' },
+  { id:'rook', name:'Rook', color:'oklch(65% 0.18 25)' },
+];
+const CHS = Array.from({length:18},(_,i)=>i+1);
+const ITEMS = [
+  { id:'sword',   name:"Father's sword",   kind:'weapon',   char:'mira',   events:[
+    {ch:1,act:'hangs on mantel'},{ch:14,act:'taken',detail:'"She seized her father\'s sword from the mantelpiece."'},
+    {ch:15,act:'carried'},{ch:16,act:'carried'},{ch:17,act:'drawn'},{ch:18,act:'broken',detail:'Broken at the parley.'}
+  ]},
+  { id:'bow',     name:'Grey-yew bow',     kind:'weapon',   char:'mira',   events:[
+    {ch:2,act:'gifted'},{ch:3,act:'carried'},{ch:4,act:'carried'},{ch:5,act:'carried'},{ch:6,act:'lost',detail:'Left at the inn. Mira never retrieves it. ⚠ never resolved.'}
+  ]},
+  { id:'horn',    name:'The old horn',     kind:'relic',    char:'tobyn',  events:[
+    {ch:1,act:'wall-mount'},{ch:14,act:'sounded'},{ch:14,act:'returned'},{ch:17,act:'hidden',detail:'Tobyn hides it before the parley.'}
+  ]},
+  { id:'coin',    name:'Rook\'s coin',     kind:'token',    char:'rook',   events:[
+    {ch:6,act:'shown'},{ch:8,act:'shown'},{ch:11,act:'given to Mira',detail:'A gift without explanation.'},{ch:12,act:'carried',detail:'In Mira\'s pocket.'}
+  ]},
+  { id:'letter',  name:"Father's letter",  kind:'document', char:'tobyn',  events:[
+    {ch:4,act:'written'},{ch:7,act:'hidden',detail:'Under a tile in the study.'},{ch:13,act:'found'},{ch:13,act:'read'},{ch:14,act:'burned',detail:'Tobyn burns the letter. Mira never reads it. ⚠ dramatic question.'}
+  ]},
+  { id:'ring',    name:'The sea-grey ring', kind:'token',   char:'edrick', events:[
+    {ch:5,act:'worn'},{ch:8,act:'worn'},{ch:10,act:'removed'},{ch:14,act:'offered to Mira',detail:'She does not take it.'}
+  ]},
+  { id:'prophecy',name:'The prophecy',     kind:'document', char:'tobyn',  events:[
+    {ch:2,act:'quoted'},{ch:7,act:'hidden'},{ch:9,act:'partial read'},{ch:13,act:'revealed',detail:'Tobyn wrote it. Reveal chapter.'}
+  ]},
+  { id:'cloak',   name:'Winter cloak',     kind:'garment',  char:'mira',   events:[
+    {ch:3,act:'worn'},{ch:4,act:'worn'},{ch:11,act:'torn'},{ch:12,act:'mended'},{ch:14,act:'worn'}
+  ]},
+];
+const ACT_COLORS = { taken:'oklch(78% 0.13 78)', carried:'oklch(72% 0.13 145)', drawn:'oklch(70% 0.15 25)', broken:'oklch(65% 0.18 25)', lost:'oklch(65% 0.18 25)', hidden:'oklch(60% 0.04 60)', burned:'oklch(65% 0.18 25)', revealed:'oklch(78% 0.13 78)', shown:'oklch(72% 0.10 200)', worn:'oklch(70% 0.13 300)' };
+function App(){
+  const t = useTheme();
+  const [item,setItem] = React.useState('sword');
+  const [filter,setFilter] = React.useState('all');
+  const current = ITEMS.find(i=>i.id===item);
+  const filtered = filter==='all'?ITEMS:ITEMS.filter(i=>i.char===filter);
+  return (<div style={{display:'flex',height:'100vh',overflow:'hidden',background:t.bg,color:t.ink,fontFamily:t.font}}>
+    <aside style={{width:240,background:t.sidebar,borderRight:`1px solid ${t.rule}`,padding:'20px 14px',flexShrink:0,display:'flex',flexDirection:'column'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,paddingBottom:14,borderBottom:`1px solid ${t.rule}`,marginBottom:14}}>
+        <div style={{width:32,height:32,background:t.accent,color:t.onAccent,fontFamily:t.display,fontWeight:600,display:'grid',placeItems:'center',fontSize:15,borderRadius:2}}>L<span style={{fontSize:13,opacity:.6}}>w</span></div>
+        <div><div style={{fontFamily:t.display,fontWeight:500,fontSize:15}}>Loomwright</div><div style={{fontFamily:t.mono,fontSize:9,color:t.accent,letterSpacing:.14,textTransform:'uppercase',marginTop:2}}>Inventory</div></div>
+      </div>
+      <div style={{fontFamily:t.mono,fontSize:9,color:t.ink3,letterSpacing:.14,textTransform:'uppercase',marginBottom:6}}>Filter · owner</div>
+      <select value={filter} onChange={e=>setFilter(e.target.value)} style={{padding:'6px 8px',background:t.bg,color:t.ink,border:`1px solid ${t.rule}`,borderRadius:t.radius,fontSize:12}}><option value="all">All characters</option>{CHARS.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
+      <div style={{fontFamily:t.mono,fontSize:9,color:t.ink3,letterSpacing:.14,textTransform:'uppercase',marginTop:16,marginBottom:6}}>Items · {filtered.length}</div>
+      <div style={{flex:1,overflowY:'auto'}}>{filtered.map(i=>{ const ch = CHARS.find(c=>c.id===i.char); return (
+        <button key={i.id} onClick={()=>setItem(i.id)} style={{display:'flex',alignItems:'center',gap:8,width:'100%',textAlign:'left',padding:'7px 8px',marginBottom:2,background:item===i.id?t.paper:'transparent',border:'none',borderLeft:item===i.id?`2px solid ${ch.color}`:'2px solid transparent',cursor:'pointer',color:t.ink}}>
+          <span style={{width:8,height:8,background:ch.color,borderRadius:'50%',flexShrink:0}} />
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:t.display,fontSize:13,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{i.name}</div>
+            <div style={{fontFamily:t.mono,fontSize:9,color:t.ink3,letterSpacing:.1,textTransform:'uppercase'}}>{i.kind} · {i.events.length} events</div>
+          </div>
+        </button>); })}</div>
+    </aside>
+    <main style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
+      <header style={{padding:'14px 28px',borderBottom:`1px solid ${t.rule}`,display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
+        <div><div style={{fontFamily:t.mono,fontSize:9,color:t.accent,letterSpacing:.14,textTransform:'uppercase'}}>Inventory over chapters · book II</div><div style={{fontFamily:t.display,fontSize:20,fontWeight:500,marginTop:2}}>Where every object is — in every chapter</div></div>
+        <div style={{flex:1}} /><ThemeToggle />
+      </header>
+      <div style={{flex:1,overflowY:'auto',padding:'24px 28px'}}>
+        <div style={{padding:'10px 0',marginBottom:6,display:'grid',gridTemplateColumns:`220px repeat(18, 1fr)`,gap:3}}>
+          <div style={{fontFamily:t.mono,fontSize:9,color:t.ink3,letterSpacing:.14,textTransform:'uppercase'}}>Item · owner</div>
+          {CHS.map(c=><div key={c} style={{fontFamily:t.mono,fontSize:9,color:t.ink3,textAlign:'center',letterSpacing:.1}}>{c}</div>)}
+        </div>
+        {filtered.map(i=>{ const ch = CHARS.find(c=>c.id===i.char); return (
+          <div key={i.id} style={{display:'grid',gridTemplateColumns:'220px repeat(18, 1fr)',gap:3,padding:'8px 0',borderTop:`1px solid ${t.rule}`,alignItems:'center',cursor:'pointer',background:item===i.id?t.paper2:'transparent'}} onClick={()=>setItem(i.id)}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:8,height:8,background:ch.color,borderRadius:'50%',flexShrink:0}} />
+              <div><div style={{fontFamily:t.display,fontSize:13,fontWeight:500,color:t.ink}}>{i.name}</div><div style={{fontFamily:t.mono,fontSize:9,color:t.ink3,letterSpacing:.1,textTransform:'uppercase'}}>{ch.name}</div></div>
+            </div>
+            {CHS.map(c=>{ const ev = i.events.find(e=>e.ch===c); return <div key={c} title={ev?ev.act:''} style={{height:24,background:ev?(ACT_COLORS[ev.act]||ch.color):'transparent',borderRadius:1,opacity:ev?0.85:1,border:ev?'none':`1px dashed ${t.rule}`,display:'grid',placeItems:'center',fontFamily:t.mono,fontSize:9,color:'rgba(0,0,0,0.7)',letterSpacing:.05,textTransform:'uppercase',fontWeight:600}}>{ev?ev.act.slice(0,3):''}</div>; })}
+          </div>); })}
+        {current && <div style={{marginTop:24,padding:18,background:t.paper,border:`1px solid ${t.rule}`,borderLeft:`3px solid ${CHARS.find(c=>c.id===current.char).color}`,borderRadius:t.radius,maxWidth:820}}>
+          <div style={{fontFamily:t.mono,fontSize:10,color:t.accent,letterSpacing:.14,textTransform:'uppercase'}}>Life of · {current.name}</div>
+          <div style={{fontFamily:t.display,fontSize:18,fontWeight:500,marginTop:4}}>{current.name} · {current.kind}</div>
+          <div style={{marginTop:12}}>{current.events.map((e,i)=>(
+            <div key={i} style={{display:'grid',gridTemplateColumns:'60px auto 1fr',gap:10,padding:'8px 0',borderTop:i>0?`1px solid ${t.rule}`:'none',alignItems:'start'}}>
+              <div style={{fontFamily:t.mono,fontSize:10,color:t.ink3,letterSpacing:.1,textTransform:'uppercase'}}>CH.{String(e.ch).padStart(2,'0')}</div>
+              <span style={{padding:'2px 8px',background:(ACT_COLORS[e.act]||t.accent)+'22',color:(ACT_COLORS[e.act]||t.accent),fontFamily:t.mono,fontSize:10,letterSpacing:.12,textTransform:'uppercase',borderRadius:1}}>{e.act}</span>
+              <div style={{fontSize:13,color:t.ink2,lineHeight:1.55,fontStyle:'italic'}}>{e.detail||<span style={{color:t.ink3}}>—</span>}</div>
+            </div>))}
+          </div>
+        </div>}
+      </div>
+    </main>
+  </div>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<ThemeProvider><App /></ThemeProvider>);
+</script></body></html>

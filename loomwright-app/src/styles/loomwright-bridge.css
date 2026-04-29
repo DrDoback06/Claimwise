@@ -1,0 +1,393 @@
+/**
+ * Loomwright palette bridge.
+ *
+ * Retheme legacy components without rebuilding each one.
+ * ------------------------------------------------------
+ * The legacy tree uses three distinct style systems:
+ *
+ *   1. Tailwind utility classes (bg-slate-900, text-emerald-400, and
+ *      alpha-suffix variants like bg-slate-900/40 compiled by Tailwind to
+ *      selectors like .bg-slate-900\/40).
+ *   2. Legacy CSS vars from styles/theme.css (--bg-primary, --text-primary,
+ *      etc.) consumed via `.card`, `.btn`, `.input`.
+ *   3. Custom RPG utility classes defined in styles/rpgComponents.css
+ *      (.glass-light / .glass-medium / .glass-heavy / .quest-tooltip /
+ *      .ornate-border / .card-depth) and rarity chain classes from
+ *      utils/rpgTheme.js (glow-common / glow-rare / etc.).
+ *
+ * This file triggers when ThemeProvider sets
+ * `document.body.dataset.lwTheme = "night" | "day"` and rewires all three
+ * systems so legacy components adopt the Loomwright palette automatically.
+ *
+ * Values are plain hex / rgba (CRA 5.0.1 cssnano preset doesn't recognise
+ * oklch() or color-mix()). The JS theme.js tokens still use oklch for
+ * runtime inline styles which aren't minified.
+ */
+
+/* --- 1. Loomwright tokens as CSS vars --- */
+
+body[data-lw-theme="night"] {
+  --lw-bg: #0f1419;
+  --lw-paper: #171d24;
+  --lw-paper2: #1d242c;
+  --lw-sidebar: #0a0e12;
+  --lw-ink: #e8e1d0;
+  --lw-ink-2: #a8a18f;
+  --lw-ink-3: #6a655a;
+  --lw-rule: #262d36;
+  --lw-rule-soft: rgba(38, 45, 54, 0.5);
+  --lw-accent: #e2b552;
+  --lw-accent-soft: rgba(226, 181, 82, 0.22);
+  --lw-accent-2: #7fb8c7;
+  --lw-accent-2-soft: rgba(127, 184, 199, 0.22);
+  --lw-good: #6fbf7c;
+  --lw-warn: #e2b552;
+  --lw-bad: #c76b5a;
+  --lw-on-accent: #0a0e12;
+}
+
+body[data-lw-theme="day"] {
+  --lw-bg: #f4efe4;
+  --lw-paper: #fbf7ed;
+  --lw-paper2: #ffffff;
+  --lw-sidebar: #ebe4d2;
+  --lw-ink: #2a261e;
+  --lw-ink-2: #5a544a;
+  --lw-ink-3: #8a8478;
+  --lw-rule: #d9d2bf;
+  --lw-rule-soft: rgba(217, 210, 191, 0.6);
+  --lw-accent: #a85a32;
+  --lw-accent-soft: rgba(168, 90, 50, 0.16);
+  --lw-accent-2: #3b7a8f;
+  --lw-accent-2-soft: rgba(59, 122, 143, 0.16);
+  --lw-good: #3f7d4a;
+  --lw-warn: #a85a32;
+  --lw-bad: #a84034;
+  --lw-on-accent: #fbf7ed;
+}
+
+/* --- 2. Legacy theme.css vars redirect to Loomwright tokens --- */
+
+body[data-lw-theme] {
+  --bg-primary: var(--lw-bg);
+  --bg-secondary: var(--lw-paper);
+  --bg-tertiary: var(--lw-paper2);
+  --bg-elevated: var(--lw-paper2);
+
+  --accent-primary: var(--lw-accent);
+  --accent-primary-hover: var(--lw-accent);
+  --accent-primary-muted: var(--lw-accent-soft);
+  --accent-secondary: var(--lw-accent-2);
+  --accent-secondary-hover: var(--lw-accent-2);
+  --accent-secondary-muted: var(--lw-accent-2-soft);
+
+  --text-primary: var(--lw-ink);
+  --text-secondary: var(--lw-ink-2);
+  --text-muted: var(--lw-ink-3);
+  --text-disabled: var(--lw-ink-3);
+
+  --border-subtle: var(--lw-rule);
+  --border-default: var(--lw-rule);
+  --border-active: var(--lw-accent);
+  --border-muted: var(--lw-rule);
+
+  --status-success: var(--lw-good);
+  --status-warning: var(--lw-warn);
+  --status-error: var(--lw-bad);
+  --status-info: var(--lw-accent-2);
+}
+
+/* --- 3. RPG glass + ornate classes -> Loomwright paper ramp --- */
+
+body[data-lw-theme] .glass-light {
+  backdrop-filter: none;
+  background: var(--lw-paper) !important;
+  border-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] .glass-medium {
+  backdrop-filter: none;
+  background: var(--lw-paper) !important;
+  border-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] .glass-heavy {
+  backdrop-filter: none;
+  background: var(--lw-paper2) !important;
+  border-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] .quest-tooltip {
+  backdrop-filter: none;
+  background: var(--lw-paper) !important;
+  border-color: var(--lw-rule) !important;
+  color: var(--lw-ink) !important;
+}
+body[data-lw-theme] .ornate-border,
+body[data-lw-theme] .ornate-border-corner {
+  border-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] .card-depth,
+body[data-lw-theme] .card-depth-hover:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* --- 4. Tailwind utility overrides (attribute selectors catch alpha variants) --- */
+
+/* Dark surface ramp: bg-slate-9*, bg-gray-9*, bg-zinc-9*, bg-neutral-9*, bg-black */
+body[data-lw-theme] [class*="bg-slate-9"],
+body[data-lw-theme] [class*="bg-gray-9"],
+body[data-lw-theme] [class*="bg-zinc-9"],
+body[data-lw-theme] [class*="bg-neutral-9"],
+body[data-lw-theme] .bg-black {
+  background-color: var(--lw-bg) !important;
+}
+body[data-lw-theme] [class*="bg-slate-8"],
+body[data-lw-theme] [class*="bg-gray-8"],
+body[data-lw-theme] [class*="bg-zinc-8"],
+body[data-lw-theme] [class*="bg-neutral-8"] {
+  background-color: var(--lw-paper) !important;
+}
+body[data-lw-theme] [class*="bg-slate-7"],
+body[data-lw-theme] [class*="bg-gray-7"],
+body[data-lw-theme] [class*="bg-zinc-7"],
+body[data-lw-theme] [class*="bg-neutral-7"] {
+  background-color: var(--lw-paper2) !important;
+}
+body[data-lw-theme] [class*="bg-slate-6"],
+body[data-lw-theme] [class*="bg-gray-6"] {
+  background-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] [class*="bg-slate-50"],
+body[data-lw-theme] [class*="bg-gray-50"],
+body[data-lw-theme] [class*="bg-slate-100"],
+body[data-lw-theme] [class*="bg-gray-100"] {
+  background-color: var(--lw-paper2) !important;
+  color: var(--lw-ink) !important;
+}
+body[data-lw-theme] .bg-white {
+  background-color: var(--lw-paper) !important;
+  color: var(--lw-ink) !important;
+}
+
+/* Accent ramps: emerald / green (primary) + blue / cyan / sky (secondary) */
+body[data-lw-theme] [class*="bg-emerald-"],
+body[data-lw-theme] [class*="bg-green-"] {
+  background-color: var(--lw-accent-soft) !important;
+}
+body[data-lw-theme] [class*="bg-emerald-5"],
+body[data-lw-theme] [class*="bg-emerald-6"],
+body[data-lw-theme] [class*="bg-emerald-7"],
+body[data-lw-theme] [class*="bg-green-5"],
+body[data-lw-theme] [class*="bg-green-6"],
+body[data-lw-theme] [class*="bg-green-7"] {
+  background-color: var(--lw-accent) !important;
+  color: var(--lw-on-accent) !important;
+}
+body[data-lw-theme] [class*="bg-blue-"],
+body[data-lw-theme] [class*="bg-cyan-"],
+body[data-lw-theme] [class*="bg-sky-"] {
+  background-color: var(--lw-accent-2-soft) !important;
+}
+body[data-lw-theme] [class*="bg-purple-"],
+body[data-lw-theme] [class*="bg-violet-"],
+body[data-lw-theme] [class*="bg-pink-"],
+body[data-lw-theme] [class*="bg-rose-"] {
+  background-color: var(--lw-accent-soft) !important;
+}
+body[data-lw-theme] [class*="bg-amber-"],
+body[data-lw-theme] [class*="bg-yellow-"],
+body[data-lw-theme] [class*="bg-orange-"] {
+  background-color: var(--lw-accent-soft) !important;
+}
+body[data-lw-theme] [class*="bg-red-"] {
+  background-color: rgba(199, 107, 90, 0.2) !important;
+}
+
+/* Text ramps */
+body[data-lw-theme] .text-white,
+body[data-lw-theme] [class*="text-slate-1"],
+body[data-lw-theme] [class*="text-gray-1"],
+body[data-lw-theme] [class*="text-slate-2"],
+body[data-lw-theme] [class*="text-gray-2"],
+body[data-lw-theme] [class*="text-slate-3"],
+body[data-lw-theme] [class*="text-gray-3"] {
+  color: var(--lw-ink) !important;
+}
+body[data-lw-theme] [class*="text-slate-4"],
+body[data-lw-theme] [class*="text-gray-4"],
+body[data-lw-theme] [class*="text-slate-5"],
+body[data-lw-theme] [class*="text-gray-5"] {
+  color: var(--lw-ink-2) !important;
+}
+body[data-lw-theme] [class*="text-slate-6"],
+body[data-lw-theme] [class*="text-slate-7"],
+body[data-lw-theme] [class*="text-gray-6"],
+body[data-lw-theme] [class*="text-gray-7"] {
+  color: var(--lw-ink-3) !important;
+}
+body[data-lw-theme] [class*="text-emerald-"],
+body[data-lw-theme] [class*="text-green-"] {
+  color: var(--lw-accent) !important;
+}
+body[data-lw-theme] [class*="text-blue-"],
+body[data-lw-theme] [class*="text-cyan-"],
+body[data-lw-theme] [class*="text-sky-"] {
+  color: var(--lw-accent-2) !important;
+}
+body[data-lw-theme] [class*="text-purple-"],
+body[data-lw-theme] [class*="text-violet-"] {
+  color: var(--lw-accent) !important;
+}
+body[data-lw-theme] [class*="text-red-"],
+body[data-lw-theme] [class*="text-rose-"] {
+  color: var(--lw-bad) !important;
+}
+body[data-lw-theme] [class*="text-yellow-"],
+body[data-lw-theme] [class*="text-amber-"],
+body[data-lw-theme] [class*="text-orange-"] {
+  color: var(--lw-warn) !important;
+}
+
+/* Borders */
+body[data-lw-theme] [class*="border-slate-"],
+body[data-lw-theme] [class*="border-gray-"],
+body[data-lw-theme] [class*="border-zinc-"],
+body[data-lw-theme] [class*="border-neutral-"] {
+  border-color: var(--lw-rule) !important;
+}
+body[data-lw-theme] [class*="border-emerald-"],
+body[data-lw-theme] [class*="border-green-"] {
+  border-color: var(--lw-accent) !important;
+}
+body[data-lw-theme] [class*="border-blue-"],
+body[data-lw-theme] [class*="border-cyan-"],
+body[data-lw-theme] [class*="border-sky-"] {
+  border-color: var(--lw-accent-2) !important;
+}
+body[data-lw-theme] [class*="border-purple-"],
+body[data-lw-theme] [class*="border-violet-"],
+body[data-lw-theme] [class*="border-amber-"],
+body[data-lw-theme] [class*="border-orange-"],
+body[data-lw-theme] [class*="border-yellow-"],
+body[data-lw-theme] [class*="border-red-"],
+body[data-lw-theme] [class*="border-rose-"] {
+  border-color: var(--lw-accent) !important;
+}
+
+/* Hover states */
+body[data-lw-theme] [class*="hover:bg-slate-"]:hover,
+body[data-lw-theme] [class*="hover:bg-gray-"]:hover {
+  background-color: var(--lw-paper2) !important;
+}
+body[data-lw-theme] [class*="hover:bg-emerald-"]:hover,
+body[data-lw-theme] [class*="hover:bg-green-"]:hover {
+  background-color: var(--lw-accent-soft) !important;
+}
+body[data-lw-theme] [class*="hover:text-emerald-"]:hover,
+body[data-lw-theme] [class*="hover:text-green-"]:hover {
+  color: var(--lw-accent) !important;
+}
+body[data-lw-theme] [class*="hover:text-white"]:hover {
+  color: var(--lw-ink) !important;
+}
+body[data-lw-theme] [class*="hover:border-"]:hover {
+  border-color: var(--lw-accent) !important;
+}
+
+/* Gradients - neutralise dark slate gradients against Loomwright bg */
+body[data-lw-theme] [class*="bg-gradient"][class*="from-slate-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-gray-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-zinc-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-black"] {
+  background-image: linear-gradient(135deg, var(--lw-paper), var(--lw-paper2)) !important;
+}
+body[data-lw-theme] [class*="bg-gradient"][class*="from-emerald-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-green-"] {
+  background-image: linear-gradient(135deg, var(--lw-accent-soft), transparent) !important;
+}
+body[data-lw-theme] [class*="bg-gradient"][class*="from-blue-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-purple-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-violet-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-amber-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-orange-"],
+body[data-lw-theme] [class*="bg-gradient"][class*="from-red-"] {
+  background-image: linear-gradient(135deg, var(--lw-paper), var(--lw-paper2)) !important;
+}
+
+/* Shadow neutralisation: old RPG shadow classes spew coloured glows */
+body[data-lw-theme] [class*="shadow-emerald-"],
+body[data-lw-theme] [class*="shadow-green-"],
+body[data-lw-theme] [class*="shadow-blue-"],
+body[data-lw-theme] [class*="shadow-purple-"],
+body[data-lw-theme] [class*="shadow-orange-"],
+body[data-lw-theme] [class*="shadow-amber-"],
+body[data-lw-theme] [class*="shadow-red-"],
+body[data-lw-theme] [class*="shadow-slate-"] {
+  --tw-shadow-color: rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Ring (focus ring) neutralisation */
+body[data-lw-theme] [class*="ring-emerald-"],
+body[data-lw-theme] [class*="ring-green-"] {
+  --tw-ring-color: var(--lw-accent) !important;
+}
+body[data-lw-theme] [class*="ring-blue-"],
+body[data-lw-theme] [class*="ring-cyan-"],
+body[data-lw-theme] [class*="ring-sky-"] {
+  --tw-ring-color: var(--lw-accent-2) !important;
+}
+
+/* --- 5. Scrollbars --- */
+body[data-lw-theme] ::-webkit-scrollbar-track { background: var(--lw-paper) !important; }
+body[data-lw-theme] ::-webkit-scrollbar-thumb { background: var(--lw-rule) !important; border: 2px solid var(--lw-paper) !important; }
+body[data-lw-theme] ::-webkit-scrollbar-thumb:hover { background: var(--lw-ink-3) !important; }
+
+/* --- 6. Body baseline + RPG app container --- */
+body[data-lw-theme] {
+  background: var(--lw-bg);
+  color: var(--lw-ink);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+body[data-lw-theme] .grimguff-app { background: var(--lw-bg) !important; }
+
+/* --- 7. Onboarding wizard denser overrides --- */
+body[data-lw-theme] .loomwright-onboarding [class*="bg-amber-"],
+body[data-lw-theme] .loomwright-onboarding [class*="bg-orange-"],
+body[data-lw-theme] .loomwright-onboarding [class*="bg-yellow-"] {
+  background-color: var(--lw-accent) !important;
+  color: var(--lw-on-accent) !important;
+}
+body[data-lw-theme] .loomwright-onboarding [class*="text-amber-"],
+body[data-lw-theme] .loomwright-onboarding [class*="text-orange-"],
+body[data-lw-theme] .loomwright-onboarding [class*="text-yellow-"] {
+  color: var(--lw-accent) !important;
+}
+body[data-lw-theme] .loomwright-onboarding h1,
+body[data-lw-theme] .loomwright-onboarding h2,
+body[data-lw-theme] .loomwright-onboarding h3 {
+  font-family: 'Fraunces', Georgia, serif !important;
+  letter-spacing: -0.01em;
+}
+
+/* --- 8. Rarity palette neutralisation (utils/rpgTheme.js emits these) --- */
+body[data-lw-theme] .rarity-common { color: var(--lw-ink-2) !important; }
+body[data-lw-theme] .rarity-magic,
+body[data-lw-theme] .rarity-rare { color: var(--lw-accent-2) !important; }
+body[data-lw-theme] .rarity-legendary { color: var(--lw-accent) !important; }
+body[data-lw-theme] .rarity-unique,
+body[data-lw-theme] .rarity-mythic { color: var(--lw-bad) !important; }
+
+body[data-lw-theme] .rarity-border-common,
+body[data-lw-theme] .rarity-border-magic,
+body[data-lw-theme] .rarity-border-rare,
+body[data-lw-theme] .rarity-border-legendary,
+body[data-lw-theme] .rarity-border-unique,
+body[data-lw-theme] .rarity-border-mythic { border-color: var(--lw-rule) !important; }
+
+body[data-lw-theme] .text-gradient {
+  background: var(--lw-accent) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}

@@ -1,0 +1,24 @@
+{
+  "appId": "com.loomwright.studio",
+  "appName": "Loomwright",
+  "webDir": "build",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https"
+  },
+  "plugins": {
+    "Network": { "networkStatus": true },
+    "App": { "launchUrl": "index.html" },
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#0f1419"
+    },
+    "SpeechRecognition": {
+      "enableLanguageDetection": true,
+      "maxResults": 3
+    }
+  },
+  "ios": { "contentInset": "automatic", "scrollEnabled": true },
+  "android": { "allowMixedContent": true, "captureInput": true, "webContentsDebuggingEnabled": true }
+}

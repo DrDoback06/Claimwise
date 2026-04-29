@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Loomwright — Language Workbench</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; }
+  *::-webkit-scrollbar { width:8px; height:8px; } *::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); border-radius:4px; }
+  button, input, select, textarea { font-family: inherit; }
+  .squiggle-grammar { background-image: linear-gradient(45deg, transparent 45%, oklch(70% 0.15 25) 45%, oklch(70% 0.15 25) 55%, transparent 55%); background-size: 3px 2px; background-repeat: repeat-x; background-position: 0 100%; padding-bottom: 2px; cursor: pointer; }
+  .squiggle-spell { background-image: linear-gradient(45deg, transparent 45%, oklch(65% 0.18 20) 45%, oklch(65% 0.18 20) 55%, transparent 55%); background-size: 3px 2px; background-repeat: repeat-x; background-position: 0 100%; padding-bottom: 2px; cursor: pointer; }
+  .squiggle-style { background-image: linear-gradient(45deg, transparent 45%, oklch(72% 0.12 200) 45%, oklch(72% 0.12 200) 55%, transparent 55%); background-size: 3px 2px; background-repeat: repeat-x; background-position: 0 100%; padding-bottom: 2px; cursor: pointer; }
+  .squiggle-echo { background-color: oklch(78% 0.13 78 / 0.25); padding: 0 1px; cursor: pointer; }
+  .selected-word { background: oklch(78% 0.13 78 / 0.35); padding: 1px 2px; border-radius: 2px; cursor: pointer; }
+  .pulse-dot { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="proto/theme.jsx"></script>
+<script type="text/babel" src="proto/primitives.jsx"></script>
+<script type="text/babel" src="language/data.jsx"></script>
+<script type="text/babel" src="language/app.jsx"></script>
+</body>
+</html>
