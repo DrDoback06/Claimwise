@@ -8,6 +8,8 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # Netlify sets CI=true by default; CRA then fails the build on ESLint *warnings*.
+  CI = "false"
 
 # SPA: client-side routes and deep links resolve to the app shell
 [[redirects]]

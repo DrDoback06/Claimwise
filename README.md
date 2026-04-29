@@ -8,6 +8,8 @@ This repo is a normal CRA app: **build command** `npm run build`, **publish dire
 
 If the deploy log shows **“Build image no longer supported”**, the site is pinned to an old Netlify image. In the Netlify UI go to **Project configuration → Build & deploy → Continuous deployment → Build image selection** and choose **Ubuntu 24.04 (Noble)** (or the newest offered), then **Clear cache and deploy site**.
 
+`netlify.toml` sets **`CI=false`** so Create React App does not treat ESLint warnings as build failures (Netlify defaults `CI=true`, which breaks this codebase’s production build).
+
 ---
 
 # Getting Started with Create React App
