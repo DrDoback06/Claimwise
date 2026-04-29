@@ -1,4 +1,0 @@
-# Image storage directory
-# Images will be stored here as base64 in IndexedDB, but this directory structure is maintained for reference
-
-
