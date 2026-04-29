@@ -1,0 +1,16 @@
+# Netlify — Create React App (Grimguff / Claimwise)
+# If deploy fails with "Build image no longer supported", update the site in Netlify:
+# Site settings → Build & deploy → Continuous Deployment → Build image selection → Ubuntu 24.x (Noble)
+
+[build]
+  command = "npm run build"
+  publish = "build"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA: client-side routes and deep links resolve to the app shell
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

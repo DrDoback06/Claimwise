@@ -2,6 +2,12 @@
 
 Legacy Create React App for the Grimguff tracker and classic Writer’s Room (including entity extraction). **This checkout loads that UI by default.** To open the newer unified Writers Room instead, use **`?writers=1`** or **`#/writers`** (`src/AppRouter.jsx`).
 
+## Deploy on Netlify
+
+This repo is a normal CRA app: **build command** `npm run build`, **publish directory** `build` (see `netlify.toml`).
+
+If the deploy log shows **“Build image no longer supported”**, the site is pinned to an old Netlify image. In the Netlify UI go to **Project configuration → Build & deploy → Continuous deployment → Build image selection** and choose **Ubuntu 24.04 (Noble)** (or the newest offered), then **Clear cache and deploy site**.
+
 ---
 
 # Getting Started with Create React App
