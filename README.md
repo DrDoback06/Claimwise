@@ -1,6 +1,6 @@
 # Claimwise Omniscience (Grimguff Tracker)
 
-Legacy Create React App for the Grimguff tracker and classic Writer’s Room (including entity extraction). **This checkout loads that UI by default.** To open the newer unified Writers Room instead, use **`?writers=1`** or **`#/writers`** (`src/AppRouter.jsx`).
+Create React App for the classic Grimguff tracker, Writer’s Room canvas, and entity extraction (`src/App.js`). There is no separate Loomwright shell in this repository.
 
 ## Deploy on Netlify
 

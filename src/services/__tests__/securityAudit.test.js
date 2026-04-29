@@ -109,23 +109,11 @@ describe('Security Audit', () => {
     });
   });
 
-  describe('Canon lifecycle enforced', () => {
-    test('WritersRoom imports canon lifecycle service', () => {
-      const wr = allContents.find(f => f.relativePath.includes('WritersRoomEnhanced'));
-      expect(wr).toBeDefined();
-      expect(wr.content).toContain('canonLifecycleService');
-      expect(wr.content).toContain('STATES');
-    });
-
-    test('WritersRoom has separate Save Draft and Save & Extract buttons', () => {
-      const wr = allContents.find(f => f.relativePath.includes('WritersRoomEnhanced'));
-      expect(wr.content).toContain('SAVE DRAFT');
-      expect(wr.content).toContain('SAVE & EXTRACT');
-    });
-
-    test('WritersRoom has read-only enforcement for non-Draft states', () => {
-      const wr = allContents.find(f => f.relativePath.includes('WritersRoomEnhanced'));
-      expect(wr.content).toContain('readOnly={canonState !== STATES.DRAFT}');
+  describe('Classic writer surface', () => {
+    test('WritingCanvasPro exposes Save & Extract', () => {
+      const wcp = allContents.find(f => f.relativePath.includes('WritingCanvasPro.jsx'));
+      expect(wcp).toBeDefined();
+      expect(wcp.content).toContain('SAVE & EXTRACT');
     });
   });
 
