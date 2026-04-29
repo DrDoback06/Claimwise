@@ -27,3 +27,6 @@ yarn-error.log*
 .cursor/
 npm-install-log.txt
 Thumbs.db
+
+# Stale folder name (Windows may keep an empty dir handle open locally)
+claimwise-tab-designs/

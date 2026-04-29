@@ -34,8 +34,7 @@
     "cap:ios": "cap open ios",
     "cap:android": "cap open android",
     "cap:build:ios": "npm run build && cap sync && cap open ios",
-    "cap:build:android": "npm run build && cap sync && cap open android",
-    "secrets:scan": "./scripts/secret-scan.sh"
+    "cap:build:android": "npm run build && cap sync && cap open android"
   },
   "eslintConfig": {
     "extends": [

@@ -1,28 +1,29 @@
-// Loomwright — top-level app router. Hash-based decision between the new
-// unified Writers Room and the legacy app.
-//
-// /#/legacy or ?legacy=1 → legacy App.js (kept around while users adapt)
-// anything else          → new WritersRoom (default)
+// Top-level router: classic Grimguff / Claimwise tracker is the default.
+// Opt in to the newer Writers Room shell with ?writers=1 or #/writers
 
 import React from 'react';
 import App from './App';
 import WritersRoom from './features/writers-room';
 
-function isLegacyRoute() {
+function isWritersRoomRoute() {
   if (typeof window === 'undefined') return false;
   const h = window.location.hash || '';
-  if (h === '#/legacy' || h.startsWith('#/legacy/')) return true;
-  if (window.location.search.includes('legacy=1')) return true;
+  if (h === '#/writers' || h.startsWith('#/writers/')) return true;
+  if (window.location.search.includes('writers=1')) return true;
   return false;
 }
 
 export default function AppRouter() {
-  const [legacy, setLegacy] = React.useState(() => isLegacyRoute());
+  const [writersRoom, setWritersRoom] = React.useState(() => isWritersRoomRoute());
   React.useEffect(() => {
-    const onHash = () => setLegacy(isLegacyRoute());
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    const sync = () => setWritersRoom(isWritersRoomRoute());
+    window.addEventListener('hashchange', sync);
+    window.addEventListener('popstate', sync);
+    return () => {
+      window.removeEventListener('hashchange', sync);
+      window.removeEventListener('popstate', sync);
+    };
   }, []);
-  if (legacy) return <App />;
-  return <WritersRoom />;
+  if (writersRoom) return <WritersRoom />;
+  return <App />;
 }
